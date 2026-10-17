@@ -1,0 +1,59 @@
+{
+  "name": "nexoss-local",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node --experimental-strip-types server.ts",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs",
+    "preview": "vite preview",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "lint": "tsc --noEmit",
+    "audit:multiempresa": "node scripts/audit-multiempresa-readiness.mjs",
+    "migrate:control-plane": "node scripts/migrate-control-plane.mjs",
+    "test:multiempresa": "node --experimental-strip-types --test server/multiempresa/tenantResolver.test.ts server/multiempresa/tenantSecretProvider.test.ts server/multiempresa/platformStore.test.ts server/multiempresa/tenantFileStore.test.ts server/multiempresa/fiscalBoardStore.test.ts server/multiempresa/postgresControlPlaneRepository.test.ts server/multiempresa/companyAccess.test.ts server/inventory/productMatch.test.ts server/logger.test.ts server/sales/saleTotals.test.ts server/money.test.ts src/domain/expenseChart.test.ts src/domain/inventoryBookLayout.test.ts src/domain/fiscalCalendar.test.ts server/mail/mailer.test.ts server/notify/notifier.test.ts server/sales/localSales.test.ts server/routes/salesRoutes.test.ts server/productionRuntime.test.ts scripts/migrate-control-plane.test.mjs",
+    "test:multiempresa:postgres": "node --experimental-strip-types --test server/multiempresa/postgresControlPlaneRepository.integration.test.ts",
+    "test:auth": "node --experimental-strip-types --test server/auth/firebaseAuth.test.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "@neon/config": "^1.9.1",
+    "@neon/env": "^1.6.2",
+    "@neondatabase/serverless": "^1.1.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/canvas-confetti": "^1.9.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "canvas-confetti": "^1.9.4",
+    "dotenv": "^17.2.3",
+    "esbuild": "^0.25.0",
+    "express": "^4.21.2",
+    "firebase": "^12.18.0",
+    "firebase-admin": "^14.5.0",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "pg": "^8.23.1",
+    "qrcode.react": "^4.2.0",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "recharts": "^3.10.1",
+    "vite": "^6.2.3",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3"
+  }
+}

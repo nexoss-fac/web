@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Enforce tabular figures on all numbers, currencies, dates, and tables */
+  .font-mono,
+  table,
+  td,
+  th,
+  input[type="number"],
+  input[type="date"],
+  input[type="datetime-local"] {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom minimal scrollbar for smooth UI without layout jumps */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Utility to hide scrollbar on horizontal button tabs while allowing touch/wheel scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Thermal receipt sawtooth tear effect */
+.thermal-sawtooth-top {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 8' fill='%23fafaf9'%3E%3Cpolygon points='0,8 8,0 16,8'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-size: 12px 6px;
+  height: 6px;
+  width: 100%;
+}
+
+.thermal-sawtooth-bottom {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 8' fill='%23fafaf9'%3E%3Cpolygon points='0,0 8,8 16,0'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-size: 12px 6px;
+  height: 6px;
+  width: 100%;
+}
+
+/* Optimized Print Styles for POS Thermal and Full Page */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .print-hide {
+    display: none !important;
+  }
+  .print-receipt-container {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 3mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}
