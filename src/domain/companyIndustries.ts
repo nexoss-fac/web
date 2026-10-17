@@ -133,6 +133,23 @@ export const COMPANY_INDUSTRIES = {
 
 export type IndustryTemplate = keyof typeof COMPANY_INDUSTRIES;
 
+/** Flujos y registros que orientan la configuración operativa de cada rama. */
+export const INDUSTRY_WORKFLOWS: Record<IndustryTemplate, { flow: string[]; records: string[] }> = {
+  food_manufacturing: { flow: ['Registrar materia prima y lote', 'Controlar producción y vencimiento', 'Trasladar producto terminado a inventario', 'Vender por presentación y lote'], records: ['Lotes', 'Fechas de vencimiento', 'Rendimiento de producción', 'Costo por lote'] },
+  manufacturing: { flow: ['Definir materiales y costo estándar', 'Registrar orden y consumo de insumos', 'Controlar producto en proceso', 'Recibir producto terminado y despachar'], records: ['Órdenes de producción', 'Consumo de materiales', 'Merma', 'Costo de fabricación'] },
+  footwear: { flow: ['Crear modelos y variantes por talla/color', 'Recibir pares por variante', 'Controlar existencias y apartados', 'Vender y ajustar stock por talla'], records: ['Modelo', 'Talla y color', 'Pares disponibles', 'Apartados'] },
+  commerce: { flow: ['Registrar proveedores y compras', 'Recibir y categorizar mercancía', 'Actualizar costos y precios', 'Vender y reponer por stock mínimo'], records: ['SKU', 'Proveedor', 'Costo de compra', 'Existencia y reposición'] },
+  services: { flow: ['Crear servicios y tarifas', 'Registrar cliente y orden de servicio', 'Controlar avance y gastos asociados', 'Facturar y cobrar el servicio'], records: ['Cliente', 'Servicio contratado', 'Estado de ejecución', 'Horas y gastos'] },
+  health: { flow: ['Registrar suministros y servicios', 'Controlar lotes y vencimientos', 'Vincular consumos a la atención', 'Facturar y revisar cobros'], records: ['Lote y vencimiento', 'Insumos utilizados', 'Servicio prestado', 'Cobro'] },
+  legal: { flow: ['Abrir expediente por cliente', 'Registrar actuaciones y fechas clave', 'Controlar honorarios y gastos reembolsables', 'Facturar y cerrar expediente'], records: ['Expediente', 'Cliente', 'Actuación y plazo', 'Honorarios y gastos'] },
+  accounting: { flow: ['Dar de alta clientes y obligaciones', 'Registrar documentos y movimientos', 'Preparar conciliación y asientos', 'Revisar vencimientos y entregar reportes'], records: ['Cliente', 'Período contable', 'Documentos soporte', 'Obligaciones y entregables'] },
+  education: { flow: ['Crear cursos y períodos', 'Registrar alumnos e inscripciones', 'Controlar asistencia y materiales', 'Facturar matrículas y cuotas'], records: ['Curso', 'Alumno', 'Período', 'Matrícula y pagos'] },
+  hospitality: { flow: ['Configurar menú, habitaciones o servicios', 'Registrar compras y consumos', 'Procesar ventas por turno', 'Cerrar caja y revisar costos'], records: ['Producto o servicio', 'Turno', 'Consumo', 'Ventas y costos'] },
+  construction: { flow: ['Crear obra y presupuesto', 'Asignar materiales, equipos y personal', 'Registrar avances y gastos por obra', 'Certificar hitos y facturar'], records: ['Proyecto/obra', 'Presupuesto', 'Avance', 'Materiales y costos'] },
+  agriculture: { flow: ['Registrar parcela, rubro y ciclo', 'Planificar insumos y labores', 'Controlar producción y cosecha', 'Clasificar y vender cosecha'], records: ['Parcela', 'Ciclo agrícola', 'Labores e insumos', 'Cosecha y rendimiento'] },
+  other: { flow: ['Configurar productos y servicios', 'Registrar compras y gastos', 'Vender y cobrar', 'Revisar inventario y reportes'], records: ['Productos y servicios', 'Compras', 'Ventas', 'Gastos'] },
+};
+
 export function isIndustryTemplate(value: unknown): value is IndustryTemplate {
   return typeof value === 'string' && Object.hasOwn(COMPANY_INDUSTRIES, value);
 }

@@ -58,11 +58,13 @@ test('rechaza destinatarios inválidos y SMTP sin nodemailer da una instrucción
   assert.equal((await sendMail({ ...message, to: 'a@b.com,c@d.com' }, config)).sent, false);
 });
 
-test('el correo de invitación escapa el nombre de la empresa y trae el enlace', () => {
-  const mail = buildInvitationEmail({ to: 'ana@example.com', companyName: '<img src=x onerror=alert(1)>', role: 'cashier', invitedBy: 'dueno@tienda.com', expiresAt: '2026-10-23T00:00:00Z', appUrl: 'https://app.nexoss.com' });
+test('el correo de invitación escapa el nombre de la empresa y trae el enlace directo', () => {
+  const invitationUrl = 'https://app.nexoss.com/?invitation=invite-test';
+  const mail = buildInvitationEmail({ to: 'ana@example.com', companyName: '<img src=x onerror=alert(1)>', role: 'cashier', invitedBy: 'dueno@tienda.com', expiresAt: '2026-10-23T00:00:00Z', invitationUrl });
   assert.equal(mail.html.includes('<img'), false);
   assert.ok(mail.html.includes('&lt;img'));
-  assert.ok(mail.text.includes('https://app.nexoss.com'));
+  assert.ok(mail.text.includes(invitationUrl));
+  assert.ok(mail.html.includes(invitationUrl));
   assert.ok(mail.text.includes('Cajero'));
   assert.ok(mail.subject.startsWith('Te invitaron a'));
 });

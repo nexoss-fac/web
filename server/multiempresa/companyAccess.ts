@@ -2,12 +2,14 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { FirebaseAuthenticatedRequest } from '../auth/firebaseAuth.ts';
 import { LocalPlatformStore, hasActiveSubscription, type MembershipRole } from './platformStore.ts';
+import { resolveIndustryTemplate } from '../../src/domain/companyIndustries.ts';
 import { resolveAuthorizedTenant, TenantResolutionError, type TenantRepository, type TenantSecretProvider } from './tenantResolver.ts';
 
 export interface TenantStorageContext {
   companyId: string;
   uid: string;
   role: MembershipRole;
+  industryTemplate: ReturnType<typeof resolveIndustryTemplate>;
   companySlug?: string;
   connectionString?: string;
 }
@@ -108,6 +110,7 @@ function checkTenantPermissions(
   res: Response,
   role: MembershipRole,
   modules: string[],
+  industryTemplate: ReturnType<typeof resolveIndustryTemplate>,
 ): boolean {
   const method = req.method.toUpperCase();
   const route = normalizeApiRoute(req.originalUrl);
@@ -116,6 +119,15 @@ function checkTenantPermissions(
   const moduleName = MODULE_BY_ROUTE.find((entry) => entry.route.test(route))?.module ?? null;
   if (moduleName && !modules.includes(moduleName)) {
     res.status(403).json({ error: 'El módulo no está incluido en el plan de la empresa.' });
+    return false;
+  }
+
+  // Estos flujos contienen lógica de calzado (tallas, apartados y análisis de
+  // zapatos). La autorización se aplica en el servidor aunque se invoque la API
+  // directamente, sin depender de que la interfaz oculte el módulo.
+  const footwearOnlyRoute = /^\/(?:layaways(?:\/|$)|(?:ai\/)?(?:analyze-shoe|shoe-ai|shoe)(?:\/|$))/;
+  if (footwearOnlyRoute.test(route) && industryTemplate !== 'footwear') {
+    res.status(403).json({ error: 'Esta función solo está habilitada para empresas de calzado.' });
     return false;
   }
 
@@ -150,8 +162,12 @@ export function createCompanyAccessMiddleware(store: LocalPlatformStore): Reques
       if (company.status !== 'active' || !hasActiveSubscription(state, company.id)) return res.status(403).json({ error: 'La empresa o su suscripción no están habilitadas para operar.' });
       const subscription = state.subscriptions.find((item) => item.companyId === companyId)!;
       const plan = state.plans.find((item) => item.id === subscription.planId)!;
-      if (!checkTenantPermissions(req, res, membership.role, plan.modules)) return;
-      const tenant = { companyId, uid: identity.uid, role: membership.role } satisfies TenantStorageContext;
+      const industryTemplate = resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || '');
+      if (!checkTenantPermissions(req, res, membership.role, plan.modules, industryTemplate)) return;
+      const tenant = {
+        companyId, uid: identity.uid, role: membership.role,
+        industryTemplate: resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || ''),
+      } satisfies TenantStorageContext;
       (req as TenantAuthenticatedRequest).tenant = tenant;
       tenantStorageContext.run(tenant, next);
     } catch {
@@ -177,12 +193,13 @@ export function createPostgresCompanyAccessMiddleware(
         repository,
         secrets,
       });
-      if (!checkTenantPermissions(req, res, tenant.role, tenant.modules)) return;
+      if (!checkTenantPermissions(req, res, tenant.role, tenant.modules, tenant.industryTemplate)) return;
       const context: TenantStorageContext = {
         companyId: tenant.companyId,
         companySlug: tenant.companySlug,
         uid: identity!.uid,
         role: tenant.role,
+        industryTemplate: tenant.industryTemplate,
         connectionString: tenant.connectionString,
       };
       (req as TenantAuthenticatedRequest).tenant = context;

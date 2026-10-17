@@ -9,6 +9,10 @@ coverage/
 *.bak
 .neon
 .secrets/
+*.pem
+*-service-account*.json
+firebase-admin*.json
+credentials.json
 server/data/
 emulator-data/
 firebase-export-*/

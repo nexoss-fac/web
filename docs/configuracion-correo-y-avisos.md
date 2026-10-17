@@ -25,12 +25,22 @@ Requiere una cuenta en resend.com y un dominio verificado.
     RESEND_API_KEY=re_xxxxxxxx
     MAIL_FROM=NEXOSS <hola@tudominio.com>
 
-### Enlace del correo
-El correo lleva un enlace para entrar a NEXOSS. Si no defines `APP_PUBLIC_URL`, apunta a `http://127.0.0.1:3000`, que solo funciona en tu computadora. Define la dirección por la que la otra persona puede abrir la aplicación:
+### Despliegue en Render
+En Render crea **New → Web Service**, conecta el repositorio y configura:
+
+    Build Command: npm ci && npm run build
+    Start Command: npm start
+
+En **Environment**, agrega `MAIL_PROVIDER=resend`, `RESEND_API_KEY` y `MAIL_FROM`. Guarda la clave solamente en Render, nunca en el repositorio ni en el código del navegador. Render asigna una URL pública al servicio; NEXOSS la usa automáticamente para formar los enlaces de invitación. Si conectas un dominio propio, define también `APP_PUBLIC_URL` con esa URL HTTPS.
+
+### Enlace de invitación
+Al crear una invitación, NEXOSS envía un correo con un enlace directo a esa invitación, la empresa y el rol asignado. La persona debe iniciar sesión o crear su cuenta con el mismo correo invitado, verificarlo y pulsar **Aceptar y entrar**. El enlace no concede acceso hasta que la invitación se acepta.
+
+En desarrollo local, si no defines `APP_PUBLIC_URL`, el enlace apunta a `http://127.0.0.1:3000`, que solo funciona en tu computadora. Para una URL propia, define:
 
     APP_PUBLIC_URL=https://nexoss.tudominio.com
 
-Si el correo no sale, la invitación igual queda creada y el panel muestra el motivo.
+Configura el proveedor de correo en el entorno del servidor y reinicia o vuelve a desplegar NEXOSS. Si el correo no sale, la invitación igual queda creada y el panel muestra el motivo para corregir la configuración.
 
 ## Avisos al teléfono (venta o gasto nuevo)
 

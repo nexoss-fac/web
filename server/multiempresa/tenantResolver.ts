@@ -1,3 +1,5 @@
+import type { IndustryTemplate } from '../../src/domain/companyIndustries.ts';
+
 /**
  * Límite de autorización multiempresa (sin dependencias externas).
  * Este módulo NO está conectado todavía a las rutas heredadas.
@@ -14,6 +16,7 @@ export interface VerifiedIdentity {
 export interface MembershipRecord {
   companyId: string;
   slug: string;
+  industryTemplate: IndustryTemplate;
   companyStatus: 'onboarding' | 'active' | 'suspended' | 'archived';
   membershipStatus: 'invited' | 'active' | 'revoked';
   role: TenantRole;
@@ -34,6 +37,7 @@ export interface TenantSecretProvider {
 export interface AuthorizedTenantContext {
   companyId: string;
   companySlug: string;
+  industryTemplate: IndustryTemplate;
   role: TenantRole;
   modules: string[];
   connectionString: string;
@@ -106,6 +110,7 @@ export async function resolveAuthorizedTenant(input: {
   return {
     companyId: membership.companyId,
     companySlug: membership.slug,
+    industryTemplate: membership.industryTemplate,
     role: membership.role,
     modules: membership.modules,
     connectionString,

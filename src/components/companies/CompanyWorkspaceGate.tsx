@@ -7,7 +7,7 @@ import type { FirebaseUser } from '../../lib/firebase';
 import { LoginPage } from '../auth/LoginPage';
 
 import { refreshCurrentFirebaseUser, resendVerificationEmail } from '../../lib/firebase';
-import { COMPANY_INDUSTRIES, resolveIndustryTemplate } from '../../domain/companyIndustries';
+import { COMPANY_INDUSTRIES, INDUSTRY_WORKFLOWS, resolveIndustryTemplate } from '../../domain/companyIndustries';
 
 
 
@@ -137,7 +137,14 @@ export const CompanyWorkspaceGate: React.FC<Props> = ({ user, loading, onTenantS
 
       if (!response.ok) throw new Error(data.error || 'La invitación ya no está disponible.');
 
-      await loadCompanies();
+      const rows = await loadCompanies();
+      const company = rows.find((item) => item.id === invitation.companyId);
+      if (company) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('invitation');
+        window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+        await selectCompany(company);
+      }
 
     } catch (err) { setError(err instanceof Error ? err.message : 'Error de conexión.'); }
 
@@ -388,6 +395,8 @@ onTenantSelected(company.id, company.role);
   const setValue = (setter: React.Dispatch<React.SetStateAction<any>>, key: string) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setter((current: any) => ({ ...current, [key]: event.target.value }));
   const selectedIndustry = resolveIndustryTemplate(form.industryTemplate, form.activity || '');
   const selectedIndustryProfile = COMPANY_INDUSTRIES[selectedIndustry];
+  const linkedInvitationId = new URLSearchParams(window.location.search).get('invitation');
+  const linkedInvitation = invitations.find((item) => item.id === linkedInvitationId);
 
 
 
@@ -418,7 +427,8 @@ onTenantSelected(company.id, company.role);
           <div className="mt-5 grid gap-3">{companies.map((company) => <button key={company.id} onClick={() => void selectCompany(company)} className="flex items-center justify-between gap-4 rounded-xl border border-slate-700 p-4 text-left hover:border-emerald-500"><span><strong className="block">{company.tradeName || company.legalName}</strong><small className="text-slate-400">{company.role} · {company.status === 'onboarding' ? 'Configuración pendiente' : `${company.subscription?.plan || 'Plan'} · vence ${company.subscription?.currentPeriodEnd ? new Date(company.subscription.currentPeriodEnd).toLocaleDateString() : '—'}`}</small></span><span className="text-emerald-400">{company.status === 'onboarding' ? 'Continuar →' : 'Entrar →'}</span></button>)}</div>
           {emailMatches.length > 0 && <section className="mt-5 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4"><h2 className="font-semibold text-amber-100">Empresas registradas con tu correo verificado</h2><p className="mt-1 text-xs text-slate-300">Estas empresas están asociadas a otra identidad de Firebase. No se otorgó acceso; inicia sesión con la cuenta original o pide a un administrador que invite este correo.</p><div className="mt-3 grid gap-2">{emailMatches.map((company) => <div key={company.id} className="rounded-lg border border-slate-700 bg-slate-950 p-3"><strong className="block text-sm text-white">{company.tradeName || company.legalName}</strong><span className="text-xs text-slate-400">{company.status === 'onboarding' ? 'Configuración pendiente' : 'Empresa registrada'}</span></div>)}</div></section>}
 
-          {invitations.length > 0 && <section className="mt-5 rounded-xl border border-emerald-500/30 p-4"><h2 className="font-semibold">Invitaciones recibidas</h2><div className="mt-3 grid gap-2">{invitations.map((invitation) => <div key={invitation.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-950 p-3"><span className="text-sm">{invitation.companyName} · {invitation.role}<small className="block text-slate-400">Vence {new Date(invitation.expiresAt).toLocaleDateString()}</small></span><button disabled={busy} onClick={() => void acceptInvitation(invitation)} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold disabled:opacity-50">Aceptar</button></div>)}</div></section>}
+          {linkedInvitation && <section className="mt-5 rounded-xl border border-emerald-400/50 bg-emerald-500/10 p-4"><h2 className="font-semibold">Invitación a {linkedInvitation.companyName}</h2><p className="mt-1 text-sm text-slate-300">Rol asignado: <strong>{linkedInvitation.role}</strong>. Al aceptar entrarás directamente a esta empresa.</p><button disabled={busy} onClick={() => void acceptInvitation(linkedInvitation)} className="mt-3 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">Aceptar y entrar</button></section>}
+          {invitations.length > 0 && <section className="mt-5 rounded-xl border border-emerald-500/30 p-4"><h2 className="font-semibold">Invitaciones recibidas</h2><div className="mt-3 grid gap-2">{invitations.map((invitation) => <div key={invitation.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-950 p-3"><span className="text-sm">{invitation.companyName} · {invitation.role}<small className="block text-slate-400">Vence {new Date(invitation.expiresAt).toLocaleDateString()}</small></span><button disabled={busy} onClick={() => void acceptInvitation(invitation)} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold disabled:opacity-50">Aceptar</button></div>)}</div></section>}
 
           {managedInvitations.length > 0 && <section className="mt-5 rounded-xl border border-slate-700 p-4"><h2 className="font-semibold">Invitaciones pendientes de tus empresas</h2><div className="mt-3 grid gap-2">{managedInvitations.map((invitation) => <div key={invitation.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-950 p-3"><span className="text-sm">{invitation.companyName} · {invitation.email}<small className="block text-slate-400">{invitation.role} · vence {new Date(invitation.expiresAt).toLocaleDateString()}</small></span><button disabled={busy} onClick={() => void revokeInvitation(invitation)} className="rounded-lg border border-rose-500/50 px-3 py-2 text-sm text-rose-200 disabled:opacity-50">Revocar</button></div>)}</div></section>}
 
@@ -444,7 +454,12 @@ onTenantSelected(company.id, company.role);
               <option value="">Selecciona el tipo de empresa</option>
               {Object.entries(COMPANY_INDUSTRIES).map(([value, industry]) => <option key={value} value={value}>{industry.label}</option>)}
             </select>
-            <span className="mt-2 block font-normal text-slate-400">{form.industryTemplate ? COMPANY_INDUSTRIES[resolveIndustryTemplate(form.industryTemplate)].description : 'Este perfil adapta el catálogo, las categorías iniciales y la presentación del espacio de trabajo.'}</span>
+            <span className="mt-2 block font-normal text-slate-400">{form.industryTemplate ? COMPANY_INDUSTRIES[resolveIndustryTemplate(form.industryTemplate)].description : 'Este perfil adapta el catálogo, las categorías iniciales y el flujo de trabajo.'}</span>
+            {form.industryTemplate && <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900 p-3 font-normal">
+              <p className="font-semibold text-emerald-300">Flujo recomendado para {COMPANY_INDUSTRIES[resolveIndustryTemplate(form.industryTemplate)].label}</p>
+              <ol className="mt-2 grid gap-1 sm:grid-cols-2">{INDUSTRY_WORKFLOWS[resolveIndustryTemplate(form.industryTemplate)].flow.map((item, index) => <li key={item} className="text-xs text-slate-300">{index + 1}. {item}</li>)}</ol>
+              <p className="mt-2 text-xs text-slate-400">Controla: {INDUSTRY_WORKFLOWS[resolveIndustryTemplate(form.industryTemplate)].records.join(' · ')}</p>
+            </div>}
           </label>
 
           <button disabled={busy} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-bold disabled:opacity-50">Registrar empresa y configurar →</button>
@@ -472,7 +487,7 @@ onTenantSelected(company.id, company.role);
             </label>
             <p className="sm:col-span-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-100">La condición fiscal debe coincidir con los documentos de la empresa y la normativa aplicable en Venezuela. Exento y no sujeto no significan lo mismo. Si tienes dudas, consulta a tu contador antes de guardar.</p></div>}
 
-          {step === 3 && <div className="space-y-3"><p className="text-sm text-slate-300">El propietario ya es administrador. Puedes invitar una persona ahora; el sistema no enviará correos automáticamente, el usuario debe iniciar sesión con el correo indicado.</p><input type="email" placeholder="Correo del colaborador (opcional)" value={invitation.inviteEmail} onChange={setValue(setInvitation,'inviteEmail')} className="w-full rounded-lg bg-slate-950 p-3"/><select value={invitation.inviteRole} onChange={setValue(setInvitation,'inviteRole')} className="w-full rounded-lg bg-slate-950 p-3"><option value="cashier">Cajero</option><option value="supervisor">Supervisor</option><option value="accountant">Contador</option><option value="auditor">Auditor</option><option value="admin">Administrador de empresa</option></select><div className="rounded-lg border border-slate-700 p-3 text-xs text-slate-400">La invitación se activa al verificar en Firebase el mismo correo. El envío de correo requiere un proveedor posterior.</div></div>}
+          {step === 3 && <div className="space-y-3"><p className="text-sm text-slate-300">Puedes invitar a una persona. Recibirá un enlace directo por correo si el servicio de correo está configurado, y deberá entrar con el mismo correo verificado.</p><input type="email" placeholder="Correo del colaborador (opcional)" value={invitation.inviteEmail} onChange={setValue(setInvitation,'inviteEmail')} className="w-full rounded-lg bg-slate-950 p-3"/><select value={invitation.inviteRole} onChange={setValue(setInvitation,'inviteRole')} className="w-full rounded-lg bg-slate-950 p-3"><option value="cashier">Cajero</option><option value="supervisor">Supervisor</option><option value="accountant">Contador</option><option value="auditor">Auditor</option><option value="admin">Administrador de empresa</option></select><div className="rounded-lg border border-slate-700 p-3 text-xs text-slate-400">Al abrir el enlace, podrá aceptar la invitación y entrar a la empresa con el rol asignado. Configura el remitente de correo y APP_PUBLIC_URL en el servidor.</div></div>}
 
           {step === 4 && <div className="grid gap-3"><label className="text-sm">Sucursales<input type="number" min="1" value={workspace.branches} onChange={setValue(setWorkspace,'branches')} className="mt-1 w-full rounded-lg bg-slate-950 p-3"/></label><label className="text-sm">Depósitos<input type="number" min="1" value={workspace.warehouses} onChange={setValue(setWorkspace,'warehouses')} className="mt-1 w-full rounded-lg bg-slate-950 p-3"/></label><fieldset className="rounded-xl border border-slate-700 p-4">
               <legend className="px-2 text-sm font-semibold">Categorías iniciales</legend>

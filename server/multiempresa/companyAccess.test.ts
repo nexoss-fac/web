@@ -5,9 +5,9 @@ import type { LocalPlatformStore, MembershipRole, PlatformState } from './platfo
 
 const COMPANY = '11111111-1111-4111-8111-111111111111';
 
-function stateFor(role: MembershipRole): PlatformState {
+function stateFor(role: MembershipRole, industryTemplate = 'other'): PlatformState {
   return {
-    companies: [{ id: COMPANY, status: 'active' } as any],
+    companies: [{ id: COMPANY, status: 'active', workspace: { industryTemplate } } as any],
     users: [{ id: 'u1', provider: 'firebase', subject: 'uid-1', email: 'a@b.c', displayName: 'A', createdAt: '' }],
     memberships: [{ companyId: COMPANY, userId: 'u1', role, status: 'active', createdAt: '' }],
     invitations: [],
@@ -17,8 +17,8 @@ function stateFor(role: MembershipRole): PlatformState {
   };
 }
 
-function run(role: MembershipRole, method: string, url: string, body?: unknown) {
-  const store = { readState: () => stateFor(role) } as unknown as LocalPlatformStore;
+function run(role: MembershipRole, method: string, url: string, body?: unknown, industryTemplate = 'other') {
+  const store = { readState: () => stateFor(role, industryTemplate) } as unknown as LocalPlatformStore;
   const middleware = createCompanyAccessMiddleware(store);
   const req: any = { method, originalUrl: url, body, firebaseIdentity: { uid: 'uid-1' }, get: (h: string) => (h.toLowerCase() === 'x-company-id' ? COMPANY : undefined) };
   let status = 200;
@@ -105,4 +105,11 @@ test('cajera no puede borrar ventas ni leer contactos que no sean clientes', () 
 
 test('un rol desconocido no tiene ningún permiso', () => {
   assert.equal(run('invitado' as MembershipRole, 'GET', '/api/sales').status, 403);
+});
+
+test('las funciones de calzado se limitan en servidor al giro footwear', () => {
+  assert.equal(run('owner', 'GET', '/api/layaways', undefined, 'footwear').nextCalled, true);
+  assert.equal(run('owner', 'GET', '/api/layaways', undefined, 'commerce').status, 403);
+  assert.equal(run('admin', 'POST', '/api/ai/analyze-shoe', {}, 'services').status, 403);
+  assert.equal(run('owner', 'POST', '/api/ai/analyze-shoe', {}, 'footwear').nextCalled, true);
 });

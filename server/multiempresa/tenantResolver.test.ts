@@ -5,7 +5,7 @@ import { resolveAuthorizedTenant, TenantResolutionError, type MembershipRecord }
 const identity = { provider: 'firebase', subject: 'user-test-001', email: 'test@example.invalid' };
 const activeMembership: MembershipRecord = {
   companyId: 'company-a', slug: 'empresa-a', companyStatus: 'active', membershipStatus: 'active',
-  role: 'owner', secretReference: 'secret://tenant/company-a', connectionStatus: 'ready',
+  role: 'owner', industryTemplate: 'footwear', secretReference: 'secret://tenant/company-a', connectionStatus: 'ready',
   modules: ['pos', 'inventory', 'reports', 'accounting'],
 };
 const repo = (record: MembershipRecord | null) => ({ findMembership: async () => record });
@@ -45,6 +45,7 @@ test('resuelve contexto solo después de validar identidad, membresía, estado y
   assert.equal(context.companyId, 'company-a');
   assert.equal(context.role, 'owner');
   assert.equal(context.companySlug, 'empresa-a');
+  assert.equal(context.industryTemplate, 'footwear');
   assert.deepEqual(context.modules, ['pos', 'inventory', 'reports', 'accounting']);
   assert.match(context.connectionString, /^postgresql:\/\//);
 });

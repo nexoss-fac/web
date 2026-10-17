@@ -4,9 +4,10 @@ import {
   Edit3, Factory, GraduationCap, HardHat, Hotel, LoaderCircle, Mail, Milk, Plus,
   Save, Scale, ShieldCheck, ShoppingBag, Trash2, Users, Wheat, X,
 } from 'lucide-react';
-import { COMPANY_INDUSTRIES, resolveIndustryTemplate, type IndustryTemplate } from '../../domain/companyIndustries';
+import { COMPANY_INDUSTRIES, INDUSTRY_WORKFLOWS, resolveIndustryTemplate, type IndustryTemplate } from '../../domain/companyIndustries';
+import { PushNotificationSettings } from '../common/PushNotificationSettings';
 
-type AdminTab = 'company' | 'team' | 'categories';
+type AdminTab = 'company' | 'team' | 'categories' | 'notifications';
 type CompanyProfile = {
   legalName: string; tradeName: string; taxId: string; activity: string; address: string;
   phone: string; email: string; industryTemplate: IndustryTemplate;
@@ -258,6 +259,7 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
     { id: 'company', label: 'Empresa y rubro', Icon: Building2 },
     { id: 'team', label: 'Equipo y roles', Icon: Users },
     { id: 'categories', label: 'Categorías', Icon: ClipboardList },
+    { id: 'notifications', label: 'Notificaciones', Icon: Activity },
   ];
   const IndustryIcon = activeIndustry.Icon;
 
@@ -329,7 +331,14 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
                 </button>
               ))}
             </div>
-            <p className="mt-3 text-xs text-slate-500">La selección se usa como imagen de portada del panel y puede cambiarse cuando quieras.</p>
+            <p className="mt-3 text-xs text-slate-500">El perfil define las categorías iniciales y el flujo operativo recomendado para esta rama.</p>
+          </section>
+          <section className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 shadow-sm sm:p-6 lg:col-span-2">
+            <h3 className="text-lg font-bold text-slate-900">Flujo operativo · {activeIndustry.label}</h3>
+            <div className="mt-4 grid gap-5 md:grid-cols-2">
+              <div><p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Pasos de trabajo</p><ol className="mt-2 space-y-2">{INDUSTRY_WORKFLOWS[profile.industryTemplate].flow.map((item, index) => <li key={item} className="flex gap-2 text-sm text-slate-700"><span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">{index + 1}</span>{item}</li>)}</ol></div>
+              <div><p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Datos que el perfil debe controlar</p><ul className="mt-2 space-y-2">{INDUSTRY_WORKFLOWS[profile.industryTemplate].records.map((item) => <li key={item} className="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-sm text-slate-700">{item}</li>)}</ul><p className="mt-3 text-xs text-slate-500">Guarda el perfil para aplicarlo en el espacio de esta empresa.</p></div>
+            </div>
           </section>
         </div>
       )}
@@ -430,6 +439,13 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
               </section>
             ))}
           </div>
+        </div>
+      )}
+
+      {tab === 'notifications' && (
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div><h3 className="text-lg font-bold text-slate-900">Notificaciones de esta empresa</h3><p className="mt-1 text-sm text-slate-500">Activa cada dispositivo, envía una prueba y desactívalo desde aquí cuando quieras.</p></div>
+          <PushNotificationSettings key={companyId} mode="settings" />
         </div>
       )}
     </section>

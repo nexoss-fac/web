@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { getRecentVerifications, verifyBdvPayment } from './bdv.ts';
 import { tenantStorageContext, type TenantStorageContext } from './multiempresa/companyAccess.ts';
 
-const companyA: TenantStorageContext = { companyId: '11111111-1111-4111-8111-111111111111', uid: 'uid-a', role: 'owner' };
-const companyB: TenantStorageContext = { companyId: '22222222-2222-4222-8222-222222222222', uid: 'uid-b', role: 'auditor' };
+const companyA: TenantStorageContext = { companyId: '11111111-1111-4111-8111-111111111111', uid: 'uid-a', role: 'owner', industryTemplate: 'footwear' };
+const companyB: TenantStorageContext = { companyId: '22222222-2222-4222-8222-222222222222', uid: 'uid-b', role: 'auditor', industryTemplate: 'commerce' };
 
 test('el historial BDV de una empresa no se ve desde otra', async () => {
   await tenantStorageContext.run(companyA, () => verifyBdvPayment({

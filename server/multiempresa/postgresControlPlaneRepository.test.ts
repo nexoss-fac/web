@@ -33,7 +33,7 @@ test('la consulta de membresía enlaza identidad, proveedor y empresa solicitada
     return result(allowed ? [{
       company_id: 'company-a', slug: 'empresa-a', company_status: 'active',
       membership_status: 'active', role: 'owner', secret_reference: 'secrets/a',
-      connection_status: 'ready', modules: ['pos', 'inventory'],
+      connection_status: 'ready', modules: ['pos', 'inventory'], workspace: { industryTemplate: 'footwear' },
     }] : []);
   });
   const repository = new PostgresControlPlaneRepository(pool);

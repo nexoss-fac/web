@@ -149,6 +149,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
       try {
         return await client.query(
           `SELECT c.id AS company_id, c.slug, c.status AS company_status,
+                  c.economic_activity, c.workspace,
                   m.status AS membership_status, m.role, t.secret_reference,
                   t.status AS connection_status, p.modules
            FROM platform_users u
@@ -171,6 +172,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     if (!row || !isRole(row.role)) return null;
     return {
       companyId: row.company_id, slug: row.slug, companyStatus: row.company_status,
+      industryTemplate: resolveIndustryTemplate(row.workspace?.industryTemplate, row.economic_activity || ''),
       membershipStatus: row.membership_status, role: row.role,
       secretReference: row.secret_reference, connectionStatus: row.connection_status || 'provisioning',
       modules: Array.isArray(row.modules) ? row.modules.filter((module: unknown): module is string => typeof module === 'string') : [],
@@ -360,11 +362,12 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     companyId: string,
     requestedStep: number,
     data: unknown,
-  ): Promise<{ status: string; onboardingStep: number } | null | { incomplete: true }> {
+  ): Promise<{ status: string; onboardingStep: number; invitation?: { id: string; email: string; role: string; expiresAt: string }; companyName?: string } | null | { incomplete: true }> {
     if (!Number.isInteger(requestedStep) || requestedStep < 2 || requestedStep > 5) return null;
     return this.transaction(async (client) => {
       const locked = await client.query(
         `SELECT c.id, c.status, c.onboarding_step, c.country_code, c.address, c.phone, c.economic_activity,
+                c.trade_name, c.legal_name,
                 c.fiscal, c.workspace, u.id AS user_id, p.max_users, p.max_branches, p.max_warehouses, p.modules
          FROM platform_users u
          JOIN company_memberships m ON m.user_id = u.id AND m.company_id = $2
@@ -388,6 +391,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
           [companyId, JSON.stringify(fiscal)],
         );
       }
+      let onboardingInvitation: { id: string; email: string; role: string; expiresAt: string } | undefined;
       if (requestedStep === 3) {
         const email = typeof source.inviteEmail === 'string' ? source.inviteEmail.trim().toLowerCase() : '';
         const role = typeof source.inviteRole === 'string' ? source.inviteRole : 'cashier';
@@ -406,18 +410,21 @@ export class PostgresControlPlaneRepository implements TenantRepository {
             [companyId],
           );
           const active = await client.query(
-            `SELECT id FROM company_invitations WHERE company_id = $1 AND lower(email) = $2
+            `SELECT id, role, expires_at FROM company_invitations WHERE company_id = $1 AND lower(email) = $2
              AND status = 'pending' AND expires_at > NOW()`,
             [companyId, email],
           );
           if (Number(count.rows[0].count) >= Number(row.max_users)) return null;
           if (!active.rows[0]) {
             const invitationId = randomUUID();
-            await client.query(
+            const inserted = await client.query<{ expires_at: Date }>(
               `INSERT INTO company_invitations (id, company_id, email, role, invited_by_user_id, status, expires_at)
-               VALUES ($1, $2, $3, $4, $5, 'pending', NOW() + INTERVAL '7 days')`,
+               VALUES ($1, $2, $3, $4, $5, 'pending', NOW() + INTERVAL '7 days') RETURNING expires_at`,
               [invitationId, companyId, email, role, row.user_id],
             );
+            onboardingInvitation = { id: invitationId, email, role, expiresAt: new Date(inserted.rows[0].expires_at).toISOString() };
+          } else {
+            onboardingInvitation = { id: active.rows[0].id, email, role: active.rows[0].role, expiresAt: new Date(active.rows[0].expires_at).toISOString() };
           }
         }
         await client.query(
@@ -446,7 +453,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
       const nextStep = Math.min(5, requestedStep + (requestedStep < 5 ? 1 : 0));
       await client.query(`UPDATE platform_companies SET onboarding_step = $2, updated_at = NOW() WHERE id = $1`, [companyId, nextStep]);
       await this.audit(client, identity.uid, `company.onboarding.step_${requestedStep}`, companyId);
-      return { status: requestedStep === 5 ? 'active' : 'onboarding', onboardingStep: nextStep };
+      return { status: requestedStep === 5 ? 'active' : 'onboarding', onboardingStep: nextStep, ...(onboardingInvitation ? { invitation: onboardingInvitation, companyName: row.trade_name || row.legal_name || '' } : {}) };
     });
   }
 

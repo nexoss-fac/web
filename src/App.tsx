@@ -95,7 +95,7 @@ function AppContent({ onTenantSelected }: { onTenantSelected: (id: string) => vo
       <div className="flex-1 flex flex-col min-w-0 bg-slate-50 text-slate-900 min-h-screen">
         
         {/* High Density White Top Header with Live Revenue */}
-        {isCompanyAdmin && <PushNotificationSettings />}
+        {isCompanyAdmin && <PushNotificationSettings key={activeCompanyId} mode="prompt" />}
 
         <Header
           activeTab={activeTab}

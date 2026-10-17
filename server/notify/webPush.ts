@@ -53,6 +53,33 @@ export async function removeWebPushSubscription(sql: Sql, uid: string, endpoint:
   await sql`DELETE FROM nexoss_web_push_subscriptions WHERE uid = ${uid} AND endpoint = ${endpoint}`;
 }
 
+export async function hasWebPushSubscription(sql: Sql, uid: string) {
+  await ensureTable(sql);
+  const rows = await sql`SELECT 1 AS active FROM nexoss_web_push_subscriptions WHERE uid = ${uid} LIMIT 1`;
+  return rows.length > 0;
+}
+
+export async function sendWebPushTest(sql: Sql, uid: string) {
+  if (!isWebPushConfigured()) throw new Error('Web Push no está configurado en el servidor.');
+  await ensureTable(sql);
+  const rows = await sql`SELECT id, subscription FROM nexoss_web_push_subscriptions WHERE uid = ${uid}`;
+  if (!rows.length) return false;
+  const webPush = await getWebPush();
+  const message = JSON.stringify({ title: 'NEXOSS · Notificación de prueba', body: 'Este dispositivo está conectado y puede recibir avisos de ventas y gastos.', url: '/?tab=admin', tag: 'nexoss-notification-test' });
+  await Promise.all((rows as any[]).map(async (row) => {
+    try {
+      await webPush.sendNotification(row.subscription, message, { TTL: 60 * 60 });
+    } catch (error: any) {
+      const status = Number(error?.statusCode);
+      if (status === 404 || status === 410) {
+        await sql`DELETE FROM nexoss_web_push_subscriptions WHERE id = ${row.id}`;
+      }
+      throw error;
+    }
+  }));
+  return true;
+}
+
 export async function sendWebPushToCompanyAdmins(sql: Sql, payload: { title: string; body: string; url?: string }) {
   if (!isWebPushConfigured()) return;
   await ensureTable(sql);

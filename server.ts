@@ -27,6 +27,9 @@ import {
   deleteLayawayFromDb,
   getSalesClosures,
   addSalesClosure,
+  getAccountingLedger,
+  saveAccountingEntry,
+  deleteAccountingEntry,
 } from './server/db.ts';
 import { verifyBdvPayment, getBdvApiConfig, getRecentVerifications } from './server/bdv.ts';
 import { analyzeShoeImage } from './server/shoeAi.ts';
@@ -44,7 +47,7 @@ import { assertProductionRuntimeSupported } from './server/productionRuntime.ts'
 import { logger } from './server/logger.ts';
 import { sendMail } from './server/mail/mailer.ts';
 import { buildExpenseNotice, buildSaleNotice, sendNotice, type Notice } from './server/notify/notifier.ts';
-import { isWebPushConfigured, saveWebPushSubscription, removeWebPushSubscription, sendWebPushToCompanyAdmins } from './server/notify/webPush.ts';
+import { isWebPushConfigured, saveWebPushSubscription, removeWebPushSubscription, sendWebPushToCompanyAdmins, hasWebPushSubscription, sendWebPushTest } from './server/notify/webPush.ts';
 import { buildInvitationEmail } from './server/mail/invitationEmail.ts';
 import type { AccountBalance, Sale, ShoeProduct } from './src/types.ts';
 
@@ -61,12 +64,15 @@ let postgresControlPlane: PostgresControlPlaneRepository | undefined;
  * Envía el correo de invitación. No hace fallar la invitación si el correo no sale:
  * la invitación queda creada y la respuesta indica si el correo se envió y por qué no.
  */
-async function sendInvitationNotice(input: { to: string; companyName: string; role: string; invitedBy?: string; expiresAt: string }) {
+async function sendInvitationNotice(input: { to: string; companyName: string; role: string; invitationId: string; invitedBy?: string; expiresAt: string }) {
   const port = Number(process.env.PORT) || 3000;
-  const appUrl = (process.env.APP_PUBLIC_URL || `http://127.0.0.1:${port}`).replace(/\/+$/, '');
-  const result = await sendMail(buildInvitationEmail({ ...input, appUrl }));
+  const publicBaseUrl = process.env.APP_PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `http://127.0.0.1:${port}`;
+  const appUrl = publicBaseUrl.replace(/\/+$/, '');
+  const invitationUrl = new URL('/', `${appUrl}/`);
+  invitationUrl.searchParams.set('invitation', input.invitationId);
+  const result = await sendMail(buildInvitationEmail({ ...input, invitationUrl: invitationUrl.toString() }));
   if (!result.sent) logger.warn('[Invitación] No se pudo enviar el correo:', result.error);
-  const localOnly = !process.env.APP_PUBLIC_URL;
+  const localOnly = !process.env.APP_PUBLIC_URL && !process.env.RENDER_EXTERNAL_URL;
   return {
     emailSent: result.sent,
     ...(result.sent ? {} : { emailError: result.error }),
@@ -463,12 +469,16 @@ async function startServer() {
         const result = await getPostgresControlPlane().saveOnboardingStep(identity, req.params.companyId, requestedStep, req.body?.data);
         if (!result) return res.status(403).json({ error: 'No tienes permisos para configurar esta empresa.' });
         if ('incomplete' in result) return res.status(400).json({ error: 'Completa los datos empresariales y fiscales requeridos antes de finalizar.' });
-        return res.json(result);
+        const notice = result.invitation
+          ? await sendInvitationNotice({ to: result.invitation.email, companyName: result.companyName || '', role: result.invitation.role, invitationId: result.invitation.id, invitedBy: identity.email, expiresAt: result.invitation.expiresAt })
+          : {};
+        return res.json({ ...result, ...notice });
       } catch {
         return res.status(503).json({ error: 'No se pudo guardar la configuración.' });
       }
     }
     try {
+      let onboardingInvitationId: string | null = null;
       const result = PLATFORM_STORE.update((state) => {
         const user = state.users.find((item) => item.subject === identity?.uid);
         const membership = user && state.memberships.find((item) => item.userId === user.id && item.companyId === req.params.companyId && item.status === 'active' && ['owner', 'admin'].includes(item.role));
@@ -487,7 +497,11 @@ async function startServer() {
             const activeSeats = state.memberships.filter((item) => item.companyId === company.id && item.status === 'active').length + state.invitations.filter((item) => item.companyId === company.id && isInvitationPending(item)).length;
             if (activeSeats >= (plan?.limits.users || 1)) return null;
             const existing = state.invitations.find((item) => item.companyId === company.id && item.email.toLowerCase() === inviteEmail && isInvitationPending(item));
-            if (!existing) state.invitations.push(createCompanyInvitation(company.id, inviteEmail, inviteRole as Exclude<MembershipRole, 'owner'>));
+            if (!existing) {
+              const onboardingInvitation = createCompanyInvitation(company.id, inviteEmail, inviteRole as Exclude<MembershipRole, 'owner'>);
+              state.invitations.push(onboardingInvitation);
+              onboardingInvitationId = onboardingInvitation.id;
+            } else onboardingInvitationId = existing.id;
           }
           company.workspace = { ...company.workspace, teamSetup: inviteEmail ? 'invitation_pending' : 'owner_only' };
         }
@@ -507,11 +521,15 @@ async function startServer() {
         company.onboardingStep = Math.min(5, requestedStep + (requestedStep < 5 ? 1 : 0));
         company.updatedAt = new Date().toISOString();
         state.audit.push({ id: randomUUID(), actorUid: identity.uid, companyId: company.id, action: `company.onboarding.step_${requestedStep}`, createdAt: new Date().toISOString(), metadata: {} });
-        return { incomplete: false as const, status: company.status, onboardingStep: company.onboardingStep };
+        const onboardingInvitation = onboardingInvitationId ? state.invitations.find((item) => item.id === onboardingInvitationId) : undefined;
+        return { incomplete: false as const, status: company.status, onboardingStep: company.onboardingStep, ...(onboardingInvitation ? { invitation: onboardingInvitation, companyName: company.tradeName || company.legalName || '' } : {}) };
       });
       if (!result) return res.status(403).json({ error: 'No tienes permisos para configurar esta empresa.' });
       if (result.incomplete) return res.status(400).json({ error: 'Completa los datos empresariales y fiscales requeridos antes de finalizar.' });
-      return res.json(result);
+      const notice = result.invitation
+        ? await sendInvitationNotice({ to: result.invitation.email, companyName: result.companyName || '', role: result.invitation.role, invitationId: result.invitation.id, invitedBy: identity.email, expiresAt: result.invitation.expiresAt })
+        : {};
+      return res.json({ ...result, ...notice });
     } catch { return res.status(503).json({ error: 'No se pudo guardar la configuración.' }); }
   });
 
@@ -659,7 +677,7 @@ async function startServer() {
           const profile = await getPostgresControlPlane().getManagedCompanyProfile(req.params.companyId, identity?.uid || '');
           companyName = profile?.tradeName || profile?.legalName || '';
         } catch { /* el nombre es solo para el correo */ }
-        const notice = await sendInvitationNotice({ to: email, companyName, role, invitedBy: identity?.email, expiresAt: invitation.expiresAt });
+        const notice = await sendInvitationNotice({ to: email, companyName, role, invitationId: invitation.id, invitedBy: identity?.email, expiresAt: invitation.expiresAt });
         return res.status(201).json({ success: true, invitationId: invitation.id, expiresAt: invitation.expiresAt, ...notice });
       } catch {
         return res.status(503).json({ error: 'No se pudo crear la invitación.' });
@@ -682,7 +700,7 @@ async function startServer() {
         return { invited: true, invitation, companyName: company.tradeName || company.legalName || '' };
       });
       if (!result.invited) return res.status(403).json({ error: result.error });
-      const notice = await sendInvitationNotice({ to: email, companyName: result.companyName, role, invitedBy: identity?.email, expiresAt: result.invitation.expiresAt });
+      const notice = await sendInvitationNotice({ to: email, companyName: result.companyName, role, invitationId: result.invitation.id, invitedBy: identity?.email, expiresAt: result.invitation.expiresAt });
       return res.status(201).json({ success: true, invitationId: result.invitation.id, expiresAt: result.invitation.expiresAt, ...notice });
     } catch { return res.status(503).json({ error: 'No se pudo crear la invitación.' }); }
   });
@@ -723,6 +741,31 @@ async function startServer() {
     const key = (process.env.WEB_PUSH_VAPID_PUBLIC_KEY || '').trim();
     if (!key || !isWebPushConfigured()) return res.status(503).json({ configured: false, error: 'Las notificaciones push aún no están configuradas en el servidor.' });
     return res.json({ configured: true, publicKey: key });
+  });
+
+  app.get('/api/push/status', adminOnly, async (req, res) => {
+    const tenant = (req as TenantAuthenticatedRequest).tenant;
+    const sql = getNeonSql();
+    if (!tenant?.uid || !sql) return res.status(503).json({ configured: isWebPushConfigured(), active: false, error: 'No hay una base de datos disponible para esta empresa.' });
+    try {
+      const active = await hasWebPushSubscription(sql, tenant.uid);
+      return res.json({ configured: isWebPushConfigured(), active });
+    } catch {
+      return res.status(503).json({ configured: isWebPushConfigured(), active: false, error: 'No se pudo consultar el estado de notificaciones.' });
+    }
+  });
+
+  app.post('/api/push/test', adminOnly, async (req, res) => {
+    const tenant = (req as TenantAuthenticatedRequest).tenant;
+    const sql = getNeonSql();
+    if (!tenant?.uid || !sql) return res.status(503).json({ error: 'No hay una base de datos disponible para esta empresa.' });
+    try {
+      const sent = await sendWebPushTest(sql, tenant.uid);
+      return sent ? res.json({ sent: true }) : res.status(404).json({ sent: false, error: 'Este usuario no tiene un dispositivo activado en esta empresa.' });
+    } catch (error) {
+      logger.warn('[Web Push] Falló la notificación de prueba:', error instanceof Error ? error.message : 'error');
+      return res.status(502).json({ sent: false, error: 'El servidor no pudo entregar la notificación de prueba. Revisa la configuración VAPID y el permiso del navegador.' });
+    }
   });
 
   app.post('/api/push/subscribe', adminOnly, async (req, res) => {
@@ -1994,7 +2037,20 @@ async function startServer() {
   // 10. Catálogo local; publicación externa desactivada.
   // Contabilidad local: evita enviar la petición al fallback HTML de Vite y
   // mantiene los asientos en el mismo almacén local de la demostración.
-  app.get('/api/accounting', (req, res) => {
+  app.get('/api/accounting', async (req, res) => {
+    // En el modo multiempresa con Neon, el contexto autorizado resuelve la BD
+    // propia del tenant. No leer el JSON local para una empresa conectada a Neon.
+    if (getNeonSql()) {
+      try {
+        const start = String(req.query.start || '') || undefined;
+        const end = String(req.query.end || '') || undefined;
+        const data = await getAccountingLedger(start, end);
+        return res.json({ source: 'neon_postgres', data });
+      } catch (error) {
+        logger.error('Error al consultar contabilidad en Neon:', error);
+        return res.status(503).json({ error: 'No se pudieron cargar los datos contables de esta empresa.' });
+      }
+    }
     const state = readServerStore();
     const start = String(req.query.start || '');
     const end = String(req.query.end || '');
@@ -2019,7 +2075,15 @@ async function startServer() {
     res.json({ source: 'local_demo', data: { entries, ledger } });
   });
 
-  app.post('/api/accounting/journal', (req, res) => {
+  app.post('/api/accounting/journal', async (req, res) => {
+    if (getNeonSql()) {
+      try {
+        const result = await saveAccountingEntry(req.body || {});
+        return res.json({ source: 'neon_postgres', data: result });
+      } catch (error) {
+        return res.status(400).json({ error: error instanceof Error ? error.message : 'No se pudo guardar el asiento.' });
+      }
+    }
     const state = readServerStore();
     const entry = req.body || {};
     const lines = Array.isArray(entry.lineas) ? entry.lineas : [];
@@ -2050,7 +2114,16 @@ async function startServer() {
     res.json({ source: 'local_demo', data: { id: saved.id, numeroAsiento: saved.numero_asiento, totalDebe, totalHaber } });
   });
 
-  app.delete('/api/accounting/journal/:id', (req, res) => {
+  app.delete('/api/accounting/journal/:id', async (req, res) => {
+    if (getNeonSql()) {
+      try {
+        await deleteAccountingEntry(req.params.id);
+        return res.json({ ok: true });
+      } catch (error) {
+        logger.error('Error al eliminar asiento contable en Neon:', error);
+        return res.status(503).json({ error: 'No se pudo eliminar el asiento contable.' });
+      }
+    }
     const state = readServerStore();
     const entries = state.accountingEntries || [];
     const remaining = entries.filter((entry: any) => String(entry.id) !== String(req.params.id));
@@ -2128,8 +2201,9 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '127.0.0.1', () => {
-    logger.info(`NEXOSS local iniciado en http://127.0.0.1:${PORT}`);
+  const HOST = process.env.RENDER ? '0.0.0.0' : '127.0.0.1';
+  app.listen(PORT, HOST, () => {
+    logger.info(`NEXOSS iniciado en http://${HOST}:${PORT}`);
   });
 }
 
