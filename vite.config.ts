@@ -49,6 +49,17 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      fs: {
+        // El servidor de desarrollo sirve la raíz del proyecto: sin esto, cualquiera que llegue
+        // al puerto descarga server/data (datos de todas las empresas) sin iniciar sesión.
+        // Reemplaza la lista por defecto de Vite, por eso se repiten sus entradas.
+        deny: [
+          '.env', '.env.*', '*.{crt,pem}', '**/.git/**',
+          '**/server/**', '**/.secrets/**', '**/.neon', '**/*.bak', '**/*.prev',
+          '**/firebase-export-*/**', '**/emulator-data/**', 'server.ts', 'neon.ts',
+          '**/db/**', '**/database/**', '**/scripts/**', '**/audit-*.json',
+        ],
+      },
     },
   };
 });

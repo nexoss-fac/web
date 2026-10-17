@@ -36,7 +36,7 @@ import { LocalPlatformStore, acceptCompanyInvitation, createCompanyForVerifiedUs
 import { createPostgresControlPlaneRepositoryFromEnvironment, type PostgresControlPlaneRepository } from './server/multiempresa/postgresControlPlaneRepository.ts';
 import { createCompanyAccessMiddleware, createPostgresCompanyAccessMiddleware, requireTenantRole, tenantStorageContext, type TenantAuthenticatedRequest } from './server/multiempresa/companyAccess.ts';
 import { LocalEnvironmentTenantSecretProvider } from './server/multiempresa/tenantSecretProvider.ts';
-import { tenantDataFiles } from './server/multiempresa/tenantFileStore.ts';
+import { readJsonFileWithBackup, tenantDataFiles, writeJsonFileAtomic } from './server/multiempresa/tenantFileStore.ts';
 import { FiscalBoardValidationError, matchesPublicBoardToken, publicFiscalBoard, readFiscalBoard, saveFiscalBoard, validateFiscalBoardState } from './server/multiempresa/fiscalBoardStore.ts';
 import { NATIONAL_FISCAL_REQUIREMENTS } from './src/domain/fiscalBoard.ts';
 import { isIndustryTemplate, normalizeIndustryTemplate, resolveIndustryTemplate } from './src/domain/companyIndustries.ts';
@@ -146,9 +146,12 @@ const DEFAULT_ACCOUNTS: AccountBalance[] = [
 
 function readServerStore(): ServerStoreState {
   const files = getTenantFiles();
-  try {
-    if (fs.existsSync(files.store)) {
-      const data = JSON.parse(fs.readFileSync(files.store, 'utf-8'));
+  // Si el archivo está dañado y tampoco hay respaldo, esto lanza: nunca se reinicializa
+  // encima de datos que todavía podrían recuperarse a mano.
+  const data = readJsonFileWithBackup(files.store, (error) => {
+    logger.error('store_state.json dañado; se usó la copia de respaldo .prev:', error);
+  }) as any;
+  if (data && typeof data === 'object') {
       return {
         products: Array.isArray(data.products) ? data.products : [],
         sales: Array.isArray(data.sales) ? data.sales : [],
@@ -165,10 +168,8 @@ function readServerStore(): ServerStoreState {
         adminPin: data.adminPin || '1234',
         updatedAt: data.updatedAt || new Date().toISOString(),
       };
-    }
-  } catch (e) {
-    logger.error('Error reading server store:', e);
   }
+  if (data !== undefined) throw new Error('El archivo de datos de la empresa tiene un formato inválido.');
 
   const initial: ServerStoreState = {
     products: [],
@@ -187,22 +188,20 @@ function readServerStore(): ServerStoreState {
     updatedAt: new Date().toISOString(),
   };
 
-  try {
-    fs.writeFileSync(files.store, JSON.stringify(initial, null, 2), 'utf-8');
-  } catch (e) {}
-
+  writeJsonFileAtomic(files.store, initial);
   return initial;
 }
 
 function writeServerStore(state: ServerStoreState) {
+  const files = getTenantFiles();
+  state.updatedAt = new Date().toISOString();
+  // store_state.json es la fuente de verdad; products/sales.json son copias de lectura.
+  writeJsonFileAtomic(files.store, state);
   try {
-    const files = getTenantFiles();
-    state.updatedAt = new Date().toISOString();
-    fs.writeFileSync(files.store, JSON.stringify(state, null, 2), 'utf-8');
-    fs.writeFileSync(files.products, JSON.stringify(state.products, null, 2), 'utf-8');
-    fs.writeFileSync(files.sales, JSON.stringify(state.sales, null, 2), 'utf-8');
+    writeJsonFileAtomic(files.products, state.products);
+    writeJsonFileAtomic(files.sales, state.sales);
   } catch (e) {
-    logger.error('Error writing server store:', e);
+    logger.error('No se pudieron actualizar las copias products/sales.json:', e);
   }
 }
 
@@ -232,8 +231,39 @@ function sanitizeStoreForTenantRole(store: ServerStoreState, role: MembershipRol
   return { ...store, sales: [], movements: [], cashClosures: [], expenses: [], bankMovements: [], currencyPurchases: [], accountingEntries: [], adminPin: '' };
 }
 
+/**
+ * Express 4 no captura promesas rechazadas: un error lanzado en un handler `async`
+ * (por ejemplo, un archivo de datos dañado) dejaría la petición colgada o tumbaría
+ * el proceso. Esto envuelve los handlers de rutas para enviarlos a `next(err)`.
+ */
+function forwardAsyncRouteErrors(app: express.Express) {
+  type Handler = (req: express.Request, res: express.Response, next: express.NextFunction) => unknown;
+  const wrap = (handler: unknown) => {
+    // Los manejadores de error (4 parámetros) y lo que no sea función se dejan igual.
+    if (typeof handler !== 'function' || handler.length >= 4) return handler;
+    const fn = handler as Handler;
+    return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      try {
+        const result = fn(req, res, next);
+        if (result && typeof (result as Promise<unknown>).catch === 'function') (result as Promise<unknown>).catch(next);
+      } catch (error) {
+        next(error);
+      }
+    };
+  };
+  for (const method of ['get', 'post', 'put', 'patch', 'delete', 'all'] as const) {
+    const original = (app[method] as (...args: unknown[]) => unknown).bind(app);
+    (app as any)[method] = (...args: unknown[]) => {
+      // app.get('ajuste') es el getter de configuración, no una ruta.
+      if (method === 'get' && args.length === 1) return original(...args);
+      return original(...args.map(wrap));
+    };
+  }
+}
+
 async function startServer() {
   const app = express();
+  forwardAsyncRouteErrors(app);
   // Render (y la mayoría de hostings) asignan el puerto por variable de
   // entorno. Si se deja fijo en 3000, el servicio arranca pero el hosting
   // nunca logra conectarse y el sitio queda caído.
@@ -2071,6 +2101,12 @@ async function startServer() {
 
   // Never let an unknown API endpoint fall through to the SPA's index.html.
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ruta API no encontrada.' }));
+  app.use('/api', (err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    logger.error('Error no controlado en la API:', err);
+    if (res.headersSent) return next(err);
+    // Mensaje genérico: el detalle interno queda solo en el log.
+    return res.status(500).json({ error: 'No se pudo completar la operación. Revisa el registro del servidor.' });
+  });
 
   // 11. Vite Middleware for Development / Static serving for Production
   if (process.env.NODE_ENV !== 'production') {

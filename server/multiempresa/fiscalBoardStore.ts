@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readJsonFileWithBackup, writeJsonFileAtomic } from './tenantFileStore.ts';
 import type { FiscalArea, FiscalBoardSettings, FiscalBoardState, FiscalCalendarEvent, FiscalPortalConfig, FiscalRequirement } from '../../src/domain/fiscalBoard.ts';
 import { FISCAL_AREAS, FISCAL_DOCUMENT_STATUSES, FISCAL_RECURRENCES } from '../../src/domain/fiscalBoard.ts';
 import { DEFAULT_REMIND_DAYS, daysBetween, deriveDocumentStatus, toDateKey } from '../../src/domain/fiscalCalendar.ts';
@@ -17,8 +17,8 @@ export function createDefaultFiscalBoard(requirements: FiscalRequirement[]): Fis
 }
 
 export function readFiscalBoard(filePath: string, requirements: FiscalRequirement[]): FiscalBoardState {
-  if (!existsSync(filePath)) return createDefaultFiscalBoard(requirements);
-  const parsed: unknown = JSON.parse(readFileSync(filePath, 'utf8'));
+  const parsed = readJsonFileWithBackup(filePath);
+  if (parsed === undefined) return createDefaultFiscalBoard(requirements);
   if (!parsed || typeof parsed !== 'object') throw new Error('El expediente fiscal almacenado no es válido.');
   const value = parsed as Partial<FiscalBoardState>;
   if (!Array.isArray(value.documents) || !Array.isArray(value.requirements)) {
@@ -53,7 +53,7 @@ export function mergeFiscalRequirements(defaults: FiscalRequirement[], savedRequ
 }
 
 export function saveFiscalBoard(filePath: string, state: FiscalBoardState): void {
-  writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf8');
+  writeJsonFileAtomic(filePath, state);
 }
 
 export function matchesPublicBoardToken(tokenHash: string | undefined, token: string): boolean {

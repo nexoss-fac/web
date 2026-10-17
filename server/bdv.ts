@@ -5,6 +5,7 @@
 
 import { getNeonSql } from './db.ts';
 import { logger } from './logger.ts';
+import { tenantStorageContext } from './multiempresa/companyAccess.ts';
 
 export interface BdvVerificationRequest {
   referencia: string;
@@ -32,8 +33,20 @@ export interface BdvVerificationResult {
   detalles_tecnicos?: Record<string, unknown>;
 }
 
-// In-memory verification log for fast retrieval
-const localVerificationLog: BdvVerificationResult[] = [];
+// Historial en memoria separado por empresa: contiene referencia, teléfono y cédula
+// de los pagadores, así que nunca debe compartirse entre tenants.
+const localVerificationLogs = new Map<string, BdvVerificationResult[]>();
+
+function currentCompanyLog(): BdvVerificationResult[] | null {
+  const companyId = tenantStorageContext.getStore()?.companyId;
+  if (!companyId) return null;
+  let log = localVerificationLogs.get(companyId);
+  if (!log) {
+    log = [];
+    localVerificationLogs.set(companyId, log);
+  }
+  return log;
+}
 
 export function getBdvApiConfig() {
   return {
@@ -156,8 +169,10 @@ export async function verifyBdvPayment(data: BdvVerificationRequest): Promise<Bd
 }
 
 async function saveVerificationLog(item: BdvVerificationResult) {
-  localVerificationLog.unshift(item);
-  if (localVerificationLog.length > 50) localVerificationLog.pop();
+  const log = currentCompanyLog();
+  if (!log) throw new Error('No existe un contexto de empresa autorizado para registrar la verificación.');
+  log.unshift(item);
+  if (log.length > 50) log.pop();
 
   const sql = getNeonSql();
   if (sql) {
@@ -187,6 +202,6 @@ async function saveVerificationLog(item: BdvVerificationResult) {
   }
 }
 
-export function getRecentVerifications() {
-  return localVerificationLog;
+export function getRecentVerifications(): BdvVerificationResult[] {
+  return [...(currentCompanyLog() ?? [])];
 }
