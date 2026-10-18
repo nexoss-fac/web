@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { BellRing, BellOff, LoaderCircle, Send } from 'lucide-react';
 
-type Props = { mode?: 'prompt' | 'settings' };
+type Props = { mode?: 'prompt' | 'settings'; companyId?: string };
 
 function decodeVapidKey(value: string): Uint8Array {
   const padding = '='.repeat((4 - value.length % 4) % 4);
@@ -10,12 +10,13 @@ function decodeVapidKey(value: string): Uint8Array {
   return Uint8Array.from(raw, (char) => char.charCodeAt(0));
 }
 
-export const PushNotificationSettings: React.FC<Props> = ({ mode = 'prompt' }) => {
+export const PushNotificationSettings: React.FC<Props> = ({ mode = 'prompt', companyId = '' }) => {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [configured, setConfigured] = useState(true);
   const [checking, setChecking] = useState(true);
+  const [databaseVariable, setDatabaseVariable] = useState('MAKD_SHOP_DATABASE_URL');
 
   const refreshStatus = useCallback(async () => {
     setChecking(true);
@@ -117,6 +118,27 @@ export const PushNotificationSettings: React.FC<Props> = ({ mode = 'prompt' }) =
     }
   };
 
+  const repairCompanyConnection = async () => {
+    setBusy(true);
+    setMessage('');
+    try {
+      const variableName = databaseVariable.trim().toUpperCase();
+      if (!/^[A-Z][A-Z0-9_]*_DATABASE_URL$/.test(variableName) || ['DATABASE_URL', 'CONTROL_PLANE_DATABASE_URL'].includes(variableName)) {
+        throw new Error('Escribe el nombre de la variable Neon configurada en Render, por ejemplo MAKD_SHOP_DATABASE_URL.');
+      }
+      const response = await fetch(`/api/platform/companies/${companyId}/database`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ variableName }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'No se pudo verificar la conexión.');
+      setMessage('Conexión de la empresa verificada. Recarga la página para continuar.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo reparar la conexión.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (mode === 'prompt' && (checking || enabled)) return null;
 
   return (
@@ -129,6 +151,7 @@ export const PushNotificationSettings: React.FC<Props> = ({ mode = 'prompt' }) =
         <p className="text-xs text-slate-500">Avisos de ventas y gastos en este dispositivo.</p>
         {!configured && <p role="alert" className="mt-1 text-xs text-amber-700">Falta configurar las claves Web Push en el servidor.</p>}
         {message && <p role="status" className="mt-1 text-xs text-slate-600">{message}</p>}
+        {message.toLowerCase().includes('no se pudo resolver la conexión de la empresa') && companyId && <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"><label className="text-xs text-slate-600">Variable Neon configurada en Render<input value={databaseVariable} onChange={(event) => setDatabaseVariable(event.target.value.toUpperCase())} placeholder="MAKD_SHOP_DATABASE_URL" className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm text-slate-900"/><span className="mt-1 block">Escribe solo el nombre de la variable, nunca la URL ni la contraseña.</span></label><button type="button" onClick={() => void repairCompanyConnection()} disabled={busy} className="self-end rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Verificar y conectar</button></div>}
       </div>
       {mode === 'settings' && enabled && <button type="button" onClick={() => void sendTest()} disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 disabled:opacity-60"><Send size={15} />Enviar prueba</button>}
       <button
