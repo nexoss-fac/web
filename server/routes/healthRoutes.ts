@@ -1,6 +1,6 @@
 import type { Express, Request, RequestHandler, Response } from 'express';
 import { randomUUID } from 'node:crypto';
-import { getNeonSql } from '../db.ts';
+import { getNeonSql, initDatabaseSchema } from '../db.ts';
 import type { TenantAuthenticatedRequest } from '../multiempresa/companyAccess.ts';
 
 type Sql = NonNullable<ReturnType<typeof getNeonSql>>;
@@ -24,7 +24,7 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
     if (!authorizedClinic(req, res)) return;
     const sql = getNeonSql();
     if (!sql) return res.status(503).json({ error: 'La base de datos clínica no está disponible.' });
-    try { await handler(req, res, sql); }
+    try { await initDatabaseSchema(); await handler(req, res, sql); }
     catch { return res.status(503).json({ error: 'No se pudo procesar la información clínica.' }); }
   }] as const;
 
