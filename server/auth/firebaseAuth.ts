@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { applicationDefault, getApps, initializeApp, type App } from 'firebase-admin/app';
+import { applicationDefault, cert, getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { logger } from '../logger.ts';
@@ -54,10 +54,13 @@ function getFirebaseAdminApp(): App {
 
   const emulatorEnabled = Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST?.trim());
   assertFirebaseAdminCredentialSource();
+  const credentialPath = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
   const existingApp = getApps().find((app) => app.name === 'nexoss-auth');
   adminApp = existingApp || initializeApp({
     projectId,
-    ...(emulatorEnabled ? {} : { credential: applicationDefault() }),
+    ...(emulatorEnabled
+      ? {}
+      : { credential: credentialPath ? cert(credentialPath) : applicationDefault() }),
   }, 'nexoss-auth');
   return adminApp;
 }
