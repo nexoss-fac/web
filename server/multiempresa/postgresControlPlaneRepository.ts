@@ -85,20 +85,21 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     this.pool = pool;
   }
 
-  async findPublicBoardTenant(companyId: string): Promise<{ companyId: string; companyName: string; secretReference: string } | null> {
+  async findPublicBoardTenant(companyId: string): Promise<{ companyId: string; companyName: string; secretReference: string | null; encryptedConnectionSecret: string | null } | null> {
     const client = await this.pool.connect();
     try {
       const result = await client.query(
         `SELECT c.id, COALESCE(NULLIF(c.trade_name, ''), c.legal_name) AS company_name,
-                t.secret_reference
+                t.secret_reference, t.encrypted_connection_secret
          FROM platform_companies c
          JOIN tenant_database_connections t ON t.company_id = c.id AND t.status = 'ready'
-         WHERE c.id = $1 AND c.status = 'active' AND t.secret_reference IS NOT NULL
+         WHERE c.id = $1 AND c.status = 'active'
+           AND (t.secret_reference IS NOT NULL OR t.encrypted_connection_secret IS NOT NULL)
          LIMIT 1`,
         [companyId],
       );
       const row = result.rows[0];
-      return row ? { companyId: row.id, companyName: row.company_name, secretReference: row.secret_reference } : null;
+      return row ? { companyId: row.id, companyName: row.company_name, secretReference: row.secret_reference, encryptedConnectionSecret: row.encrypted_connection_secret } : null;
     } finally {
       client.release();
     }
@@ -127,6 +128,50 @@ export class PostgresControlPlaneRepository implements TenantRepository {
       await this.audit(client, actorUid, 'platform.tenant_database.connected', companyId, { provider: 'neon' });
       return true;
     });
+  }
+
+  async setProvisionedTenantDatabaseConnection(companyId: string, encryptedConnectionSecret: string, actorUid: string): Promise<boolean> {
+    return this.transaction(async (client) => {
+      const result = await client.query(
+        `INSERT INTO tenant_database_connections
+           (company_id, provider, secret_reference, encrypted_connection_secret, encryption_key_version,
+            status, schema_version, provisioned_at, last_health_check_at)
+         VALUES ($1, 'neon', NULL, $2, 'v1', 'ready', '1', NOW(), NOW())
+         ON CONFLICT (company_id) DO UPDATE SET
+           provider = 'neon', secret_reference = NULL,
+           encrypted_connection_secret = EXCLUDED.encrypted_connection_secret,
+           encryption_key_version = EXCLUDED.encryption_key_version,
+           status = 'ready', schema_version = EXCLUDED.schema_version,
+           provisioned_at = NOW(), last_health_check_at = NOW(), updated_at = NOW()
+         WHERE tenant_database_connections.status IN ('provisioning', 'degraded')
+         RETURNING company_id`,
+        [companyId, encryptedConnectionSecret],
+      );
+      if (!result.rowCount) return false;
+      await this.audit(client, actorUid, 'tenant_database.provisioned', companyId, { provider: 'neon' });
+      return true;
+    });
+  }
+
+  async listTenantDatabasesToProvision(limit = 20): Promise<Array<{ companyId: string; actorUid: string }>> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT c.id AS company_id, owner.auth_subject AS actor_uid
+         FROM platform_companies c
+         JOIN company_memberships m ON m.company_id = c.id AND m.role = 'owner' AND m.status = 'active'
+         JOIN platform_users owner ON owner.id = m.user_id AND owner.auth_provider = 'firebase'
+         LEFT JOIN tenant_database_connections t ON t.company_id = c.id
+         WHERE c.status IN ('onboarding', 'active')
+           AND (t.company_id IS NULL OR t.status IN ('provisioning', 'degraded'))
+         ORDER BY c.created_at
+         LIMIT $1`,
+        [Math.max(1, Math.min(limit, 100))],
+      );
+      return result.rows.map((row) => ({ companyId: row.company_id, actorUid: row.actor_uid }));
+    } finally {
+      client.release();
+    }
   }
 
   static fromEnvironment(): PostgresControlPlaneRepository {
@@ -194,7 +239,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
         return await client.query(
           `SELECT c.id AS company_id, c.slug, c.status AS company_status,
                   c.economic_activity, c.workspace,
-                  m.status AS membership_status, m.role, t.secret_reference,
+                  m.status AS membership_status, m.role, t.secret_reference, t.encrypted_connection_secret,
                   t.status AS connection_status, p.modules, p.max_products,
                   COALESCE(s.status IN ('trialing', 'active') AND s.current_period_end > NOW() AND p.active = TRUE, FALSE) AS subscription_active
            FROM platform_users u
@@ -218,7 +263,8 @@ export class PostgresControlPlaneRepository implements TenantRepository {
       companyId: row.company_id, slug: row.slug, companyStatus: row.company_status,
       industryTemplate: resolveIndustryTemplate(row.workspace?.industryTemplate, row.economic_activity || ''),
       membershipStatus: row.membership_status, role: row.role,
-      secretReference: row.secret_reference, connectionStatus: row.connection_status || 'provisioning',
+      secretReference: row.secret_reference, encryptedConnectionSecret: row.encrypted_connection_secret,
+      connectionStatus: row.connection_status || 'provisioning',
       modules: Array.isArray(row.modules) ? row.modules.filter((module: unknown): module is string => typeof module === 'string') : [],
       maxProducts: Number(row.max_products) || 0,
       subscriptionActive: row.subscription_active === true,
@@ -359,6 +405,11 @@ export class PostgresControlPlaneRepository implements TenantRepository {
         `INSERT INTO company_subscriptions (company_id, plan_id, status, current_period_start, current_period_end)
          VALUES ($1, $2, 'trialing', NOW(), NOW() + INTERVAL '14 days')`,
         [id, trial.rows[0].id],
+      );
+      await client.query(
+        `INSERT INTO tenant_database_connections (company_id, provider, status)
+         VALUES ($1, 'neon', 'provisioning')`,
+        [id],
       );
       await this.audit(client, identity.uid, 'company.created', id, { source: 'self_service' });
       return mapCompany(result.rows[0]);

@@ -1,4 +1,5 @@
 import type { TenantSecretProvider } from './tenantResolver.ts';
+import { decryptTenantConnectionString } from './tenantConnectionCipher.ts';
 
 export class LocalEnvironmentTenantSecretProvider implements TenantSecretProvider {
   private readonly environment: NodeJS.ProcessEnv;
@@ -7,7 +8,9 @@ export class LocalEnvironmentTenantSecretProvider implements TenantSecretProvide
     this.environment = environment;
   }
 
-  async getConnectionString(secretReference: string): Promise<string> {
+  async getConnectionString(secretReference: string | null, encryptedConnectionSecret?: string | null): Promise<string> {
+    if (encryptedConnectionSecret) return decryptTenantConnectionString(encryptedConnectionSecret, this.environment);
+    if (!secretReference) throw new Error('La empresa no tiene una referencia de conexión.');
     const match = /^(?:local-env|render-env):([A-Z][A-Z0-9_]*_DATABASE_URL)$/.exec(secretReference);
     if (!match || match[1] === 'CONTROL_PLANE_DATABASE_URL' || match[1] === 'DATABASE_URL') {
       throw new Error('Referencia de conexión de empresa no permitida.');

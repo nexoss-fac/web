@@ -42,6 +42,8 @@ import { LocalPlatformStore, acceptCompanyInvitation, createCompanyForVerifiedUs
 import { createPostgresControlPlaneRepositoryFromEnvironment, type PostgresControlPlaneRepository } from './server/multiempresa/postgresControlPlaneRepository.ts';
 import { createCompanyAccessMiddleware, createPostgresCompanyAccessMiddleware, requireTenantRole, tenantStorageContext, type TenantAuthenticatedRequest } from './server/multiempresa/companyAccess.ts';
 import { LocalEnvironmentTenantSecretProvider } from './server/multiempresa/tenantSecretProvider.ts';
+import { encryptTenantConnectionString } from './server/multiempresa/tenantConnectionCipher.ts';
+import { NeonTenantProvisioner } from './server/multiempresa/neonTenantProvisioner.ts';
 import { readJsonFileWithBackup, tenantDataFiles, writeJsonFileAtomic } from './server/multiempresa/tenantFileStore.ts';
 import { FiscalBoardValidationError, matchesPublicBoardToken, normalizeFiscalBoard, publicFiscalBoard, readFiscalBoard, saveFiscalBoard, validateFiscalBoardState } from './server/multiempresa/fiscalBoardStore.ts';
 import type { FiscalBoardState } from './src/domain/fiscalBoard.ts';
@@ -132,6 +134,60 @@ function isSamePostgresDatabase(left: string, right: string): boolean {
 function getPostgresControlPlane(): PostgresControlPlaneRepository {
   if (!postgresControlPlane) postgresControlPlane = createPostgresControlPlaneRepositoryFromEnvironment();
   return postgresControlPlane;
+}
+
+const tenantProvisioningInFlight = new Set<string>();
+let tenantProvisioningSweepRunning = false;
+
+function tenantAutoProvisioningConfigured(): boolean {
+  const encodedKey = process.env.TENANT_DATABASE_ENCRYPTION_KEY?.trim() || '';
+  return Boolean(process.env.NEON_API_KEY?.trim()) && Buffer.from(encodedKey, 'base64').length === 32;
+}
+
+async function provisionTenantDatabase(companyId: string, actorUid: string): Promise<boolean> {
+  if (tenantProvisioningInFlight.has(companyId)) return false;
+  if (!tenantAutoProvisioningConfigured()) return false;
+  tenantProvisioningInFlight.add(companyId);
+  try {
+    const { connectionString } = await new NeonTenantProvisioner().createTenantConnection(companyId);
+    await neon(connectionString)`SELECT current_database(), NOW()`;
+    await tenantStorageContext.run({
+      companyId,
+      uid: actorUid,
+      role: 'owner',
+      industryTemplate: 'other',
+      connectionString,
+    }, () => initDatabaseSchema());
+    const encrypted = encryptTenantConnectionString(connectionString);
+    return await getPostgresControlPlane().setProvisionedTenantDatabaseConnection(companyId, encrypted, actorUid);
+  } catch (error) {
+    const safeError = error as { code?: unknown; name?: unknown } | null;
+    logger.warn('[Tenant provisioning] Neon no pudo completar el alta automática:', {
+      companyId,
+      code: typeof safeError?.code === 'string' ? safeError.code : 'provisioning_failed',
+      name: typeof safeError?.name === 'string' ? safeError.name : 'Error',
+    });
+    return false;
+  } finally {
+    tenantProvisioningInFlight.delete(companyId);
+  }
+}
+
+async function retryTenantDatabaseProvisioning(): Promise<void> {
+  if (tenantProvisioningSweepRunning || !usePostgresControlPlane() || !tenantAutoProvisioningConfigured()) return;
+  tenantProvisioningSweepRunning = true;
+  try {
+    const candidates = await getPostgresControlPlane().listTenantDatabasesToProvision();
+    for (const candidate of candidates) await provisionTenantDatabase(candidate.companyId, candidate.actorUid || 'system:tenant-provisioner');
+  } catch (error) {
+    const safeError = error as { code?: unknown; name?: unknown } | null;
+    logger.warn('[Tenant provisioning] No se pudo revisar la cola automática:', {
+      code: typeof safeError?.code === 'string' ? safeError.code : 'control_plane_unavailable',
+      name: typeof safeError?.name === 'string' ? safeError.name : 'Error',
+    });
+  } finally {
+    tenantProvisioningSweepRunning = false;
+  }
 }
 
 function getTenantFiles() {
@@ -349,7 +405,7 @@ async function startServer() {
       try {
         const tenant = await getPostgresControlPlane().findPublicBoardTenant(req.params.companyId);
         if (!tenant) return res.status(404).json({ error: 'La cartelera no está disponible.' });
-        const connectionString = await new LocalEnvironmentTenantSecretProvider().getConnectionString(tenant.secretReference);
+        const connectionString = await new LocalEnvironmentTenantSecretProvider().getConnectionString(tenant.secretReference, tenant.encryptedConnectionSecret);
         const saved = await tenantStorageContext.run({
           companyId: tenant.companyId,
           uid: 'public-board',
@@ -469,9 +525,13 @@ async function startServer() {
     if (!identity?.uid || !identity.email) return res.status(401).json({ error: 'Firebase debe verificar una cuenta con correo.' });
     if (identity.emailVerified !== true) return res.status(403).json({ error: 'Verifica el correo de Firebase antes de registrar una empresa.' });
     if (usePostgresControlPlane()) {
+      if (!tenantAutoProvisioningConfigured()) {
+        return res.status(503).json({ error: 'El alta automática de bases de datos no está disponible en este momento. Contacta al soporte de NEXOSS.' });
+      }
       try {
         const company = await getPostgresControlPlane().createCompany(req.body, identity);
-        return res.status(201).json({ company: { id: company.id, slug: company.slug, legalName: company.legalName, tradeName: company.tradeName, industryTemplate: resolveIndustryTemplate(company.workspace.industryTemplate, company.activity), status: company.status, onboardingStep: company.onboardingStep } });
+        void provisionTenantDatabase(company.id, identity.uid);
+        return res.status(201).json({ company: { id: company.id, slug: company.slug, legalName: company.legalName, tradeName: company.tradeName, industryTemplate: resolveIndustryTemplate(company.workspace.industryTemplate, company.activity), status: company.status, onboardingStep: company.onboardingStep, tenantDatabaseStatus: 'provisioning' } });
       } catch (error) {
         const message = error instanceof Error ? error.message : '';
         if (message.includes('Ya existe')) return res.status(409).json({ error: message });
@@ -2370,6 +2430,11 @@ async function startServer() {
   }
 
   const HOST = process.env.RENDER ? '0.0.0.0' : '127.0.0.1';
+  if (usePostgresControlPlane()) {
+    void retryTenantDatabaseProvisioning();
+    const provisioningTimer = setInterval(() => void retryTenantDatabaseProvisioning(), 30_000);
+    provisioningTimer.unref();
+  }
   app.listen(PORT, HOST, () => {
     logger.info(`NEXOSS iniciado en http://${HOST}:${PORT}`);
   });

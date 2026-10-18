@@ -21,6 +21,7 @@ export interface MembershipRecord {
   membershipStatus: 'invited' | 'active' | 'revoked';
   role: TenantRole;
   secretReference: string | null;
+  encryptedConnectionSecret?: string | null;
   connectionStatus: 'provisioning' | 'ready' | 'degraded' | 'disabled';
   modules: string[];
   maxProducts?: number;
@@ -34,7 +35,7 @@ export interface TenantRepository {
 
 export interface TenantSecretProvider {
   /** Debe consultar un gestor de secretos. Nunca debe devolver una URL enviada por el navegador. */
-  getConnectionString(secretReference: string): Promise<string>;
+  getConnectionString(secretReference: string | null, encryptedConnectionSecret?: string | null): Promise<string>;
 }
 
 export interface AuthorizedTenantContext {
@@ -102,13 +103,13 @@ export async function resolveAuthorizedTenant(input: {
   if (membership.companyStatus !== 'active') {
     throw new TenantResolutionError(503, 'TENANT_UNAVAILABLE', 'La empresa no está habilitada para operar.');
   }
-  if (!membership.secretReference || membership.connectionStatus !== 'ready') {
-    throw new TenantResolutionError(503, 'TENANT_UNAVAILABLE', 'La conexión de datos de esta empresa no está lista. El administrador debe conectarla desde la configuración de empresa.');
+  if ((!membership.secretReference && !membership.encryptedConnectionSecret) || membership.connectionStatus !== 'ready') {
+    throw new TenantResolutionError(503, 'TENANT_UNAVAILABLE', 'La base de datos de esta empresa se está preparando automáticamente. Intenta de nuevo en unos momentos.');
   }
 
   let connectionString: string;
   try {
-    connectionString = await secrets.getConnectionString(membership.secretReference);
+    connectionString = await secrets.getConnectionString(membership.secretReference, membership.encryptedConnectionSecret);
   } catch {
     // No propagar mensajes del proveedor: podrían incluir información sensible.
     throw new TenantResolutionError(503, 'TENANT_UNAVAILABLE', 'No se pudo resolver la conexión de la empresa.');
