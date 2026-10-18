@@ -129,63 +129,6 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     });
   }
 
-  async setTenantDatabaseConnectionForCompanyAdmin(companyId: string, secretReference: string, actorUid: string): Promise<boolean> {
-    return this.transaction(async (client) => {
-      const company = await client.query(
-        `SELECT c.id FROM platform_companies c
-         JOIN company_memberships m ON m.company_id = c.id AND m.status = 'active'
-           AND m.role IN ('owner', 'admin')
-         JOIN platform_users u ON u.id = m.user_id
-         WHERE c.id = $1 AND c.status = 'active'
-           AND u.auth_provider = 'firebase' AND u.auth_subject = $2
-         LIMIT 1`,
-        [companyId, actorUid],
-      );
-      if (!company.rows[0]) return false;
-      const assigned = await client.query(
-        `SELECT company_id FROM tenant_database_connections WHERE secret_reference = $1 AND company_id <> $2 LIMIT 1`,
-        [secretReference, companyId],
-      );
-      if (assigned.rows.length) return false;
-      await client.query(
-        `INSERT INTO tenant_database_connections
-           (company_id, provider, secret_reference, status, schema_version, provisioned_at, last_health_check_at)
-         VALUES ($1, 'neon', $2, 'ready', '1', NOW(), NOW())
-         ON CONFLICT (company_id) DO UPDATE SET
-           provider = 'neon', secret_reference = EXCLUDED.secret_reference,
-           encrypted_connection_secret = NULL, encryption_key_version = NULL,
-           status = 'ready', schema_version = EXCLUDED.schema_version,
-           provisioned_at = NOW(), last_health_check_at = NOW(), updated_at = NOW()`,
-        [companyId, secretReference],
-      );
-      await this.audit(client, actorUid, 'tenant_database.connected_by_company_admin', companyId, { provider: 'neon' });
-      return true;
-    });
-  }
-
-  async canManageTenantDatabaseReference(companyId: string, secretReference: string, actorUid: string): Promise<boolean> {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query(
-        `SELECT 1 FROM platform_companies c
-         JOIN company_memberships m ON m.company_id = c.id AND m.status = 'active'
-           AND m.role IN ('owner', 'admin')
-         JOIN platform_users u ON u.id = m.user_id
-         WHERE c.id = $1 AND c.status = 'active'
-           AND u.auth_provider = 'firebase' AND u.auth_subject = $2
-           AND NOT EXISTS (
-             SELECT 1 FROM tenant_database_connections t
-             WHERE t.secret_reference = $3 AND t.company_id <> c.id
-           )
-         LIMIT 1`,
-        [companyId, actorUid, secretReference],
-      );
-      return Boolean(result.rows[0]);
-    } finally {
-      client.release();
-    }
-  }
-
   static fromEnvironment(): PostgresControlPlaneRepository {
     const connectionString = process.env.CONTROL_PLANE_DATABASE_URL?.trim();
     if (!connectionString) throw new Error('CONTROL_PLANE_DATABASE_URL es obligatoria para el repositorio PostgreSQL.');

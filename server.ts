@@ -773,47 +773,6 @@ async function startServer() {
     }
   });
 
-  // Esta ruta queda antes del middleware tenant para que propietarios y
-  // administradores puedan reparar una conexión que precisamente impide
-  // resolver ese tenant.
-  app.put('/api/platform/companies/:companyId/database', async (req, res) => {
-    if (!usePostgresControlPlane()) return res.status(409).json({ error: 'El almacenamiento PostgreSQL del control de empresas no está activo.' });
-    const identity = (req as any).firebaseIdentity;
-    if (!identity?.uid) return res.status(401).json({ error: 'Se requiere una identidad verificada.' });
-    const name = typeof req.body?.variableName === 'string' ? req.body.variableName.trim() : '';
-    if (!/^[A-Z][A-Z0-9_]*_DATABASE_URL$/.test(name) || ['DATABASE_URL', 'CONTROL_PLANE_DATABASE_URL'].includes(name)) {
-      return res.status(400).json({ error: 'Indica el nombre de una variable Neon exclusiva de esta empresa, por ejemplo MAKD_SHOP_DATABASE_URL.' });
-    }
-    const secretReference = `${process.env.NODE_ENV === 'production' ? 'render-env:' : 'local-env:'}${name}`;
-    try {
-      const repository = getPostgresControlPlane();
-      if (!await repository.canManageTenantDatabaseReference(req.params.companyId, secretReference, identity.uid)) {
-        return res.status(403).json({ error: 'No tienes permisos de propietario o administrador para reparar esta empresa, o la variable ya está asignada a otra empresa.' });
-      }
-      const connectionString = await new LocalEnvironmentTenantSecretProvider().getConnectionString(secretReference);
-      if (isSamePostgresDatabase(connectionString, process.env.CONTROL_PLANE_DATABASE_URL?.trim() || '')) {
-        return res.status(400).json({ error: 'La base de la empresa debe ser distinta de la base central.' });
-      }
-      await neon(connectionString)`SELECT current_database(), NOW()`;
-      await tenantStorageContext.run({
-        companyId: req.params.companyId,
-        uid: identity.uid,
-        role: 'owner',
-        industryTemplate: 'other',
-        connectionString,
-      }, () => initDatabaseSchema());
-      const saved = await repository.setTenantDatabaseConnectionForCompanyAdmin(
-        req.params.companyId, secretReference, identity.uid,
-      );
-      return saved
-        ? res.json({ success: true, status: 'ready' })
-        : res.status(403).json({ error: 'No tienes permisos de propietario o administrador para esta empresa, o la variable ya está asignada.' });
-    } catch (error) {
-      logger.error('No se pudo reparar la conexión Neon de la empresa:', error);
-      return res.status(503).json({ error: 'No se pudo verificar la variable. Confirma que exista en Render y apunte a una base Neon disponible.' });
-    }
-  });
-
   app.post('/api/platform/companies/:companyId/invitations', async (req, res) => {
     const identity = (req as any).firebaseIdentity;
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
