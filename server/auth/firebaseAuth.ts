@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { applicationDefault, getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import { logger } from '../logger.ts';
 
 export interface FirebaseIdentity {
   uid: string;
@@ -104,6 +105,11 @@ export function createFirebaseAuthMiddleware(verifyToken: FirebaseIdTokenVerifie
         res.status(503).json({ error: 'La autenticación Firebase del servidor no está configurada.' });
         return;
       }
+      const firebaseError = error as { code?: unknown; name?: unknown } | null;
+      logger.warn('[Firebase Auth] ID token rejected by Firebase Admin:', {
+        code: typeof firebaseError?.code === 'string' ? firebaseError.code : 'unknown',
+        name: typeof firebaseError?.name === 'string' ? firebaseError.name : 'unknown',
+      });
       res.status(401).json({ error: 'El token Firebase no es válido o ha vencido.' });
     }
   };
