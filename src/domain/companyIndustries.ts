@@ -33,7 +33,7 @@ export const COMPANY_INDUSTRIES = {
     label: 'Comercio al detal y mayor',
     description: 'Compra, distribución, inventario y venta de mercancía',
     activityLabel: 'Mercancía',
-    productLabel: 'Artículo',
+    productLabel: 'Producto',
     variantLabel: 'Variante',
     unitLabel: 'unidades',
     posDescription: 'Busca artículos por nombre, marca, código o variante y factura en multimoneda.',

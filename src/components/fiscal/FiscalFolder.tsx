@@ -23,12 +23,13 @@ import { buildFiscalCalendar, computeFiscalNotifications, countDocumentsByStatus
 import { defaultFiscalSettings } from '../../domain/fiscalPortals';
 import { FiscalCalendarPanel } from './FiscalCalendarPanel';
 import { FiscalPortalsPanel } from './FiscalPortalsPanel';
+import { FiscalInspectionPanel } from './FiscalInspectionPanel';
 
-type Section = 'Resumen' | 'Documentos' | 'Calendario' | 'Portales' | 'Requisitos' | 'Auditoría';
+type Section = 'Resumen' | 'Documentos' | 'Inspección' | 'Calendario' | 'Portales' | 'Requisitos' | 'Auditoría';
 type StatusFilter = 'Todos' | 'Vigente' | 'Por vencer' | 'Vencido' | 'En trámite';
 type BoardView = FiscalBoardState & { publicLinkEnabled: boolean };
 
-const sections: Section[] = ['Resumen', 'Documentos', 'Calendario', 'Portales', 'Requisitos', 'Auditoría'];
+const sections: Section[] = ['Resumen', 'Documentos', 'Inspección', 'Calendario', 'Portales', 'Requisitos', 'Auditoría'];
 const statusFilters: StatusFilter[] = ['Todos', 'Vigente', 'Por vencer', 'Vencido', 'En trámite'];
 const categories = ['RIF', 'Registro mercantil', 'Solvencia', 'Permiso nacional', 'Declaración', 'Comprobante de pago', 'Otro'];
 
@@ -133,7 +134,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
       const response = await fetch('/api/fiscal-board', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documents: next.documents, requirements: next.requirements, ...(next.calendar ? { calendar: next.calendar } : {}), ...(next.settings ? { settings: next.settings } : {}) }),
+        body: JSON.stringify({ documents: next.documents, requirements: next.requirements, ...(next.calendar ? { calendar: next.calendar } : {}), ...(next.settings ? { settings: next.settings } : {}), ...(next.inspection ? { inspection: next.inspection } : {}) }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo guardar la carpeta fiscal.');
@@ -316,6 +317,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
     {section === 'Calendario' && <FiscalCalendarPanel board={board} settings={settings} today={today} saving={saving} onSave={(patch) => saveBoard({ ...board, ...patch })} />}
 
     {section === 'Portales' && <FiscalPortalsPanel settings={settings} saving={saving} onSave={(next) => saveBoard({ ...board, settings: next })} />}
+    {section === 'Inspección' && <FiscalInspectionPanel board={board} companyName={companyName} saving={saving} onSave={(inspection) => saveBoard({ ...board, inspection })} />}
 
     {section === 'Requisitos' && <section className="space-y-3">
       <div><h2 className="text-base font-bold text-slate-900">Obligaciones fiscales de referencia</h2><p className="mt-1 text-xs text-slate-500">Nacionales · estos deberes de conservación, presentación o inscripción no implican por sí solos exhibición en cartelera pública.</p></div>

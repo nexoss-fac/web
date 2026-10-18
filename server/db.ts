@@ -551,6 +551,43 @@ export async function initDatabaseSchema() {
       );
     `;
 
+    // Las categorías del onboarding se siembran en la base aislada de esta empresa.
+    for (const [index, name] of (tenant?.inventoryCategories ?? []).entries()) {
+      if (!name.trim()) continue;
+      await sql`INSERT INTO business_categories (id, name, kind) VALUES (${`onboarding-${index}-${createHash('sha256').update(name).digest('hex').slice(0, 16)}`}, ${name.trim()}, 'product') ON CONFLICT (kind, name) DO NOTHING`;
+    }
+
+    if (tenant?.industryTemplate === 'manufacturing' || tenant?.industryTemplate === 'food_manufacturing') {
+      await sql`CREATE TABLE IF NOT EXISTS manufacturing_recipes (
+        id VARCHAR(64) PRIMARY KEY, name VARCHAR(180) NOT NULL, output_product_id VARCHAR(64),
+        output_quantity NUMERIC(14, 3) NOT NULL DEFAULT 1 CHECK (output_quantity > 0),
+        output_unit VARCHAR(40) NOT NULL DEFAULT 'unidad', notes TEXT,
+        active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS manufacturing_recipe_items (
+        id VARCHAR(64) PRIMARY KEY, recipe_id VARCHAR(64) NOT NULL REFERENCES manufacturing_recipes(id) ON DELETE CASCADE,
+        inventory_product_id VARCHAR(64) NOT NULL, quantity NUMERIC(14, 3) NOT NULL CHECK (quantity > 0),
+        unit VARCHAR(40) NOT NULL DEFAULT 'unidad', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS manufacturing_recipe_items_recipe_idx ON manufacturing_recipe_items (recipe_id)`;
+      await sql`CREATE TABLE IF NOT EXISTS manufacturing_lots (
+        id VARCHAR(64) PRIMARY KEY, lot_number VARCHAR(80) NOT NULL UNIQUE,
+        recipe_id VARCHAR(64) REFERENCES manufacturing_recipes(id) ON DELETE SET NULL,
+        output_product_id VARCHAR(64), planned_quantity NUMERIC(14, 3) NOT NULL DEFAULT 0,
+        produced_quantity NUMERIC(14, 3) NOT NULL DEFAULT 0, waste_quantity NUMERIC(14, 3) NOT NULL DEFAULT 0,
+        status VARCHAR(24) NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','in_progress','completed','cancelled')),
+        started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ, expires_at DATE, notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS manufacturing_consumptions (
+        id VARCHAR(64) PRIMARY KEY, lot_id VARCHAR(64) NOT NULL REFERENCES manufacturing_lots(id) ON DELETE CASCADE,
+        inventory_product_id VARCHAR(64) NOT NULL, quantity NUMERIC(14, 3) NOT NULL CHECK (quantity > 0),
+        unit VARCHAR(40) NOT NULL DEFAULT 'unidad', unit_cost NUMERIC(14, 4) NOT NULL DEFAULT 0,
+        consumed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), notes TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS manufacturing_consumptions_lot_idx ON manufacturing_consumptions (lot_id)`;
+    }
+
 
     initializedTenantSchemas.add(schemaKey);
     logger.info('✅ Esquema Neon PostgreSQL verificado e inicializado correctamente.');

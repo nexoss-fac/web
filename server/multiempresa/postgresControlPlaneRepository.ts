@@ -153,22 +153,33 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     });
   }
 
-  async listTenantDatabasesToProvision(limit = 20): Promise<Array<{ companyId: string; actorUid: string }>> {
+  async listTenantDatabasesToProvision(limit = 20): Promise<Array<{ companyId: string; actorUid: string; industryTemplate: IndustryTemplate; categories: string[] }>> {
     const client = await this.pool.connect();
     try {
       const result = await client.query(
-        `SELECT c.id AS company_id, owner.auth_subject AS actor_uid
+        `SELECT c.id AS company_id, owner.auth_subject AS actor_uid, c.workspace, c.economic_activity
          FROM platform_companies c
          JOIN company_memberships m ON m.company_id = c.id AND m.role = 'owner' AND m.status = 'active'
          JOIN platform_users owner ON owner.id = m.user_id AND owner.auth_provider = 'firebase'
          LEFT JOIN tenant_database_connections t ON t.company_id = c.id
-         WHERE c.status IN ('onboarding', 'active')
+         WHERE c.status = 'active'
            AND (t.company_id IS NULL OR t.status IN ('provisioning', 'degraded'))
          ORDER BY c.created_at
          LIMIT $1`,
         [Math.max(1, Math.min(limit, 100))],
       );
-      return result.rows.map((row) => ({ companyId: row.company_id, actorUid: row.actor_uid }));
+      return result.rows.map((row) => {
+        const workspace = row.workspace && typeof row.workspace === 'object' ? row.workspace as Record<string, unknown> : {};
+        const categories = Array.isArray(workspace.categories)
+          ? workspace.categories.filter((value): value is string => typeof value === 'string').map((value) => value.trim()).filter(Boolean)
+          : [];
+        return {
+          companyId: row.company_id,
+          actorUid: row.actor_uid,
+          industryTemplate: resolveIndustryTemplate(workspace.industryTemplate, row.economic_activity || ''),
+          categories: [...new Set(categories)].slice(0, 30),
+        };
+      });
     } finally {
       client.release();
     }

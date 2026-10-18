@@ -10,7 +10,7 @@
 ## Persistencia de producción
 
 - `NEXOSS_PLATFORM_STORAGE=postgres` selecciona el repositorio PostgreSQL central para empresas, usuarios, membresías, invitaciones, planes y auditoría.
-- Al registrar una empresa, el servidor provisiona un proyecto Neon aislado y el esquema NEXOSS automáticamente. El proceso se reintenta desde una cola interna si Neon está temporalmente indisponible.
+- Al completar el asistente de activación, el servidor provisiona un proyecto Neon aislado para esa empresa. Con el rubro y las categorías ya guardados, crea el esquema común y las tablas iniciales del rubro; el proceso se reintenta desde una cola interna si Neon está temporalmente indisponible.
 - `tenant_database_connections` guarda la URL de conexión de los tenants nuevos cifrada con AES-256-GCM mediante `TENANT_DATABASE_ENCRYPTION_KEY`. Los secretos existentes pueden conservar su referencia a una variable del entorno.
 - Cada empresa resuelve su conexión desde el control central dentro del contexto autorizado. Productos, ventas, gastos, apartados, cierres y contabilidad se guardan en su base PostgreSQL.
 - La empresa MAKD sigue usando su proyecto Neon y referencia actuales; el aprovisionador no altera ni migra esa conexión.

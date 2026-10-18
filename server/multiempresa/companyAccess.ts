@@ -13,6 +13,7 @@ export interface TenantStorageContext {
   companySlug?: string;
   connectionString?: string;
   maxProducts?: number;
+  inventoryCategories?: string[];
 }
 export const tenantStorageContext = new AsyncLocalStorage<TenantStorageContext>();
 export interface TenantAuthenticatedRequest extends FirebaseAuthenticatedRequest { tenant?: TenantStorageContext; }

@@ -144,7 +144,7 @@ function tenantAutoProvisioningConfigured(): boolean {
   return Boolean(process.env.NEON_API_KEY?.trim()) && Buffer.from(encodedKey, 'base64').length === 32;
 }
 
-async function provisionTenantDatabase(companyId: string, actorUid: string): Promise<boolean> {
+async function provisionTenantDatabase(companyId: string, actorUid: string, industryTemplate: string, categories: string[]): Promise<boolean> {
   if (tenantProvisioningInFlight.has(companyId)) return false;
   if (!tenantAutoProvisioningConfigured()) return false;
   tenantProvisioningInFlight.add(companyId);
@@ -155,7 +155,8 @@ async function provisionTenantDatabase(companyId: string, actorUid: string): Pro
       companyId,
       uid: actorUid,
       role: 'owner',
-      industryTemplate: 'other',
+      industryTemplate: resolveIndustryTemplate(industryTemplate),
+      inventoryCategories: categories,
       connectionString,
     }, () => initDatabaseSchema());
     const encrypted = encryptTenantConnectionString(connectionString);
@@ -178,7 +179,7 @@ async function retryTenantDatabaseProvisioning(): Promise<void> {
   tenantProvisioningSweepRunning = true;
   try {
     const candidates = await getPostgresControlPlane().listTenantDatabasesToProvision();
-    for (const candidate of candidates) await provisionTenantDatabase(candidate.companyId, candidate.actorUid || 'system:tenant-provisioner');
+    for (const candidate of candidates) await provisionTenantDatabase(candidate.companyId, candidate.actorUid || 'system:tenant-provisioner', candidate.industryTemplate, candidate.categories);
   } catch (error) {
     const safeError = error as { code?: unknown; name?: unknown } | null;
     logger.warn('[Tenant provisioning] No se pudo revisar la cola automática:', {
@@ -530,7 +531,6 @@ async function startServer() {
       }
       try {
         const company = await getPostgresControlPlane().createCompany(req.body, identity);
-        void provisionTenantDatabase(company.id, identity.uid);
         return res.status(201).json({ company: { id: company.id, slug: company.slug, legalName: company.legalName, tradeName: company.tradeName, industryTemplate: resolveIndustryTemplate(company.workspace.industryTemplate, company.activity), status: company.status, onboardingStep: company.onboardingStep, tenantDatabaseStatus: 'provisioning' } });
       } catch (error) {
         const message = error instanceof Error ? error.message : '';
@@ -607,6 +607,7 @@ async function startServer() {
         const result = await getPostgresControlPlane().saveOnboardingStep(identity, req.params.companyId, requestedStep, req.body?.data);
         if (!result) return res.status(403).json({ error: 'No tienes permisos para configurar esta empresa.' });
         if ('incomplete' in result) return res.status(400).json({ error: 'Completa los datos empresariales y fiscales requeridos antes de finalizar.' });
+        if (result.status === 'active') void retryTenantDatabaseProvisioning();
         const notice = result.invitation
           ? await sendInvitationNotice({ to: result.invitation.email, companyName: result.companyName || '', role: result.invitation.role, invitationId: result.invitation.id, invitedBy: identity.email, expiresAt: result.invitation.expiresAt })
           : {};

@@ -34,6 +34,7 @@ export function normalizeFiscalBoard(parsed: unknown, requirements: FiscalRequir
     auditEvents: Array.isArray(value.auditEvents) ? value.auditEvents : [],
     ...(Array.isArray(value.calendar) ? { calendar: value.calendar } : {}),
     ...(value.settings && typeof value.settings === 'object' ? { settings: value.settings } : {}),
+    ...(value.inspection && typeof value.inspection === 'object' ? { inspection: value.inspection } : {}),
     ...(typeof value.publicTokenHash === 'string' ? { publicTokenHash: value.publicTokenHash } : {}),
     ...(typeof value.updatedAt === 'string' ? { updatedAt: value.updatedAt } : {}),
   };
@@ -161,7 +162,34 @@ export function validateFiscalBoardState(value: unknown, defaults: FiscalRequire
 
   const calendar = payload.calendar === undefined ? undefined : validateCalendar(payload.calendar);
   const settings = payload.settings === undefined ? undefined : validateSettings(payload.settings);
-  return { documents, requirements, ...(calendar ? { calendar } : {}), ...(settings ? { settings } : {}) };
+  const inspection = payload.inspection === undefined ? undefined : validateInspection(payload.inspection, documentIds);
+  return { documents, requirements, ...(calendar ? { calendar } : {}), ...(settings ? { settings } : {}), ...(inspection ? { inspection } : {}) };
+}
+
+function validateInspection(value: unknown, documentIds: Set<string>): NonNullable<FiscalBoardState['inspection']> {
+  if (!value || typeof value !== 'object') throw new FiscalBoardValidationError('El informe de inspección no es válido.');
+  const item = value as Partial<NonNullable<FiscalBoardState['inspection']>>;
+  const rawEntries = item.entries && typeof item.entries === 'object' ? Object.entries(item.entries) : [];
+  if (rawEntries.length > 300) throw new FiscalBoardValidationError('El informe supera el máximo de puntos permitido.');
+  const entries: NonNullable<FiscalBoardState['inspection']>['entries'] = {};
+  for (const [id, raw] of rawEntries) {
+    if (!raw || typeof raw !== 'object') throw new FiscalBoardValidationError('Hay una respuesta de inspección inválida.');
+    const status = raw.status;
+    if (status !== '' && !['Cumple', 'No cumple', 'No aplica'].includes(String(status))) throw new FiscalBoardValidationError('El estado de un punto de inspección no es válido.');
+    const documentIdsForEntry = Array.isArray(raw.documentIds) ? raw.documentIds.filter((docId): docId is string => typeof docId === 'string') : [];
+    if (documentIdsForEntry.length > 20 || documentIdsForEntry.some((docId) => !documentIds.has(docId))) throw new FiscalBoardValidationError('Un punto del informe está vinculado a un documento inexistente.');
+    entries[textField(id, 64)] = { value: textField(raw.value, 1000), notes: textField(raw.notes, 2000), status: status as '' | 'Cumple' | 'No cumple' | 'No aplica', documentIds: documentIdsForEntry, hidden: raw.hidden === true };
+  }
+  const customItems = Array.isArray(item.customItems) ? item.customItems : [];
+  if (customItems.length > 100) throw new FiscalBoardValidationError('Puedes agregar hasta 100 puntos propios.');
+  const customIds = new Set<string>();
+  const normalizedCustom = customItems.map((raw) => {
+    if (!raw || typeof raw !== 'object') throw new FiscalBoardValidationError('Hay un punto propio inválido.');
+    const id = textField(raw.id, 64); const title = textField(raw.title, 200); const section = textField(raw.section, 80);
+    if (!id || !title || customIds.has(id)) throw new FiscalBoardValidationError('Los puntos propios necesitan un identificador y título únicos.');
+    customIds.add(id); return { id, title, section };
+  });
+  return { entries, customItems: normalizedCustom, observations: textField(item.observations, 10_000) };
 }
 
 function areaField(value: unknown, where: string): FiscalArea | '' {

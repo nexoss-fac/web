@@ -47,6 +47,20 @@ export interface FiscalPortalConfig {
   custom?: boolean;
 }
 
+export type InspectionStatus = 'Cumple' | 'No cumple' | 'No aplica';
+export interface FiscalInspectionEntry {
+  value: string;
+  notes: string;
+  status: InspectionStatus | '';
+  documentIds: string[];
+  hidden: boolean;
+}
+export interface FiscalInspectionState {
+  entries: Record<string, FiscalInspectionEntry>;
+  customItems: Array<{ id: string; title: string; section: string }>;
+  observations: string;
+}
+
 export interface FiscalBoardSettings {
   countryCode: string;
   stateCode: string;
@@ -89,6 +103,7 @@ export interface FiscalBoardState {
   requirements: FiscalRequirement[];
   calendar?: FiscalCalendarEvent[];
   settings?: FiscalBoardSettings;
+  inspection?: FiscalInspectionState;
   auditEvents?: Array<{
     id: string;
     actorUid: string;

@@ -37,7 +37,7 @@ El migrador verifica el nombre de la base antes de crear el esquema. No ejecutes
 
 ## Aprovisionamiento automático
 
-Después de configurar `NEON_API_KEY` y `TENANT_DATABASE_ENCRYPTION_KEY` una sola vez, cada alta de empresa crea automáticamente un proyecto Neon aislado con un nombre interno derivado del ID de la empresa, espera a que Neon termine de provisionarlo, ejecuta el esquema de NEXOSS y guarda la conexión cifrada en PostgreSQL central. Si Neon tiene una interrupción temporal, el servidor vuelve a intentarlo sin pedirle acciones al usuario.
+Después de configurar `NEON_API_KEY` y `TENANT_DATABASE_ENCRYPTION_KEY` una sola vez, al terminar el asistente de activación se crea automáticamente un proyecto Neon aislado con un nombre interno derivado del ID de la empresa. El servidor espera a que Neon termine de provisionarlo, crea el esquema común, guarda las categorías seleccionadas y, para manufactura y fabricación de alimentos, prepara tablas de recetas, componentes, lotes y consumos. Luego guarda la conexión cifrada en PostgreSQL central. Si Neon tiene una interrupción temporal, el servidor vuelve a intentarlo sin pedirle acciones al usuario.
 
 La empresa MAKD conserva su proyecto y su referencia `render-env:MAKD_SHOP_DATABASE_URL`. El aprovisionamiento nuevo no modifica ni migra esa base.
 
