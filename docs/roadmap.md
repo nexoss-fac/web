@@ -20,12 +20,12 @@
 - [x] Add local-demo registration, owner membership, onboarding, invitations, roles, plans, subscriptions and platform-admin endpoints/UI.
 - [x] Check membership, company status, role, plan/module access and expiration for commercial routes.
 - [x] Scope the local JSON server store and browser cache by company UUID; add negative authorization tests.
-- [ ] Replace the local file-backed control plane with a PostgreSQL control plane and one PostgreSQL database per company.
-- [ ] Add a real server-side secret provider, tenant connection health checks/provisioning, backup/restore and concurrency-safe repositories.
+- [ ] Verify the PostgreSQL control plane and separate tenant databases in staging. The repository, routing, and per-tenant Neon connection path are implemented locally; migrations and runtime isolation are not yet verified.
+- [ ] Verify Render environment-backed tenant secret references, connection health checks/provisioning, backup/restore, and concurrency-safe repositories.
 - [ ] Add E2E denials for every route, export, file and asynchronous job before considering a commercial test.
 - [ ] Choose and integrate a payment provider before enabling automatic renewals.
 
-This phase is implemented only as an isolated local demo. The multiempresa audit intentionally continues to fail commercial readiness.
+The local demo path is isolated from production. A PostgreSQL control-plane and tenant-database path now exists in code, but staging verification is still required. The multiempresa audit must continue to block commercial readiness until that evidence exists.
 
 ## 3. Validate operations and finance
 

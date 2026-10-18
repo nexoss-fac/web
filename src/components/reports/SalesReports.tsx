@@ -45,6 +45,7 @@ import {
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { useStore } from '../../context/StoreContext';
+import { COMPANY_INDUSTRIES, resolveIndustryTemplate } from '../../domain/companyIndustries';
 import { Sale, ReportPeriod } from '../../types';
 import { ReceiptModal } from '../common/ReceiptModal';
 import { DailySalesChart } from './DailySalesChart';
@@ -52,6 +53,8 @@ import { GoogleSheetsSyncModal } from '../common/GoogleSheetsSyncModal';
 import { getTodayVenezuela, getYesterdayVenezuela, getSaleDateKey } from '../../utils/dateUtils';
 
 export const SalesReports: React.FC = () => {
+  const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
+  const isFootwear = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry')) === 'footwear';
   const { sales, exchangeRate, products, bcvInfo, isBcvSyncing, syncBcvRate, updateSaleDate, updateSaleDetails, voidSale } = useStore();
 
   const [period, setPeriod] = useState<ReportPeriod>('este_mes');
@@ -434,8 +437,8 @@ export const SalesReports: React.FC = () => {
     const topSize = sizeDistribution.slice().sort((a, b) => b.pares - a.pares)[0];
     const topPayment = paymentMethodBreakdown.slice().sort((a, b) => b.montoUsd - a.montoUsd)[0];
 
-    return `Durante el período analizado se registraron ${filteredSales.length} transacciones por un total de $${totalRevenueUsd.toFixed(2)} (${totalRevenueBs.toFixed(0)} Bs), despachando ${totalPairsSold} pares de calzado. El margen de ganancia neta se ubicó en un saludable ${profitMarginPercent.toFixed(1)}% (+$${netProfitUsd.toFixed(2)} libres de costo de compra). El calzado estrella fue "${topProduct?.nombre || 'N/A'}" con ${topProduct?.pares || 0} pares vendidos. En la curva de tallas, la más demandada fue la talla ${topSize?.talla || 'N/A'} con ${topSize?.pares || 0} pares. El método de pago con mayor volumen fue ${topPayment?.cuenta || 'N/A'} con un ${topPayment?.porcentaje.toFixed(1) || 0}% de los ingresos totales.`;
-  }, [filteredSales, totalRevenueUsd, totalRevenueBs, totalPairsSold, profitMarginPercent, netProfitUsd, topSellingShoes, sizeDistribution, paymentMethodBreakdown]);
+    return isFootwear ? `Se registraron ${filteredSales.length} ventas por $${totalRevenueUsd.toFixed(2)} y se vendieron ${totalPairsSold} pares. El producto con mayor venta fue ${topProduct?.nombre || "N/A"}; la talla con mayor demanda fue ${topSize?.talla || "N/A"}.` : `Se registraron ${filteredSales.length} ventas por $${totalRevenueUsd.toFixed(2)} y ${totalPairsSold} ${industry.unitLabel}. El producto con mayor venta fue ${topProduct?.nombre || "N/A"}.`;
+  }, [filteredSales, totalRevenueUsd, totalRevenueBs, totalPairsSold, profitMarginPercent, netProfitUsd, topSellingShoes, sizeDistribution, paymentMethodBreakdown, isFootwear, industry.unitLabel]);
 
   // Export to Excel (.xlsx)
   const handleExportExcel = () => {
@@ -469,7 +472,7 @@ export const SalesReports: React.FC = () => {
       { Métrica: 'Costo Total de Compra (CMV)', Valor: totalCostUsd },
       { Métrica: 'Ganancia Neta USD', Valor: netProfitUsd },
       { Métrica: 'Margen de Ganancia %', Valor: `${profitMarginPercent.toFixed(2)}%` },
-      { Métrica: 'Total Pares Vendidos', Valor: totalPairsSold },
+      { Metrica: isFootwear ? 'Total pares vendidos' : 'Total unidades vendidas', Valor: totalPairsSold },
       { Métrica: 'Ticket Promedio USD', Valor: averageTicketUsd },
       { Métrica: 'Cantidad de Ventas', Valor: filteredSales.length },
       { Métrica: 'Tasa BCV Aplicada', Valor: exchangeRate },
@@ -481,11 +484,11 @@ export const SalesReports: React.FC = () => {
     const topData = topSellingShoes.map((p) => ({
       Modelo: p.nombre,
       Marca: p.marca,
-      Pares_Vendidos: p.pares,
+      [isFootwear ? "Pares_Vendidos" : "Unidades_Vendidas"]: p.pares,
       Ingresos_USD: p.totalUsd,
     }));
     const wsTop = XLSX.utils.json_to_sheet(topData);
-    XLSX.utils.book_append_sheet(wb, wsTop, 'Top_Calzados');
+    XLSX.utils.book_append_sheet(wb, wsTop, isFootwear ? "Top_Calzados" : "Top_Productos");
 
     XLSX.writeFile(wb, `Reporte_Ventas_NEXOSS_SHOP_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
@@ -521,7 +524,7 @@ export const SalesReports: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Métricas de ingresos, utilidades, margen de ganancia, top modelos y curva de tallas generados automáticamente.
+            {isFootwear ? "Metricas de ventas, margen, modelos y tallas." : "Metricas de ventas, ingresos, margen y productos."}
           </p>
         </div>
 
@@ -685,10 +688,10 @@ export const SalesReports: React.FC = () => {
         {/* Pairs Sold */}
         <div className="bg-white border border-slate-200 p-3.5 rounded-xl shadow-xs">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-            Pares Vendidos
+            {isFootwear ? 'Pares Vendidos' : 'Unidades Vendidas'}
           </span>
           <div className="text-2xl font-bold text-slate-900 font-mono mt-1">
-            {totalPairsSold} <span className="text-xs font-normal text-slate-500">pares</span>
+            {totalPairsSold} <span className="text-xs font-normal text-slate-500">{industry.unitLabel}</span>
           </div>
           <div className="text-xs text-slate-400 mt-0.5">
             En {filteredSales.length} ventas confirmadas
@@ -1348,14 +1351,14 @@ export const SalesReports: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         
         {/* Curva de Tallas (Size Curve Distribution) - 6 cols */}
-        <div className="lg:col-span-6 bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
+        <div className={isFootwear ? "lg:col-span-6 bg-white border border-slate-200 p-4 rounded-xl shadow-xs" : "hidden"}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-indigo-600" />
               <h3 className="font-bold text-sm text-slate-900">Curva de Tallas Vendidas</h3>
             </div>
             <span className="text-[11px] text-slate-500 font-semibold">
-              Total: {totalPairsSold} pares
+              Total: {totalPairsSold} {industry.unitLabel}
             </span>
           </div>
 
@@ -1375,9 +1378,9 @@ export const SalesReports: React.FC = () => {
                 return (
                   <div key={item.talla} className="space-y-1">
                     <div className="flex justify-between text-xs">
-                      <span className="font-mono font-bold text-slate-800">Talla {item.talla}</span>
+                      <span className="font-mono font-bold text-slate-800">{industry.variantLabel} {item.talla}</span>
                       <span className="font-mono text-indigo-600 font-semibold">
-                        {item.pares} {item.pares === 1 ? 'par' : 'pares'}
+                        {item.pares} {industry.unitLabel}
                       </span>
                     </div>
                     <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
@@ -1394,17 +1397,17 @@ export const SalesReports: React.FC = () => {
         </div>
 
         {/* Top 5 Best Selling Shoes - 6 cols */}
-        <div className="lg:col-span-6 bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
+        <div className="lg:col-span-12 bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-4 h-4 text-indigo-600" />
-              <h3 className="font-bold text-sm text-slate-900">Top Modelos de Calzado</h3>
+              <h3 className="font-bold text-sm text-slate-900">{isFootwear ? 'Top Modelos de Calzado' : 'Productos con mas ventas'}</h3>
             </div>
             <span className="text-[11px] text-slate-500 font-semibold">Por facturación</span>
           </div>
 
           <p className="text-xs text-slate-500 mb-3">
-            Zapatos con mayor volumen de ventas e ingresos durante el período.
+            <p className="text-xs text-slate-500 mb-3">{isFootwear ? 'Zapatos con mayor volumen de ventas e ingresos.' : 'Productos con mayor volumen de ventas e ingresos.'}</p>
           </p>
 
           {topSellingShoes.length === 0 ? (
@@ -1427,7 +1430,7 @@ export const SalesReports: React.FC = () => {
                       <div className="min-w-0">
                         <div className="font-bold text-xs text-slate-900 truncate">{item.nombre}</div>
                         <div className="text-[10px] text-slate-500">
-                          {item.marca} • {item.pares} {item.pares === 1 ? 'par vendido' : 'pares vendidos'}
+                          {item.marca} • {item.pares} {item.pares === 1 ? industry.unitLabel : industry.unitLabel}
                         </div>
                       </div>
                     </div>
@@ -1560,7 +1563,7 @@ export const SalesReports: React.FC = () => {
                 <th className="py-2.5 px-3 font-semibold min-w-[95px]">Factura #</th>
                 <th className="py-2.5 px-3 font-semibold min-w-[130px]">Fecha</th>
                 <th className="py-2.5 px-3 font-semibold min-w-[140px]">Cliente</th>
-                <th className="py-2.5 px-3 font-semibold min-w-[170px]">Calzado Comprado</th>
+                <th className="py-2.5 px-3 font-semibold min-w-[170px]">{isFootwear ? 'Calzado comprado' : 'Producto comprado'}</th>
                 <th className="py-2.5 px-3 text-right font-semibold min-w-[80px]">Total ($)</th>
                 <th className="py-2.5 px-3 text-right font-semibold min-w-[85px]">Total (Bs)</th>
                 <th className="py-2.5 px-3 text-right font-semibold min-w-[80px]">Ganancia ($)</th>
@@ -1686,7 +1689,7 @@ export const SalesReports: React.FC = () => {
                       <div className="space-y-0.5">
                         {sale.items.map((it, i) => (
                           <div key={i} className="text-[11px] text-slate-700">
-                            {it.cantidad}x {it.nombre_producto} <span className="text-slate-400">(T:{it.talla})</span>
+                            {it.cantidad}x {it.nombre_producto} <span className="text-slate-400">({industry.variantLabel}: {it.talla})</span>
                           </div>
                         ))}
                       </div>

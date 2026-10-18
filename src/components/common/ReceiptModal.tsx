@@ -19,6 +19,7 @@ import {
 import { Sale } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { BarcodeSvg } from './BarcodeSvg';
+import { resolveIndustryTemplate, COMPANY_INDUSTRIES } from '../../domain/companyIndustries';
 import { MakdLogo } from './MakdLogo';
 
 interface ReceiptModalProps {
@@ -27,6 +28,8 @@ interface ReceiptModalProps {
 }
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => {
+  const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
+  const isFootwear = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry')) === 'footwear';
   const { updateSaleDate } = useStore();
   const [activeView, setActiveView] = useState<'thermal' | 'digital'>('thermal');
   const [thermalWidth, setThermalWidth] = useState<'80mm' | '58mm'>('80mm');
@@ -57,8 +60,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
       `Fecha: ${new Date(sale.fecha).toLocaleString('es-VE')}\n` +
       `Total USD: $${sale.total_usd.toFixed(2)}\n` +
       `Total Bs: ${sale.total_bs.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs (Tasa: ${sale.tasa_cambio.toFixed(2)})\n\n` +
-      `*Calzados Comprados:*\n` +
-      sale.items.map((it) => `• ${it.nombre_producto} (Talla ${it.talla}) x${it.cantidad} = $${it.subtotal.toFixed(2)}`).join('\n') +
+      `${isFootwear ? "*Calzados Comprados:*" : "*Productos Comprados:*"}\n` +
+      sale.items.map((it) => `• ${it.nombre_producto} (${industry.variantLabel} ${it.talla}) x${it.cantidad} = $${it.subtotal.toFixed(2)}`).join('\n') +
       `\n\n*Formas de Pago:*\n` +
       sale.pagos.map((p) => `• ${p.cuenta}: ${p.moneda === 'Bs' ? `${p.monto.toFixed(2)} Bs` : `$${p.monto.toFixed(2)}`}`).join('\n') +
       `\n\n¡Gracias por preferir NEXOSS!\nSede no configurada, Sede no configurada, Ubicación no configurada.`
@@ -301,7 +304,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
                             {item.cantidad}x {item.nombre_producto}
                           </p>
                           <p className="text-[10px] text-stone-600 mt-0.5">
-                            Talla: <strong>{item.talla}</strong> • P.U: ${item.precio_unitario.toFixed(2)}
+                            {industry.variantLabel}: <strong>{item.talla}</strong> • P.U: ${item.precio_unitario.toFixed(2)}
                           </p>
                         </div>
                         <div className="font-black text-stone-950 font-mono shrink-0 text-right">
@@ -429,7 +432,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
                 <div className="text-[9.5px] text-stone-600 leading-tight space-y-0.5">
                   <p className="font-bold text-stone-900">¡GRACIAS POR SU PREFERENCIA!</p>
                   <p>Cambios de talla únicamente dentro de los 7 días continuos presentando este comprobante.</p>
-                  <p className="text-stone-500 italic">El calzado debe estar sin pisar y en su caja original.</p>
+                  <p className="text-stone-500 italic">{isFootwear ? "El calzado debe estar sin uso y en su caja original." : "Conserva este comprobante para cualquier consulta."}</p>
                 </div>
               </div>
 
@@ -496,7 +499,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
                 {/* Items */}
                 <div className="space-y-2">
                   <span className="text-xs font-black uppercase text-slate-500 tracking-wider block">
-                    Calzados Adquiridos ({sale.items.reduce((acc, it) => acc + it.cantidad, 0)} pares)
+                    {isFootwear ? "Calzados adquiridos (" : "Productos adquiridos ("}{sale.items.reduce((acc, it) => acc + it.cantidad, 0)} {industry.unitLabel})
                   </span>
 
                   <div className="space-y-2">
@@ -508,10 +511,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
                           </p>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[10px] font-bold">
-                              Talla {it.talla}
+                              {industry.variantLabel} {it.talla}
                             </span>
                             <span className="text-xs text-slate-500 font-mono">
-                              {it.cantidad} {it.cantidad > 1 ? 'pares' : 'par'} x ${it.precio_unitario.toFixed(2)}
+                              {it.cantidad} {industry.unitLabel} x ${it.precio_unitario.toFixed(2)}
                             </span>
                           </div>
                         </div>

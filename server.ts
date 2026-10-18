@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import { neon } from '@neondatabase/serverless';
 import path from 'path';
 import fs from 'fs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -9,6 +10,8 @@ import { createServer as createViteServer } from 'vite';
 import { 
   checkDatabaseConnection, 
   getNeonSql, 
+  readTenantWorkspaceState,
+  writeTenantWorkspaceState,
   initDatabaseSchema, 
   getNeonTables, 
   getNeonTableData,
@@ -40,7 +43,8 @@ import { createPostgresControlPlaneRepositoryFromEnvironment, type PostgresContr
 import { createCompanyAccessMiddleware, createPostgresCompanyAccessMiddleware, requireTenantRole, tenantStorageContext, type TenantAuthenticatedRequest } from './server/multiempresa/companyAccess.ts';
 import { LocalEnvironmentTenantSecretProvider } from './server/multiempresa/tenantSecretProvider.ts';
 import { readJsonFileWithBackup, tenantDataFiles, writeJsonFileAtomic } from './server/multiempresa/tenantFileStore.ts';
-import { FiscalBoardValidationError, matchesPublicBoardToken, publicFiscalBoard, readFiscalBoard, saveFiscalBoard, validateFiscalBoardState } from './server/multiempresa/fiscalBoardStore.ts';
+import { FiscalBoardValidationError, matchesPublicBoardToken, normalizeFiscalBoard, publicFiscalBoard, readFiscalBoard, saveFiscalBoard, validateFiscalBoardState } from './server/multiempresa/fiscalBoardStore.ts';
+import type { FiscalBoardState } from './src/domain/fiscalBoard.ts';
 import { NATIONAL_FISCAL_REQUIREMENTS } from './src/domain/fiscalBoard.ts';
 import { isIndustryTemplate, normalizeIndustryTemplate, resolveIndustryTemplate } from './src/domain/companyIndustries.ts';
 import { assertProductionRuntimeSupported } from './server/productionRuntime.ts';
@@ -53,7 +57,7 @@ import type { AccountBalance, Sale, ShoeProduct } from './src/types.ts';
 
 const DATA_DIR = path.join(process.cwd(), 'server', 'data');
 assertProductionRuntimeSupported();
-if (!fs.existsSync(DATA_DIR)) {
+if (process.env.NODE_ENV !== 'production' && !fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
@@ -110,6 +114,21 @@ function usePostgresControlPlane(): boolean {
   return process.env.NEXOSS_PLATFORM_STORAGE === 'postgres';
 }
 
+function isSamePostgresDatabase(left: string, right: string): boolean {
+  try {
+    const normalizeHost = (host: string) => host.replace(/^([^.]+)-pooler\./i, '$1.').toLowerCase();
+    const a = new URL(left);
+    const b = new URL(right);
+    const aDatabase = decodeURIComponent(a.pathname.replace(/^\//, '')).toLowerCase();
+    const bDatabase = decodeURIComponent(b.pathname.replace(/^\//, '')).toLowerCase();
+    return normalizeHost(a.hostname) === normalizeHost(b.hostname)
+      && (a.port || '5432') === (b.port || '5432')
+      && aDatabase === bDatabase;
+  } catch {
+    return false;
+  }
+}
+
 function getPostgresControlPlane(): PostgresControlPlaneRepository {
   if (!postgresControlPlane) postgresControlPlane = createPostgresControlPlaneRepositoryFromEnvironment();
   return postgresControlPlane;
@@ -134,6 +153,7 @@ export interface ServerStoreState {
   bankMovements: any[];
   currencyPurchases: any[];
   accountingEntries?: any[];
+  fiscalBoard?: FiscalBoardState;
   exchangeRate: number;
   historicalRates?: Record<string, number>;
   adminPin: string;
@@ -150,13 +170,18 @@ const DEFAULT_ACCOUNTS: AccountBalance[] = [
   { id: 'acc-6', nombre: 'Cashea', moneda: 'USD', saldo: 0.00, icono: 'CircleDollarSign' },
 ];
 
-function readServerStore(): ServerStoreState {
-  const files = getTenantFiles();
+async function readServerStore(): Promise<ServerStoreState> {
+  const files = process.env.NODE_ENV === 'production' ? null : getTenantFiles();
   // Si el archivo está dañado y tampoco hay respaldo, esto lanza: nunca se reinicializa
   // encima de datos que todavía podrían recuperarse a mano.
-  const data = readJsonFileWithBackup(files.store, (error) => {
+  const data = process.env.NODE_ENV === 'production'
+    ? await readTenantWorkspaceState()
+    : readJsonFileWithBackup(files!.store, (error) => {
     logger.error('store_state.json dañado; se usó la copia de respaldo .prev:', error);
-  }) as any;
+    }) as any;
+  if (process.env.NODE_ENV === 'production' && !getNeonSql()) {
+    throw new Error('La empresa no tiene una conexión Neon autorizada para guardar sus datos.');
+  }
   if (data && typeof data === 'object') {
       return {
         products: Array.isArray(data.products) ? data.products : [],
@@ -169,6 +194,7 @@ function readServerStore(): ServerStoreState {
         bankMovements: Array.isArray(data.bankMovements) ? data.bankMovements : [],
         currencyPurchases: Array.isArray(data.currencyPurchases) ? data.currencyPurchases : [],
         accountingEntries: Array.isArray(data.accountingEntries) ? data.accountingEntries : [],
+        ...(data.fiscalBoard && typeof data.fiscalBoard === 'object' ? { fiscalBoard: data.fiscalBoard as FiscalBoardState } : {}),
         exchangeRate: typeof data.exchangeRate === 'number' ? data.exchangeRate : 68.50,
         historicalRates: (data.historicalRates && typeof data.historicalRates === 'object') ? data.historicalRates : {},
         adminPin: data.adminPin || '1234',
@@ -194,13 +220,18 @@ function readServerStore(): ServerStoreState {
     updatedAt: new Date().toISOString(),
   };
 
-  writeJsonFileAtomic(files.store, initial);
+  if (process.env.NODE_ENV === 'production') await writeTenantWorkspaceState(initial as unknown as Record<string, unknown>);
+  else writeJsonFileAtomic(files!.store, initial);
   return initial;
 }
 
-function writeServerStore(state: ServerStoreState) {
-  const files = getTenantFiles();
+async function writeServerStore(state: ServerStoreState): Promise<void> {
   state.updatedAt = new Date().toISOString();
+  if (process.env.NODE_ENV === 'production') {
+    await writeTenantWorkspaceState(state as unknown as Record<string, unknown>);
+    return;
+  }
+  const files = getTenantFiles();
   // store_state.json es la fuente de verdad; products/sales.json son copias de lectura.
   writeJsonFileAtomic(files.store, state);
   try {
@@ -211,30 +242,49 @@ function writeServerStore(state: ServerStoreState) {
   }
 }
 
-function readLocalProducts(): any[] {
-  return readServerStore().products;
+async function readLocalProducts(): Promise<any[]> {
+  return (await readServerStore()).products;
 }
 
-function writeLocalProducts(products: any[]) {
-  const store = readServerStore();
+async function writeLocalProducts(products: any[]): Promise<void> {
+  const store = await readServerStore();
   store.products = products;
-  writeServerStore(store);
+  await writeServerStore(store);
 }
 
-function readLocalSales(): any[] {
-  return readServerStore().sales;
+async function readLocalSales(): Promise<any[]> {
+  return (await readServerStore()).sales;
 }
 
-function writeLocalSales(sales: any[]) {
-  const store = readServerStore();
+async function writeLocalSales(sales: any[]): Promise<void> {
+  const store = await readServerStore();
   store.sales = sales;
-  writeServerStore(store);
+  await writeServerStore(store);
+}
+
+async function readTenantFiscalBoard(): Promise<FiscalBoardState> {
+  if (process.env.NODE_ENV === 'production') {
+    const store = await readServerStore();
+    return normalizeFiscalBoard(store.fiscalBoard, NATIONAL_FISCAL_REQUIREMENTS);
+  }
+  return readFiscalBoard(getTenantFiles().fiscalBoard, NATIONAL_FISCAL_REQUIREMENTS);
+}
+
+async function writeTenantFiscalBoard(board: FiscalBoardState): Promise<void> {
+  if (process.env.NODE_ENV === 'production') {
+    const store = await readServerStore();
+    store.fiscalBoard = board;
+    await writeServerStore(store);
+    return;
+  }
+  saveFiscalBoard(getTenantFiles().fiscalBoard, board);
 }
 
 function sanitizeStoreForTenantRole(store: ServerStoreState, role: MembershipRole): ServerStoreState {
-  if (role === 'owner' || role === 'admin') return store;
-  if (role !== 'cashier') return { ...store, adminPin: '' };
-  return { ...store, sales: [], movements: [], cashClosures: [], expenses: [], bankMovements: [], currencyPurchases: [], accountingEntries: [], adminPin: '' };
+  const { fiscalBoard: _fiscalBoard, ...workspace } = store;
+  if (role === 'owner' || role === 'admin') return workspace;
+  if (role !== 'cashier') return { ...workspace, adminPin: '' };
+  return { ...workspace, sales: [], movements: [], cashClosures: [], expenses: [], bankMovements: [], currencyPurchases: [], accountingEntries: [], adminPin: '' };
 }
 
 /**
@@ -289,10 +339,38 @@ async function startServer() {
     });
   });
 
-  app.get('/api/public/fiscal-board/:companyId/:token', (req, res) => {
+  app.get('/api/public/fiscal-board/:companyId/:token', async (req, res) => {
     const token = req.params.token;
     if (!/^[0-9a-f-]{36}$/i.test(req.params.companyId) || !/^[0-9a-f]{64}$/i.test(token)) {
       return res.status(404).json({ error: 'La cartelera no está disponible.' });
+    }
+
+    if (usePostgresControlPlane()) {
+      try {
+        const tenant = await getPostgresControlPlane().findPublicBoardTenant(req.params.companyId);
+        if (!tenant) return res.status(404).json({ error: 'La cartelera no está disponible.' });
+        const connectionString = await new LocalEnvironmentTenantSecretProvider().getConnectionString(tenant.secretReference);
+        const saved = await tenantStorageContext.run({
+          companyId: tenant.companyId,
+          uid: 'public-board',
+          role: 'auditor',
+          industryTemplate: 'other',
+          connectionString,
+        }, () => readTenantWorkspaceState());
+        const board = normalizeFiscalBoard(saved?.fiscalBoard, NATIONAL_FISCAL_REQUIREMENTS);
+        if (!matchesPublicBoardToken(board.publicTokenHash, token)) {
+          return res.status(404).json({ error: 'La cartelera no está disponible.' });
+        }
+        res.set({
+          'Cache-Control': 'no-store, max-age=0',
+          'X-Robots-Tag': 'noindex, nofollow, noarchive',
+          'Referrer-Policy': 'no-referrer',
+        });
+        return res.json(publicFiscalBoard(tenant.companyName, board));
+      } catch (error) {
+        logger.error('Error consultando cartelera fiscal pública en PostgreSQL:', error);
+        return res.status(503).json({ error: 'No se pudo cargar la cartelera fiscal.' });
+      }
     }
 
     try {
@@ -525,7 +603,7 @@ async function startServer() {
         return { incomplete: false as const, status: company.status, onboardingStep: company.onboardingStep, ...(onboardingInvitation ? { invitation: onboardingInvitation, companyName: company.tradeName || company.legalName || '' } : {}) };
       });
       if (!result) return res.status(403).json({ error: 'No tienes permisos para configurar esta empresa.' });
-      if (result.incomplete) return res.status(400).json({ error: 'Completa los datos empresariales y fiscales requeridos antes de finalizar.' });
+      if (result.incomplete === true) return res.status(400).json({ error: 'Completa los datos empresariales y fiscales requeridos antes de finalizar.' });
       const notice = result.invitation
         ? await sendInvitationNotice({ to: result.invitation.email, companyName: result.companyName || '', role: result.invitation.role, invitationId: result.invitation.id, invitedBy: identity.email, expiresAt: result.invitation.expiresAt })
         : {};
@@ -659,6 +737,40 @@ async function startServer() {
       });
       return result ? res.json({ success: true }) : res.status(404).json({ error: 'Empresa no encontrada.' });
     } catch { return res.status(503).json({ error: 'No se pudo actualizar la cuenta.' }); }
+  });
+
+  app.put('/api/platform/admin/companies/:companyId/database', requirePlatformAdmin, async (req, res) => {
+    if (!usePostgresControlPlane()) return res.status(409).json({ error: 'Activa el almacenamiento PostgreSQL del control de empresas antes de enlazar bases Neon.' });
+    const secretReference = typeof req.body?.secretReference === 'string' ? req.body.secretReference.trim() : '';
+    const prefix = process.env.NODE_ENV === 'production' ? 'render-env:' : 'local-env:';
+    if (!new RegExp(`^${prefix}[A-Z][A-Z0-9_]*_DATABASE_URL$`).test(secretReference)) {
+      return res.status(400).json({ error: `Indica una referencia ${prefix}NOMBRE_DATABASE_URL; nunca envíes la URL de conexión en esta solicitud.` });
+    }
+    try {
+      const connectionString = await new LocalEnvironmentTenantSecretProvider().getConnectionString(secretReference);
+      if (isSamePostgresDatabase(connectionString, process.env.CONTROL_PLANE_DATABASE_URL?.trim() || '')) {
+        return res.status(400).json({ error: 'La base operativa debe ser distinta de la base central de empresas.' });
+      }
+      await neon(connectionString)`SELECT current_database(), NOW()`;
+      await tenantStorageContext.run({
+        companyId: req.params.companyId,
+        uid: (req as any).firebaseIdentity.uid,
+        role: 'owner',
+        industryTemplate: 'other',
+        connectionString,
+      }, () => initDatabaseSchema());
+      const saved = await getPostgresControlPlane().setTenantDatabaseConnection(
+        req.params.companyId,
+        secretReference,
+        (req as any).firebaseIdentity.uid,
+      );
+      return saved
+        ? res.json({ success: true, status: 'ready' })
+        : res.status(409).json({ error: 'La empresa no existe o esta variable ya está asignada a otra empresa.' });
+    } catch (error) {
+      logger.error('No se pudo enlazar la base Neon de la empresa:', error);
+      return res.status(503).json({ error: 'No se pudo verificar o guardar la conexión Neon indicada.' });
+    }
   });
 
   app.post('/api/platform/companies/:companyId/invitations', async (req, res) => {
@@ -807,6 +919,9 @@ async function startServer() {
           company: {
             id: company.id, legalName: company.legalName, tradeName: company.tradeName, taxId: company.taxId,
             activity: company.activity, address: company.address, phone: company.phone, email: company.email,
+            logoUrl: company.logoUrl,
+            mainBranchName: String(company.workspace.mainBranchName || 'Sede principal'),
+            mainBranchAddress: String(company.workspace.mainBranchAddress || ''),
             industryTemplate: resolveIndustryTemplate(company.workspace.industryTemplate, company.activity),
           },
         });
@@ -825,11 +940,46 @@ async function startServer() {
       return res.json({ company: {
         id: company.id, legalName: company.legalName, tradeName: company.tradeName, taxId: company.taxId,
         activity: company.activity, address: company.address, phone: company.phone, email: company.email,
+        logoUrl: company.logoUrl,
+        mainBranchName: String(company.workspace.mainBranchName || 'Sede principal'),
+        mainBranchAddress: String(company.workspace.mainBranchAddress || ''),
         industryTemplate: resolveIndustryTemplate(company.workspace.industryTemplate, company.activity),
       } });
     } catch (error) {
       logger.error('No se pudo leer el perfil local de empresa:', error);
       return res.status(503).json({ error: 'No se pudo cargar la información de la empresa.' });
+    }
+  });
+
+  // Datos visibles para cualquier miembro autenticado de la empresa activa.
+  app.get('/api/company/identity', async (req, res) => {
+    const tenant = (req as TenantAuthenticatedRequest).tenant;
+    if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada en esta sesión.' });
+    try {
+      if (usePostgresControlPlane()) {
+        const company = await getPostgresControlPlane().getCompanyIdentity(tenant.companyId);
+        if (!company) return res.status(404).json({ error: 'No se encontró el perfil de esta empresa.' });
+        return res.json({ company: {
+          legalName: company.legalName,
+          tradeName: company.tradeName,
+          address: company.address,
+          logoUrl: company.logoUrl,
+          mainBranchName: String(company.workspace.mainBranchName || 'Sede principal'),
+          mainBranchAddress: String(company.workspace.mainBranchAddress || ''),
+        } });
+      }
+      const company = PLATFORM_STORE.readState().companies.find((item) => item.id === tenant.companyId);
+      if (!company) return res.status(404).json({ error: 'No se encontró el perfil de esta empresa.' });
+      return res.json({ company: {
+        legalName: company.legalName,
+        tradeName: company.tradeName,
+        address: company.address,
+        logoUrl: company.logoUrl,
+        mainBranchName: String(company.workspace.mainBranchName || 'Sede principal'),
+        mainBranchAddress: String(company.workspace.mainBranchAddress || ''),
+      } });
+    } catch {
+      return res.status(503).json({ error: 'No se pudo cargar la identidad de la empresa.' });
     }
   });
 
@@ -841,10 +991,16 @@ async function startServer() {
       legalName: field('legalName', 180), tradeName: field('tradeName', 180), taxId: field('taxId', 40),
       activity: field('activity', 180), address: field('address', 500), phone: field('phone', 40),
       email: field('email', 254), industryTemplate: field('industryTemplate', 40),
+      logoUrl: field('logoUrl', 700_000),
+      mainBranchName: field('mainBranchName', 100) || 'Sede principal',
+      mainBranchAddress: field('mainBranchAddress', 500),
     };
+    const validLogo = !profile.logoUrl
+      || /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(profile.logoUrl)
+      || (() => { try { return new URL(profile.logoUrl).protocol === 'https:'; } catch { return false; } })();
     if (profile.legalName.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email)
-      || !isIndustryTemplate(profile.industryTemplate)) {
-      return res.status(400).json({ error: 'Revisa razón social, correo y rubro seleccionados.' });
+      || !isIndustryTemplate(profile.industryTemplate) || !validLogo) {
+      return res.status(400).json({ error: 'Revisa razón social, correo, rubro y formato del logo.' });
     }
     if (usePostgresControlPlane()) {
       try {
@@ -865,7 +1021,8 @@ async function startServer() {
         Object.assign(company, {
           legalName: profile.legalName, tradeName: profile.tradeName, taxId: profile.taxId,
           activity: profile.activity, address: profile.address, phone: profile.phone, email: profile.email,
-          workspace: { ...company.workspace, industryTemplate: profile.industryTemplate },
+          logoUrl: profile.logoUrl,
+          workspace: { ...company.workspace, industryTemplate: profile.industryTemplate, mainBranchName: profile.mainBranchName, mainBranchAddress: profile.mainBranchAddress },
           updatedAt: new Date().toISOString(),
         });
         state.audit.push({ id: randomUUID(), actorUid: tenant.uid, companyId: company.id, action: 'company.profile_updated', createdAt: new Date().toISOString(), metadata: { industryTemplate: profile.industryTemplate } });
@@ -1054,11 +1211,11 @@ async function startServer() {
     }
   });
 
-  app.get('/api/fiscal-board', (req, res) => {
+  app.get('/api/fiscal-board', async (req, res) => {
     try {
       const tenant = (req as TenantAuthenticatedRequest).tenant;
       if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
-      const board = readFiscalBoard(getTenantFiles().fiscalBoard, NATIONAL_FISCAL_REQUIREMENTS);
+      const board = await readTenantFiscalBoard();
       const { publicTokenHash, ...visibleBoard } = board;
       return res.json({ ...visibleBoard, publicLinkEnabled: Boolean(publicTokenHash) });
     } catch (error) {
@@ -1067,12 +1224,11 @@ async function startServer() {
     }
   });
 
-  app.put('/api/fiscal-board', (req, res) => {
+  app.put('/api/fiscal-board', async (req, res) => {
     try {
       const tenant = (req as TenantAuthenticatedRequest).tenant;
       if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
-      const filePath = getTenantFiles().fiscalBoard;
-      const previous = readFiscalBoard(filePath, NATIONAL_FISCAL_REQUIREMENTS);
+      const previous = await readTenantFiscalBoard();
       const submitted = validateFiscalBoardState(req.body, NATIONAL_FISCAL_REQUIREMENTS);
       const changedRequirements = submitted.requirements.filter((item) => {
         const old = previous.requirements.find((requirement) => requirement.id === item.id);
@@ -1094,7 +1250,7 @@ async function startServer() {
         ...(previous.publicTokenHash ? { publicTokenHash: previous.publicTokenHash } : {}),
         updatedAt: now,
       };
-      saveFiscalBoard(filePath, nextBoard);
+      await writeTenantFiscalBoard(nextBoard);
       const { publicTokenHash, ...visibleBoard } = nextBoard;
       return res.json({ ...visibleBoard, publicLinkEnabled: Boolean(publicTokenHash) });
     } catch (error) {
@@ -1104,12 +1260,11 @@ async function startServer() {
     }
   });
 
-  app.post('/api/fiscal-board/public-link', (req, res) => {
+  app.post('/api/fiscal-board/public-link', async (req, res) => {
     try {
       const tenant = (req as TenantAuthenticatedRequest).tenant;
       if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
-      const filePath = getTenantFiles().fiscalBoard;
-      const board = readFiscalBoard(filePath, NATIONAL_FISCAL_REQUIREMENTS);
+      const board = await readTenantFiscalBoard();
       const token = randomBytes(32).toString('hex');
       board.publicTokenHash = createHash('sha256').update(token).digest('hex');
       board.updatedAt = new Date().toISOString();
@@ -1120,7 +1275,7 @@ async function startServer() {
         createdAt: board.updatedAt,
         summary: 'Creó o renovó el enlace público de la cartelera.',
       }].slice(-200);
-      saveFiscalBoard(filePath, board);
+      await writeTenantFiscalBoard(board);
       return res.status(201).json({ token });
     } catch (error) {
       logger.error('Error creando el enlace público de la cartelera:', error);
@@ -1128,12 +1283,11 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/fiscal-board/public-link', (req, res) => {
+  app.delete('/api/fiscal-board/public-link', async (req, res) => {
     try {
       const tenant = (req as TenantAuthenticatedRequest).tenant;
       if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
-      const filePath = getTenantFiles().fiscalBoard;
-      const board = readFiscalBoard(filePath, NATIONAL_FISCAL_REQUIREMENTS);
+      const board = await readTenantFiscalBoard();
       delete board.publicTokenHash;
       board.updatedAt = new Date().toISOString();
       board.auditEvents = [...(board.auditEvents || []), {
@@ -1143,7 +1297,7 @@ async function startServer() {
         createdAt: board.updatedAt,
         summary: 'Revocó el enlace público de la cartelera.',
       }].slice(-200);
-      saveFiscalBoard(filePath, board);
+      await writeTenantFiscalBoard(board);
       return res.json({ success: true });
     } catch (error) {
       logger.error('Error revocando el enlace público de la cartelera:', error);
@@ -1151,20 +1305,32 @@ async function startServer() {
     }
   });
 
-  const enforceProductLimit = (bulk = false) => (req: any, res: any, next: any) => {
+  const enforceProductLimit = (bulk = false) => async (req: any, res: any, next: any) => {
     try {
       const tenant = tenantStorageContext.getStore();
       if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
-      const state = PLATFORM_STORE.readState();
-      const subscription = state.subscriptions.find((item) => item.companyId === tenant.companyId);
-      const plan = subscription && state.plans.find((item) => item.id === subscription.planId);
-      if (!plan) return res.status(403).json({ error: 'La empresa no tiene un plan activo.' });
-      const existing = readServerStore().products;
+      let productLimit = tenant.maxProducts;
+      if (productLimit === undefined) {
+        const state = PLATFORM_STORE.readState();
+        const subscription = state.subscriptions.find((item) => item.companyId === tenant.companyId);
+        const plan = subscription && state.plans.find((item) => item.id === subscription.planId);
+        if (!plan) return res.status(403).json({ error: 'La empresa no tiene un plan activo.' });
+        productLimit = plan.limits.products;
+      }
+      // En producción el catálogo autoritativo está en la base Neon del tenant.
+      // La copia workspace puede no contener productos importados antes de que
+      // se activara esta comprobación y permitiría superar el límite del plan.
+      const sql = getNeonSql();
+      const existingIds = sql
+        ? (await sql`SELECT id FROM shoe_products`).map((row: any) => String(row.id))
+        : (await readServerStore()).products.map((product: any) => String(product?.id || '')).filter(Boolean);
       const incoming = bulk && Array.isArray(req.body?.products) ? req.body.products : [req.body];
-      const ids = new Set(existing.map((product: any) => String(product?.id || '')).filter(Boolean));
+      const ids = new Set(existingIds);
       for (const product of incoming) if (product?.id) ids.add(String(product.id));
-      const projected = bulk && req.body?.replaceAll === true ? incoming.length : ids.size;
-      if (projected > plan.limits.products) return res.status(403).json({ error: `El plan permite hasta ${plan.limits.products} productos.` });
+      const projected = bulk && req.body?.replaceAll === true
+        ? new Set(incoming.map((product: any) => String(product?.id || '')).filter(Boolean)).size
+        : ids.size;
+      if (projected > productLimit) return res.status(403).json({ error: `El plan permite hasta ${productLimit} productos.` });
       next();
     } catch { return res.status(503).json({ error: 'No se pudo comprobar el límite del plan.' }); }
   };
@@ -1258,7 +1424,7 @@ async function startServer() {
 
   // 4. Global Store Synchronization API (Master State across all devices)
   app.get('/api/pos/version', async (_req, res) => {
-    const store = readServerStore();
+    const store = await readServerStore();
     const sql = getNeonSql();
     if (sql) {
       try {
@@ -1285,7 +1451,7 @@ async function startServer() {
 
   app.get('/api/pos/state', async (_req, res) => {
     const sql = getNeonSql();
-    const store = readServerStore();
+    const store = await readServerStore();
     const posAccounts = (store.accounts?.length ? store.accounts : DEFAULT_ACCOUNTS)
       .map((account: any) => ({
         id: account.id,
@@ -1330,8 +1496,8 @@ async function startServer() {
     });
   });
 
-  app.get('/api/store/version', (req, res) => {
-    const store = readServerStore();
+  app.get('/api/store/version', async (req, res) => {
+    const store = await readServerStore();
     const prodHash = `${store.products?.length || 0}-${store.products?.reduce((acc: number, p: any) => acc + (Number(p.stock) || 0), 0)}-${store.updatedAt}`;
     const salesHash = `${store.sales?.length || 0}-${store.sales?.[0]?.id || ''}-${store.sales?.[0]?.fecha || ''}`;
     const expHash = `${store.expenses?.length || 0}-${store.expenses?.[0]?.id || ''}`;
@@ -1365,7 +1531,7 @@ async function startServer() {
           sql`SELECT * FROM cash_closures ORDER BY fecha DESC, created_at DESC`,
           sql`SELECT * FROM layaways ORDER BY fecha_apartado DESC`,
         ]);
-        const store = sanitizeStoreForTenantRole(readServerStore(), role);
+        const store = sanitizeStoreForTenantRole(await readServerStore(), role);
         return res.json({
           success: true,
           source: 'neon_postgres',
@@ -1383,15 +1549,18 @@ async function startServer() {
             currencyPurchases: store.currencyPurchases || [],
             exchangeRate: store.exchangeRate || 807.39,
             historicalRates: store.historicalRates || {},
-            adminPin: role === 'cashier' ? '' : store.adminPin || '1234',
+            // Auditor y contable pueden leer el estado del workspace, pero el PIN
+            // administrativo solo debe salir al propietario o al administrador.
+            adminPin: role === 'owner' || role === 'admin' ? store.adminPin || '1234' : '',
             updatedAt: new Date().toISOString(),
           },
         });
       } catch (err) {
         logger.error('Neon /api/store/state fetch error, using local fallback:', err);
+        if (process.env.NODE_ENV === 'production') return res.status(503).json({ success: false, error: 'No se pudieron cargar los datos de esta empresa desde Neon.' });
       }
     }
-    const store = sanitizeStoreForTenantRole(readServerStore(), role);
+    const store = sanitizeStoreForTenantRole(await readServerStore(), role);
     res.json({
       success: true,
       source: 'server_store',
@@ -1405,13 +1574,13 @@ async function startServer() {
     });
   });
 
-  app.post('/api/store/sync', (req, res) => {
+  app.post('/api/store/sync', async (req, res) => {
     const updates = req.body;
     if (!updates || typeof updates !== 'object') {
       return res.status(400).json({ success: false, error: 'Cuerpo de sincronización inválido' });
     }
 
-    const current = readServerStore();
+    const current = await readServerStore();
     if (Array.isArray(updates.products)) {
       if (updates.allowReplaceProducts) {
         current.products = updates.products;
@@ -1455,7 +1624,7 @@ async function startServer() {
     }
     if (typeof updates.adminPin === 'string') current.adminPin = updates.adminPin;
 
-    writeServerStore(current);
+    await writeServerStore(current);
     res.json({ success: true, data: current });
   });
 
@@ -1468,9 +1637,10 @@ async function startServer() {
         return res.json({ source: 'neon_postgres', data: normalizeProducts(rows as any[]) });
       } catch (err) {
         logger.error('Neon products fetch error, using local fallback:', err);
+        if (process.env.NODE_ENV === 'production') return res.status(503).json({ error: 'No se pudieron cargar los productos de esta empresa desde Neon.' });
       }
     }
-    const local = readLocalProducts();
+    const local = await readLocalProducts();
     res.json({ source: 'local_file', data: local });
   });
 
@@ -1480,16 +1650,14 @@ async function startServer() {
       return res.status(400).json({ saved: false, error: 'Datos de producto inválidos' });
     }
 
-    // Always update server store
-    const store = readServerStore();
+    // Keep the workspace copy in step after Neon accepts the product.
+    const store = await readServerStore();
     const existingIndex = store.products.findIndex((item: any) => item.id === p.id);
     if (existingIndex >= 0) {
       store.products[existingIndex] = { ...store.products[existingIndex], ...p };
     } else {
       store.products.unshift(p);
     }
-    writeServerStore(store);
-
     const sql = getNeonSql();
     if (sql) {
       try {
@@ -1538,24 +1706,27 @@ async function startServer() {
       }
     }
 
+    await writeServerStore(store);
+
     res.json({ saved: true, id: p.id, product: p });
   });
 
   // Delete product API
   app.delete('/api/products/:id', async (req, res) => {
     const { id } = req.params;
-    const store = readServerStore();
-    store.products = store.products.filter((item: any) => item.id !== id);
-    writeServerStore(store);
-
+    const store = await readServerStore();
     const sql = getNeonSql();
     if (sql) {
       try {
         await sql`DELETE FROM shoe_products WHERE id = ${id}`;
       } catch (err) {
         logger.error('Error deleting product from Neon:', err);
+        return res.status(503).json({ success: false, error: 'No se pudo eliminar el producto de Neon.' });
       }
     }
+
+    store.products = store.products.filter((item: any) => item.id !== id);
+    await writeServerStore(store);
 
     res.json({ success: true, id });
   });
@@ -1571,24 +1742,21 @@ async function startServer() {
     if (replaceExisting) {
       finalProducts = products;
     } else {
-      const current = readLocalProducts();
+      const current = await readLocalProducts();
       const existingMap = new Map(current.map((item: any) => [item.id, item]));
       products.forEach((p: any) => {
         existingMap.set(p.id, p);
       });
       finalProducts = Array.from(existingMap.values());
     }
-    writeLocalProducts(finalProducts);
-
     const sql = getNeonSql();
     if (sql) {
       try {
         await initDatabaseSchema();
-        if (replaceExisting) {
-          await sql`DELETE FROM shoe_products`;
-        }
+        const statements: any[] = [];
+        if (replaceExisting) statements.push(sql`DELETE FROM shoe_products`);
         for (const p of products) {
-          await sql`
+          statements.push(sql`
             INSERT INTO shoe_products (
               id, nombre, marca, modelo, color, genero, categoria,
               talla, sku, precio, costo, stock, stock_minimo, stock_maximo,
@@ -1604,12 +1772,16 @@ async function startServer() {
               precio = EXCLUDED.precio,
               costo = EXCLUDED.costo,
               nombre = EXCLUDED.nombre;
-          `;
+          `);
         }
+        if (statements.length) await sql.transaction(statements);
       } catch (err) {
         logger.error('Error in bulk Neon insert:', err);
+        return res.status(503).json({ success: false, error: 'No se pudo guardar la importación de productos en Neon.' });
       }
     }
+
+    await writeLocalProducts(finalProducts);
 
     res.json({ success: true, count: products.length, total: finalProducts.length });
   });
@@ -1623,14 +1795,15 @@ async function startServer() {
     if (sql) {
       try {
         const layaways = await getLayawaysFromDb();
-        if (Array.isArray(layaways) && layaways.length > 0) {
+        if (process.env.NODE_ENV === 'production' || (Array.isArray(layaways) && layaways.length > 0)) {
           return res.json({ success: true, data: layaways, source: 'neon_postgres' });
         }
       } catch (err) {
         logger.error('Error fetching layaways from Neon:', err);
+        if (process.env.NODE_ENV === 'production') return res.status(503).json({ success: false, error: 'No se pudieron cargar los apartados de esta empresa.' });
       }
     }
-    const store = readServerStore();
+    const store = await readServerStore();
     res.json({ success: true, data: store.layaways || [], source: 'server_store' });
   });
 
@@ -1639,7 +1812,7 @@ async function startServer() {
     if (!layaway || !layaway.id) {
       return res.status(400).json({ success: false, error: 'Datos de apartado inválidos' });
     }
-    const store = readServerStore();
+    const store = await readServerStore();
     if (!store.layaways) store.layaways = [];
     const existingIndex = store.layaways.findIndex((item: any) => item.id === layaway.id);
     if (existingIndex >= 0) {
@@ -1647,13 +1820,12 @@ async function startServer() {
     } else {
       store.layaways.unshift(layaway);
     }
-    writeServerStore(store);
-
-    // Persist to Neon
     const sql = getNeonSql();
     if (sql) {
-      saveLayawayToDb(layaway).catch((err) => logger.error('Error saving layaway to Neon:', err));
+      const saved = await saveLayawayToDb(layaway);
+      if (!saved) return res.status(503).json({ success: false, error: 'No se pudo guardar el apartado en Neon.' });
     }
+    await writeServerStore(store);
 
     res.json({ success: true, layaway });
   });
@@ -1661,70 +1833,65 @@ async function startServer() {
   app.put('/api/layaways/:id', async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
-    const store = readServerStore();
+    const store = await readServerStore();
     if (!store.layaways) store.layaways = [];
-    const index = store.layaways.findIndex((item: any) => item.id === id);
-    if (index >= 0) {
-      store.layaways[index] = { ...store.layaways[index], ...updates };
-      writeServerStore(store);
-
-      // Update in Neon
-      const sql = getNeonSql();
-      if (sql) {
-        saveLayawayToDb(store.layaways[index]).catch((err) =>
-          logger.error('Error updating layaway in Neon:', err)
-        );
-      }
-
-      return res.json({ success: true, layaway: store.layaways[index] });
+    const sql = getNeonSql();
+    let existing = store.layaways.find((item: any) => item.id === id);
+    if (!existing && sql) existing = (await getLayawaysFromDb()).find((item: any) => item.id === id);
+    if (!existing) return res.status(404).json({ success: false, error: 'Apartado no encontrado' });
+    const updated = { ...existing, ...updates };
+    if (sql && !await saveLayawayToDb(updated)) {
+      return res.status(503).json({ success: false, error: 'No se pudo actualizar el apartado en Neon.' });
     }
-    res.status(404).json({ success: false, error: 'Apartado no encontrado' });
+    const index = store.layaways.findIndex((item: any) => item.id === id);
+    if (index >= 0) store.layaways[index] = updated;
+    else store.layaways.unshift(updated);
+    await writeServerStore(store);
+    return res.json({ success: true, layaway: updated });
   });
 
   app.delete('/api/layaways/:id', async (req, res) => {
     const { id } = req.params;
-    const store = readServerStore();
+    const store = await readServerStore();
     if (!store.layaways) store.layaways = [];
-    store.layaways = store.layaways.filter((item: any) => item.id !== id);
-    writeServerStore(store);
-
-    // Delete in Neon
     const sql = getNeonSql();
-    if (sql) {
-      deleteLayawayFromDb(id).catch((err) => logger.error('Error deleting layaway from Neon:', err));
+    if (sql && !await deleteLayawayFromDb(id)) {
+      return res.status(503).json({ success: false, error: 'No se pudo eliminar el apartado de Neon.' });
     }
+    store.layaways = store.layaways.filter((item: any) => item.id !== id);
+    await writeServerStore(store);
 
     res.json({ success: true, id });
   });
 
   // Movements API
-  app.get('/api/movements', (req, res) => {
-    const store = readServerStore();
+  app.get('/api/movements', async (req, res) => {
+    const store = await readServerStore();
     res.json({ success: true, data: store.movements });
   });
 
-  app.post('/api/movements', (req, res) => {
+  app.post('/api/movements', async (req, res) => {
     const m = req.body;
     if (m && m.id) {
-      const store = readServerStore();
+      const store = await readServerStore();
       store.movements.unshift(m);
-      writeServerStore(store);
+      await writeServerStore(store);
     }
     res.json({ success: true });
   });
 
   // Accounts API
-  app.get('/api/accounts', (req, res) => {
-    const store = readServerStore();
+  app.get('/api/accounts', async (req, res) => {
+    const store = await readServerStore();
     res.json({ success: true, data: store.accounts });
   });
 
-  app.post('/api/accounts', (req, res) => {
+  app.post('/api/accounts', async (req, res) => {
     const { accounts } = req.body;
     if (Array.isArray(accounts)) {
-      const store = readServerStore();
+      const store = await readServerStore();
       store.accounts = accounts;
-      writeServerStore(store);
+      await writeServerStore(store);
     }
     res.json({ success: true });
   });
@@ -2051,7 +2218,7 @@ async function startServer() {
         return res.status(503).json({ error: 'No se pudieron cargar los datos contables de esta empresa.' });
       }
     }
-    const state = readServerStore();
+    const state = await readServerStore();
     const start = String(req.query.start || '');
     const end = String(req.query.end || '');
     const entries = (state.accountingEntries || []).filter((entry: any) => {
@@ -2084,7 +2251,7 @@ async function startServer() {
         return res.status(400).json({ error: error instanceof Error ? error.message : 'No se pudo guardar el asiento.' });
       }
     }
-    const state = readServerStore();
+    const state = await readServerStore();
     const entry = req.body || {};
     const lines = Array.isArray(entry.lineas) ? entry.lineas : [];
     const rate = Number(entry.tasa_dolar || 0);
@@ -2110,7 +2277,7 @@ async function startServer() {
     state.accountingEntries = existing
       ? entries.map((item: any) => String(item.id) === saved.id ? saved : item)
       : [...entries, saved];
-    writeServerStore(state);
+    await writeServerStore(state);
     res.json({ source: 'local_demo', data: { id: saved.id, numeroAsiento: saved.numero_asiento, totalDebe, totalHaber } });
   });
 
@@ -2124,12 +2291,12 @@ async function startServer() {
         return res.status(503).json({ error: 'No se pudo eliminar el asiento contable.' });
       }
     }
-    const state = readServerStore();
+    const state = await readServerStore();
     const entries = state.accountingEntries || [];
     const remaining = entries.filter((entry: any) => String(entry.id) !== String(req.params.id));
     if (remaining.length === entries.length) return res.status(404).json({ error: 'No se encontró el asiento contable.' });
     state.accountingEntries = remaining;
-    writeServerStore(state);
+    await writeServerStore(state);
     res.json({ ok: true });
   });
 
@@ -2151,9 +2318,10 @@ async function startServer() {
         });
       } catch (err) {
         logger.error('Error obteniendo productos de Neon para catálogo:', err);
+        if (process.env.NODE_ENV === 'production') return res.status(503).json({ success: false, error: 'No se pudo cargar el catálogo de esta empresa desde Neon.' });
       }
     }
-    const localProducts = readLocalProducts().filter((p) => Number(p.stock) > 0);
+    const localProducts = (await readLocalProducts()).filter((p) => Number(p.stock) > 0);
     res.json({ success: true, count: localProducts.length, products: localProducts });
   });
 

@@ -19,12 +19,12 @@ test('bloquea producción si Firebase Auth Emulator está configurado', () => {
   );
 });
 
-test('bloquea producción mientras las rutas sigan usando persistencia JSON local', () => {
+test('bloquea producción mientras falte la configuración PostgreSQL central', () => {
   assert.throws(
     () => assertProductionRuntimeSupported({
       NODE_ENV: 'production',
       FIREBASE_PROJECT_ID: 'nexoss-dabfe',
     }),
-    (error: unknown) => error instanceof ProductionRuntimeBlockedError && error.message.includes('repositorio PostgreSQL'),
+    (error: unknown) => error instanceof ProductionRuntimeBlockedError && error.message.includes('NEXOSS_PLATFORM_STORAGE'),
   );
 });

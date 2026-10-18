@@ -35,7 +35,7 @@ function ViewFallback() {
   );
 }
 
-function AppContent({ onTenantSelected }: { onTenantSelected: (id: string) => void }) {
+function AppContent() {
   const [activeTab, setActiveTab] = useState<NavigationTab>('pos');
   // Escáner de gastos con cámara: se abre desde la barra inferior del teléfono.
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -71,14 +71,15 @@ function AppContent({ onTenantSelected }: { onTenantSelected: (id: string) => vo
     setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
     setCompanyRole(localStorage.getItem('nexoss_active_company_role') || '');
     setCompanyIndustry(localStorage.getItem('nexoss_active_company_industry') || 'other');
-    onTenantSelected(companyId);
   };
 
   return (
     <CompanyWorkspaceGate user={currentUser} loading={isAuthLoading} onTenantSelected={(companyId, role) => {
       localStorage.setItem('nexoss_active_company_role', role);
+      setActiveCompanyId(companyId);
       setCompanyRole(role);
-      onTenantSelected(companyId);
+      setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
+      setCompanyIndustry(localStorage.getItem('nexoss_active_company_industry') || 'other');
     }} onLogout={logoutUserAction}>
     <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-500 selection:text-white">
       
@@ -241,10 +242,9 @@ function AppContent({ onTenantSelected }: { onTenantSelected: (id: string) => vo
 }
 
 function PrivateApp() {
-  const [tenantScope, setTenantScope] = useState(() => localStorage.getItem('nexoss_active_company_id') || '');
   return (
-    <StoreProvider key={tenantScope || 'unselected-tenant'}>
-      <AppContent onTenantSelected={setTenantScope} />
+    <StoreProvider>
+      <AppContent />
     </StoreProvider>
   );
 }

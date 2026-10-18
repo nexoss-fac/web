@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { useStore } from '../../context/StoreContext';
 import { ShoeProduct, StockMovement } from '../../types';
 import { INVENTORY_BOOK_COLUMNS, INVENTORY_BOOK_GROUPS, classifyExitReason, type BookColumn } from '../../domain/inventoryBookLayout';
+import { COMPANY_INDUSTRIES, resolveIndustryTemplate } from '../../domain/companyIndustries';
 
 interface ReportRow {
   id: string;
@@ -73,6 +74,7 @@ const movementCostBs = (m: StockMovement, fallbackRate: number) => {
 };
 
 export const InventoryMovementReport: React.FC = () => {
+  const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
   const { products, movements, exchangeRate, sales, expenses } = useStore();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -91,7 +93,7 @@ export const InventoryMovementReport: React.FC = () => {
       if (id && !productMap.has(id)) {
         productMap.set(id, {
           id, nombre: m.producto_nombre || 'Producto sin nombre', sku: m.sku || '', marca: m.marca || '',
-          categoria: 'Calzado', clasificacion_inventario: 'Mercancía', tipo: 'Otros', talla: m.talla || '', color: '', moneda: 'USD', precio: 0, costo: 0,
+          categoria: industry.initialCategories[0], clasificacion_inventario: 'Mercancía', tipo: 'Otros', talla: m.talla || '', color: '', moneda: 'USD', precio: 0, costo: 0,
           stock: Number(m.stock_nuevo) || 0, stock_minimo: 0, activo: false, created_at: m.fecha || '',
         });
       }
@@ -202,7 +204,7 @@ export const InventoryMovementReport: React.FC = () => {
     ws['!cols'] = [{ wch: 38 }, ...INVENTORY_BOOK_COLUMNS.map((column) => ({ wch: column.kind === 'text' ? 22 : 15 }))];
     XLSX.utils.book_append_sheet(wb, ws, 'Movimiento inventario');
     const detailRows = movements.filter((m) => dateKey(m.fecha) >= periodStart && dateKey(m.fecha) <= periodEnd).map((m) => ({
-      Fecha: displayDate(m.fecha), Producto: m.producto_nombre, SKU: m.sku, Talla: m.talla, Tipo: m.tipo,
+      Fecha: displayDate(m.fecha), Producto: m.producto_nombre, SKU: m.sku, [industry.variantLabel]: m.talla, Tipo: m.tipo,
       Cantidad: signedQuantity(m), 'Costo unitario Bs': money(movementCostBs(m, exchangeRate)), 'Monto Bs': money(Math.abs(signedQuantity(m)) * movementCostBs(m, exchangeRate)),
       Documento: m.documento || '', Motivo: m.motivo || '', Usuario: m.usuario || '',
     }));
@@ -232,7 +234,7 @@ export const InventoryMovementReport: React.FC = () => {
     };
     const groupHead = INVENTORY_BOOK_GROUPS.map((group) => `<th colspan="${group.columns.length}">${escapeHtml(group.label)}</th>`).join('');
     const columnHead = INVENTORY_BOOK_COLUMNS.map((column) => `<th>${escapeHtml(column.label)}</th>`).join('');
-    const contentRows = filteredRows.map((r) => `<tr><td>${escapeHtml(r.producto)}${r.talla ? ` - Talla ${escapeHtml(r.talla)}` : ''}</td>${INVENTORY_BOOK_COLUMNS.map((column) => `<td>${bookCellText(r, column)}</td>`).join('')}</tr>`).join('');
+    const contentRows = filteredRows.map((r) => `<tr><td>${escapeHtml(r.producto)}${r.talla ? ` - ${industry.variantLabel} ${escapeHtml(r.talla)}` : ''}</td>${INVENTORY_BOOK_COLUMNS.map((column) => `<td>${bookCellText(r, column)}</td>`).join('')}</tr>`).join('');
     const totalCells = INVENTORY_BOOK_COLUMNS.map((column) => `<td>${column.sum ? formatNumber(filteredRows.reduce((sum, r) => sum + (Number((r as unknown as Record<string, number>)[column.field]) || 0), 0)) : ''}</td>`).join('');
     const bookTableHtml = `<table><thead><tr><th rowspan="2">Descripción</th>${groupHead}</tr><tr>${columnHead}</tr></thead><tbody>${contentRows}<tr class="totals"><td>TOTALES</td>${totalCells}</tr></tbody></table>`;
     const salesUsd = periodSales.reduce((sum, sale) => sum + (Number(sale.total_usd) || 0), 0);

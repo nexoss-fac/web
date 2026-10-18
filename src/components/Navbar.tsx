@@ -350,7 +350,7 @@ export const Header: React.FC<{
       case 'admin':
         return 'Administrar empresa';
       default:
-        return 'Administración de Zapatería';
+        return 'Gestion empresarial';
     }
   };
 

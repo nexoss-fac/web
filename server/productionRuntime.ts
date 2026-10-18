@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+
 export class ProductionRuntimeBlockedError extends Error {
   constructor(message: string) {
     super(message);
@@ -12,7 +14,17 @@ export function assertProductionRuntimeSupported(environment: NodeJS.ProcessEnv 
     throw new ProductionRuntimeBlockedError('Producción bloqueada: elimina FIREBASE_AUTH_EMULATOR_HOST y configura Firebase Admin con la identidad de servicio del entorno.');
   }
 
-  throw new ProductionRuntimeBlockedError(
-    'Producción bloqueada: NEXOSS todavía depende de persistencia JSON local y el repositorio PostgreSQL no está conectado a las rutas. No despliegues esta versión.',
-  );
+  if (environment.NEXOSS_PLATFORM_STORAGE?.trim() !== 'postgres') {
+    throw new ProductionRuntimeBlockedError('Producción bloqueada: configura NEXOSS_PLATFORM_STORAGE=postgres para usar el control de empresas en PostgreSQL.');
+  }
+  if (!environment.CONTROL_PLANE_DATABASE_URL?.trim()) {
+    throw new ProductionRuntimeBlockedError('Producción bloqueada: falta CONTROL_PLANE_DATABASE_URL para el control de empresas.');
+  }
+  if (!(environment.FIREBASE_PROJECT_ID?.trim() || environment.GOOGLE_CLOUD_PROJECT?.trim())) {
+    throw new ProductionRuntimeBlockedError('Producción bloqueada: falta el ID del proyecto Firebase.');
+  }
+  const credentialPath = environment.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+  if (!credentialPath || !existsSync(credentialPath)) {
+    throw new ProductionRuntimeBlockedError('Producción bloqueada: configura GOOGLE_APPLICATION_CREDENTIALS con un archivo secreto de Firebase Admin disponible en Render.');
+  }
 }

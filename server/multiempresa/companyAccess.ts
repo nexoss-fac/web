@@ -12,6 +12,7 @@ export interface TenantStorageContext {
   industryTemplate: ReturnType<typeof resolveIndustryTemplate>;
   companySlug?: string;
   connectionString?: string;
+  maxProducts?: number;
 }
 export const tenantStorageContext = new AsyncLocalStorage<TenantStorageContext>();
 export interface TenantAuthenticatedRequest extends FirebaseAuthenticatedRequest { tenant?: TenantStorageContext; }
@@ -71,6 +72,7 @@ const ROLE_POLICY: Record<MembershipRole, RolePolicy> = {
   cashier: {
     allow: [
       { methods: 'read', route: /^\/pos\/(?:state|version)$/ },
+      { methods: 'read', route: /^\/company\/identity$/ },
       { methods: 'read', route: /^\/sales$/ },
       { methods: 'read', route: /^\/contacts$/, when: isCustomerContact },
       { methods: ['POST'], route: /^\/sales$/ },
@@ -167,6 +169,7 @@ export function createCompanyAccessMiddleware(store: LocalPlatformStore): Reques
       const tenant = {
         companyId, uid: identity.uid, role: membership.role,
         industryTemplate: resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || ''),
+        maxProducts: plan.limits.products,
       } satisfies TenantStorageContext;
       (req as TenantAuthenticatedRequest).tenant = tenant;
       tenantStorageContext.run(tenant, next);
@@ -201,6 +204,7 @@ export function createPostgresCompanyAccessMiddleware(
         role: tenant.role,
         industryTemplate: tenant.industryTemplate,
         connectionString: tenant.connectionString,
+        maxProducts: tenant.maxProducts,
       };
       (req as TenantAuthenticatedRequest).tenant = context;
       tenantStorageContext.run(context, next);

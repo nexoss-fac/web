@@ -1,9 +1,10 @@
 import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
+import { createHash } from 'node:crypto';
 import { tenantStorageContext } from './multiempresa/companyAccess.ts';
 import { logger } from './logger.ts';
 import { EXPENSE_CUENTA, EXPENSE_PARTIDA, normalizeExpenseCategory } from '../src/domain/expenseChart.ts';
 
-const sqlClients = new Map<string, NeonQueryFunction<false, false>>();
+const sqlClients = new Map<string, { fingerprint: string; client: NeonQueryFunction<false, false> }>();
 const initializedTenantSchemas = new Set<string>();
 
 // PostgreSQL (y por lo tanto Neon) devuelve las columnas NUMERIC/DECIMAL como
@@ -127,12 +128,53 @@ export async function replaceDailyClosures(closures: any[]): Promise<boolean> {
 export function getNeonSql(): NeonQueryFunction<false, false> | null {
   const tenant = tenantStorageContext.getStore();
   if (!tenant?.companyId || !tenant.connectionString) return null;
-  let client = sqlClients.get(tenant.companyId);
-  if (!client) {
-    client = neon(tenant.connectionString);
-    sqlClients.set(tenant.companyId, client);
+  const fingerprint = createHash('sha256').update(tenant.connectionString).digest('hex');
+  const cached = sqlClients.get(tenant.companyId);
+  if (!cached || cached.fingerprint !== fingerprint) {
+    const client = neon(tenant.connectionString);
+    sqlClients.set(tenant.companyId, { fingerprint, client });
+    return client;
   }
-  return client;
+  return cached.client;
+}
+
+/**
+ * Persistencia JSON complementaria del espacio de trabajo de un tenant.
+ * Cada empresa resuelve su propia conexión Neon en tenantStorageContext, por
+ * lo que esta tabla vive en la base operativa de esa empresa.
+ */
+export async function readTenantWorkspaceState(): Promise<Record<string, unknown> | null> {
+  const sql = getNeonSql();
+  if (!sql) return null;
+  await sql`
+    CREATE TABLE IF NOT EXISTS nexoss_workspace_state (
+      id TEXT PRIMARY KEY CHECK (id = 'current'),
+      state JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  const rows = await sql`SELECT state FROM nexoss_workspace_state WHERE id = 'current' LIMIT 1`;
+  const state = rows[0]?.state;
+  return state && typeof state === 'object' && !Array.isArray(state)
+    ? state as Record<string, unknown>
+    : null;
+}
+
+export async function writeTenantWorkspaceState(state: Record<string, unknown>): Promise<void> {
+  const sql = getNeonSql();
+  if (!sql) throw new Error('No existe una conexión Neon operativa para la empresa autorizada.');
+  await sql`
+    CREATE TABLE IF NOT EXISTS nexoss_workspace_state (
+      id TEXT PRIMARY KEY CHECK (id = 'current'),
+      state JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`
+    INSERT INTO nexoss_workspace_state (id, state, updated_at)
+    VALUES ('current', ${JSON.stringify(state)}::jsonb, NOW())
+    ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = NOW()
+  `;
 }
 
 export async function checkDatabaseConnection(): Promise<{
@@ -215,8 +257,12 @@ export async function checkDatabaseConnection(): Promise<{
 
 export async function initDatabaseSchema() {
   const sql = getNeonSql();
-  const tenantId = tenantStorageContext.getStore()?.companyId;
-  if (!sql || !tenantId || initializedTenantSchemas.has(tenantId)) return;
+  const tenant = tenantStorageContext.getStore();
+  const tenantId = tenant?.companyId;
+  if (!sql || !tenantId || !tenant?.connectionString) return;
+  const connectionFingerprint = createHash('sha256').update(tenant.connectionString).digest('hex');
+  const schemaKey = `${tenantId}:${connectionFingerprint}`;
+  if (initializedTenantSchemas.has(schemaKey)) return;
 
   try {
     // 1. Table for Shoe Products
@@ -506,7 +552,7 @@ export async function initDatabaseSchema() {
     `;
 
 
-    initializedTenantSchemas.add(tenantId);
+    initializedTenantSchemas.add(schemaKey);
     logger.info('✅ Esquema Neon PostgreSQL verificado e inicializado correctamente.');
   } catch (error) {
     logger.error('Error al inicializar tablas en Neon:', error);
@@ -801,7 +847,8 @@ export async function updateSale(id: string, updates: Record<string, any>): Prom
     const val = typeof updates[key] === 'object' && updates[key] !== null
       ? JSON.stringify(updates[key])
       : updates[key];
-    await (sql as any).query(`UPDATE sales_transactions SET ${key} = $1 WHERE id = $2`, [val, id]);
+    const updated = await (sql as any).query(`UPDATE sales_transactions SET ${key} = $1 WHERE id = $2 RETURNING id`, [val, id]);
+    if (!updated?.length) return false;
   }
   return true;
 }
@@ -1137,14 +1184,9 @@ export async function getAccountingLedger(start?:string,end?:string) {
 export async function getLayawaysFromDb(): Promise<any[]> {
   const sql = getNeonSql();
   if (!sql) return [];
-  try {
-    await initDatabaseSchema();
-    const rows = await sql`SELECT * FROM layaways ORDER BY fecha_apartado DESC`;
-    return normalizeLayaways(rows as any[]);
-  } catch (err) {
-    logger.error('Error al obtener apartados desde Neon:', err);
-    return [];
-  }
+  await initDatabaseSchema();
+  const rows = await sql`SELECT * FROM layaways ORDER BY fecha_apartado DESC`;
+  return normalizeLayaways(rows as any[]);
 }
 
 export async function reserveStockAndSaveLayaway(layaway: any): Promise<{ ok: boolean; alreadySaved?: boolean; error?: string }> {

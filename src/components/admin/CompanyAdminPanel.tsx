@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity, Briefcase, BriefcaseMedical, Building2, Calculator, Check, ClipboardList,
   Edit3, Factory, GraduationCap, HardHat, Hotel, LoaderCircle, Mail, Milk, Plus,
-  Save, Scale, ShieldCheck, ShoppingBag, Trash2, Users, Wheat, X,
+  ImagePlus, Save, Scale, ShieldCheck, ShoppingBag, Trash2, Users, Wheat, X,
 } from 'lucide-react';
 import { COMPANY_INDUSTRIES, INDUSTRY_WORKFLOWS, resolveIndustryTemplate, type IndustryTemplate } from '../../domain/companyIndustries';
 import { PushNotificationSettings } from '../common/PushNotificationSettings';
@@ -10,7 +10,8 @@ import { PushNotificationSettings } from '../common/PushNotificationSettings';
 type AdminTab = 'company' | 'team' | 'categories' | 'notifications';
 type CompanyProfile = {
   legalName: string; tradeName: string; taxId: string; activity: string; address: string;
-  phone: string; email: string; industryTemplate: IndustryTemplate;
+  phone: string; email: string; industryTemplate: IndustryTemplate; logoUrl: string;
+  mainBranchName: string; mainBranchAddress: string;
 };
 type TeamMember = { companyId: string; userId: string; email: string; displayName: string; role: string };
 type Invitation = { id: string; companyId: string; email: string; role: string; expiresAt: string };
@@ -66,6 +67,7 @@ const industryOptions = Object.entries(COMPANY_INDUSTRIES).map(([value, industry
 
 const emptyProfile: CompanyProfile = {
   legalName: '', tradeName: '', taxId: '', activity: '', address: '', phone: '', email: '', industryTemplate: 'other',
+  logoUrl: '', mainBranchName: 'Sede principal', mainBranchAddress: '',
 };
 
 async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
@@ -146,6 +148,24 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
     } finally {
       setBusy(false);
     }
+  };
+
+  const selectCompanyLogo = (file?: File) => {
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setError('El logo debe ser una imagen PNG, JPG o WEBP.');
+      return;
+    }
+    if (file.size > 512 * 1024) {
+      setError('El logo debe pesar 512 KB o menos.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setProfile((current) => ({ ...current, logoUrl: reader.result as string }));
+    };
+    reader.onerror = () => setError('No se pudo leer el archivo del logo.');
+    reader.readAsDataURL(file);
   };
 
   const inviteMember = async (event: React.FormEvent) => {
@@ -311,9 +331,43 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
                 </label>
               ))}
               <label className="space-y-1 text-xs font-semibold text-slate-600 sm:col-span-2">
-                Dirección
+                Dirección fiscal o principal
                 <textarea rows={2} value={profile.address} onChange={(event) => setProfile((value) => ({ ...value, address: event.target.value }))} className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
               </label>
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:col-span-2">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800">Sede principal</h4>
+                  <p className="mt-1 text-xs font-normal text-slate-500">Nombre y ubicación que aparecerán en el perfil de la empresa.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1 text-xs font-semibold text-slate-600">
+                    Nombre de la sede
+                    <input maxLength={100} value={profile.mainBranchName} onChange={(event) => setProfile((value) => ({ ...value, mainBranchName: event.target.value }))} placeholder="Sede principal" className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
+                  </label>
+                  <label className="space-y-1 text-xs font-semibold text-slate-600">
+                    Ubicación de la sede
+                    <input maxLength={500} value={profile.mainBranchAddress} onChange={(event) => setProfile((value) => ({ ...value, mainBranchAddress: event.target.value }))} placeholder="Ciudad, sector y dirección" className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
+                  </label>
+                </div>
+              </div>
+              <div className="space-y-3 rounded-xl border border-slate-200 p-4 sm:col-span-2">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800">Logo de la empresa</h4>
+                  <p className="mt-1 text-xs font-normal text-slate-500">PNG, JPG o WEBP · máximo 512 KB.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    {profile.logoUrl ? <img src={profile.logoUrl} alt="Vista previa del logo" className="h-full w-full object-contain" /> : <ImagePlus className="h-7 w-7 text-slate-400" />}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                      <ImagePlus className="h-4 w-4" /> Elegir imagen
+                      <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => { selectCompanyLogo(event.target.files?.[0]); event.target.value = ''; }} />
+                    </label>
+                    {profile.logoUrl && <button type="button" onClick={() => setProfile((value) => ({ ...value, logoUrl: '' }))} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"><Trash2 className="h-4 w-4" /> Quitar logo</button>}
+                  </div>
+                </div>
+              </div>
             </div>
             <button disabled={busy} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50">
               <Save className="h-4 w-4" /> Guardar información

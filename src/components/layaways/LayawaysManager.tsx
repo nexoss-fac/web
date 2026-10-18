@@ -23,8 +23,11 @@ import {
 import { useStore } from '../../context/StoreContext';
 import { Layaway, ShoeProduct, LayawayItem, LayawayPayment } from '../../types';
 import { LayawayReceiptModal } from './LayawayReceiptModal';
+import { COMPANY_INDUSTRIES, resolveIndustryTemplate } from '../../domain/companyIndustries';
 
 export const LayawaysManager: React.FC = () => {
+  const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
+  const isFootwear = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry')) === 'footwear';
   const {
     layaways,
     products,
@@ -56,7 +59,7 @@ export const LayawaysManager: React.FC = () => {
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'activo' | 'completado' | 'cancelado'>('activo');
-  
+
   // Modal states
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [selectedLayawayForPayment, setSelectedLayawayForPayment] = useState<Layaway | null>(null);
@@ -69,7 +72,7 @@ export const LayawaysManager: React.FC = () => {
   const [clientCedula, setClientCedula] = useState('');
   const [clientTelefono, setClientTelefono] = useState('');
   const [fechaApartado, setFechaApartado] = useState(new Date().toISOString().split('T')[0]);
-  
+
   // Expiration default: 15 days from now
   const defaultDueDate = useMemo(() => {
     const d = new Date();
@@ -171,7 +174,7 @@ export const LayawaysManager: React.FC = () => {
     const totalDesired = (existingInCart ? existingInCart.cantidad : 0) + itemQuantity;
 
     if (totalDesired > availableStock) {
-      alert(`Stock insuficiente. Solo quedan ${availableStock} pares disponibles para ${activeProduct.nombre} (Talla ${activeProduct.talla}).`);
+      alert(`Stock insuficiente. Solo quedan ${availableStock} ${industry.unitLabel} disponibles para ${activeProduct.nombre} (${industry.variantLabel} ${activeProduct.talla}).`);
       return;
     }
 
@@ -220,7 +223,7 @@ export const LayawaysManager: React.FC = () => {
       return;
     }
     if (cartItems.length === 0) {
-      alert('Debes agregar al menos un par de calzado al apartado.');
+      alert(isFootwear ? 'Debes agregar al menos un par de calzado al apartado.' : 'Debes agregar al menos un producto al apartado.');
       return;
     }
 
@@ -317,8 +320,8 @@ export const LayawaysManager: React.FC = () => {
   const handleSendWhatsAppReminder = (layaway: Layaway) => {
     const text = `*Recordatorio de Apartado - NEXOSS*%0A%0A` +
       `Estimado(a) *${layaway.cliente_nombre}*, le saludamos de NEXOSS para recordarle que su apartado *#${layaway.codigo_apartado}* tiene fecha límite el *${new Date(layaway.fecha_vencimiento).toLocaleDateString('es-VE')}*.%0A%0A` +
-      `*Calzados Apartados:*%0A` +
-      layaway.items.map((it) => `- ${it.nombre_producto} (Talla: ${it.talla})`).join('%0A') +
+      `${isFootwear ? "*Calzados Apartados:*" : "*Productos Apartados:*"}%0A` +
+      layaway.items.map((it) => `- ${it.nombre_producto} (${industry.variantLabel}: ${it.talla})`).join('%0A') +
       `%0A%0A*Total:* $${Number(layaway.total_usd ?? 0).toFixed(2)}%0A` +
       `*Abonado:* $${Number(layaway.total_abonado_usd ?? 0).toFixed(2)}%0A` +
       `*SALDO PENDIENTE:* $${Number(layaway.saldo_pendiente_usd ?? 0).toFixed(2)} (${Number(layaway.saldo_pendiente_bs ?? 0).toFixed(0)} Bs)%0A%0A` +
@@ -400,7 +403,7 @@ export const LayawaysManager: React.FC = () => {
             Sistema de Apartados y Reservas
           </h2>
           <p className="text-xs text-slate-500">
-            Control de calzado apartado, abonos fraccionados y fechas de entrega para NEXOSS.
+            {isFootwear ? "Control de calzado apartado, abonos y fechas de entrega." : "Control de productos apartados, abonos y fechas de entrega."}
           </p>
         </div>
 
@@ -444,14 +447,14 @@ export const LayawaysManager: React.FC = () => {
 
         <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs mb-1">
-            <span className="font-semibold">Pares Reservados</span>
+            <span className="font-semibold">{isFootwear ? "Pares reservados" : "Productos reservados"}</span>
             <Package className="w-4 h-4 text-amber-600" />
           </div>
           <div className="text-2xl font-bold font-mono text-slate-900">
             {totalParesReservados}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            Zapatos apartados en bodega
+            {isFootwear ? "Pares apartados en bodega" : "Productos apartados"}
           </div>
         </div>
 
@@ -509,7 +512,7 @@ export const LayawaysManager: React.FC = () => {
               <tr>
                 <th className="py-3 px-3 font-semibold min-w-[90px]">Código</th>
                 <th className="py-3 px-3 font-semibold min-w-[150px]">Cliente</th>
-                <th className="py-3 px-3 font-semibold min-w-[180px]">Calzado Reservado</th>
+                <th className="py-3 px-3 font-semibold min-w-[180px]">{isFootwear ? "Calzado reservado" : "Producto reservado"}</th>
                 <th className="py-3 px-3 font-semibold min-w-[120px]">Fechas</th>
                 <th className="py-3 px-3 text-right font-semibold min-w-[85px]">Total ($)</th>
                 <th className="py-3 px-3 text-right font-semibold min-w-[85px]">Abonado ($)</th>
@@ -563,7 +566,7 @@ export const LayawaysManager: React.FC = () => {
                           {layaway.items.map((it, idx) => (
                             <div key={idx} className="text-[11px] text-slate-700">
                               <span className="font-medium">{it.cantidad}x {it.nombre_producto}</span>{' '}
-                              <span className="text-slate-400 font-semibold">(Talla: {it.talla})</span>
+                              <span className="text-slate-400 font-semibold">({industry.variantLabel}: {it.talla})</span>
                             </div>
                           ))}
                         </div>
@@ -657,7 +660,7 @@ export const LayawaysManager: React.FC = () => {
                             <button
                               onClick={() => deliverLayaway(layaway.id)}
                               className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold shadow-2xs cursor-pointer flex items-center gap-1 shrink-0 whitespace-nowrap"
-                              title="Entregar Calzado al Cliente"
+                              title={isFootwear ? "Entregar calzado al cliente" : "Entregar productos al cliente"}
                             >
                               <CheckCircle className="w-3 h-3" />
                               <span>Entregar</span>
@@ -714,7 +717,7 @@ export const LayawaysManager: React.FC = () => {
               <div className="flex items-center gap-2">
                 <BookmarkCheck className="w-5 h-5 text-indigo-600" />
                 <h3 className="font-bold text-base text-slate-900">
-                  Crear Nuevo Apartado de Calzado
+                  {isFootwear ? "Crear nuevo apartado de calzado" : "Crear nuevo apartado"}
                 </h3>
               </div>
               <button
@@ -782,9 +785,9 @@ export const LayawaysManager: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <span className="font-bold text-slate-700 flex items-center gap-1.5 text-xs sm:text-sm">
                     <ShoppingBag className="w-4 h-4 text-indigo-600" />
-                    Seleccionar Calzado a Apartar ({selectableProducts.length} disponibles)
+                    {isFootwear ? "Seleccionar calzado a apartar" : "Seleccionar productos a apartar"} ({selectableProducts.length} disponibles)
                   </span>
-                  
+
                   <div className="flex items-center gap-3 text-xs">
                     <label className="flex items-center gap-1.5 cursor-pointer text-slate-600 select-none">
                       <input
@@ -802,7 +805,7 @@ export const LayawaysManager: React.FC = () => {
                 <div>
                   <input
                     type="text"
-                    placeholder="Buscar calzado por modelo, marca (Nike, Adidas...), talla o SKU..."
+                    placeholder={`Buscar ${industry.productLabel.toLowerCase()}, marca, ${industry.variantLabel.toLowerCase()} o SKU...`}
                     value={shoeSearchQuery}
                     onChange={(e) => setShoeSearchQuery(e.target.value)}
                     className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
@@ -811,20 +814,20 @@ export const LayawaysManager: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                   <div className="sm:col-span-8">
-                    <label className="text-slate-500 font-medium block mb-1 text-xs">Calzado y Talla</label>
+                    <label className="text-slate-500 font-medium block mb-1 text-xs">{industry.productLabel} y {industry.variantLabel}</label>
                     <select
                       value={selectedProductId}
                       onChange={(e) => setSelectedProductId(e.target.value)}
                       className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-slate-900 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-indigo-500/20"
                     >
-                      <option value="">-- Seleccionar Calzado ({selectableProducts.length}) --</option>
+                      <option value="">-- Seleccionar producto ({selectableProducts.length}) --</option>
                       {selectableProducts.map((p) => {
                         const pr = Number(p.precio) || 0;
                         const prBs = exchangeRate > 0 ? (pr * exchangeRate).toFixed(2) : '0.00';
                         const stk = Number(p.stock) || 0;
                         return (
                           <option key={p.id} value={p.id}>
-                            {p.nombre} ({p.marca || 'Genérica'}) - Talla {p.talla} | ${pr.toFixed(2)} (Bs. {prBs}) [{stk} en stock]
+                            {p.nombre} ({p.marca || 'Genérica'}) - {industry.variantLabel} {p.talla} | ${pr.toFixed(2)} (Bs. {prBs}) [{stk} en stock]
                           </option>
                         );
                       })}
@@ -832,7 +835,7 @@ export const LayawaysManager: React.FC = () => {
 
                     {selectableProducts.length === 0 && (
                       <p className="text-amber-600 text-xs mt-1.5 font-medium">
-                        ⚠️ No se encontraron calzados {shoeSearchQuery ? 'con esa búsqueda' : 'con stock disponible'}. 
+                        ⚠️ No se encontraron productos {shoeSearchQuery ? 'con esa búsqueda' : 'con stock disponible'}.
                         {!includeOutOfStock && ' Puedes marcar la casilla "Mostrar sin stock / Por encargo" arriba.'}
                       </p>
                     )}
@@ -881,7 +884,7 @@ export const LayawaysManager: React.FC = () => {
                       <div>
                         <div className="font-bold">{activeProduct.nombre}</div>
                         <div className="text-[11px] text-indigo-700">
-                          Marca: {activeProduct.marca} • Talla: {activeProduct.talla} • Stock: {Number(activeProduct.stock) || 0}
+                          Marca: {activeProduct.marca} • {industry.variantLabel}: {activeProduct.talla} • Stock: {Number(activeProduct.stock) || 0}
                         </div>
                       </div>
                     </div>
@@ -896,7 +899,7 @@ export const LayawaysManager: React.FC = () => {
                 {cartItems.length > 0 && (
                   <div className="mt-2 border border-slate-200 rounded-lg bg-white overflow-hidden">
                     <div className="p-2 bg-slate-100 font-semibold text-[11px] text-slate-700 border-b border-slate-200 flex justify-between">
-                      <span>Calzados a Apartar ({cartItems.length})</span>
+                      <span>{isFootwear ? "Calzados a apartar" : "Productos a apartar"} ({cartItems.length})</span>
                       <span>Subtotal: ${subtotalNuevoApartado.toFixed(2)}</span>
                     </div>
                     <div className="divide-y divide-slate-100">
@@ -1131,7 +1134,7 @@ export const LayawaysManager: React.FC = () => {
                   disabled={cartItems.length === 0}
                   className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-lg shadow-xs cursor-pointer transition-colors"
                 >
-                  Crear y Reservar Calzado
+                  {isFootwear ? "Crear y reservar calzado" : "Crear y reservar productos"}
                 </button>
               </div>
             </form>

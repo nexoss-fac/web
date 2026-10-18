@@ -72,9 +72,9 @@ La auditoría debe seguir marcando **NO LISTO PARA USO COMERCIAL MULTIEMPRESA** 
 
 ## Pendientes antes de producción o prueba comercial
 
-- Implementar y probar repositorios PostgreSQL separados: control plane en una base central nueva y datos operativos en base independiente por empresa.
-- Integrar un gestor de secretos real, resolver conexiones desde el servidor, health checks/provisión y política de rotación; jamás guardar URLs de clientes en claro.
+- El repositorio PostgreSQL del control plane y la resolución de una base Neon por empresa ya están conectados en código. Falta ejecutar la migración en una base central nueva y comprobar el flujo con empresas y bases sintéticas en staging.
+- El servidor ya resuelve referencias a variables privadas por empresa; falta comprobar configuración en Render, rotación, health checks y provisión. Nunca guardar URLs de clientes en claro ni aceptarlas desde el navegador.
 - Ejecutar migraciones únicamente en infraestructura nueva y previamente autorizada, con backups y revisión de seguridad.
-- Completar cuota/uso (no solo usuarios, productos, sucursales y depósitos), renovaciones, webhooks de pago e idempotencia después de que el dueño indique el PSP elegido.
+- Completar cuota/uso (no solo usuarios, productos, sucursales y depósitos). Pagos automáticos, renovaciones y webhooks quedan fuera del alcance hasta que el dueño elija un PSP.
 - Integrar un proveedor de correo para invitaciones, recuperación de cuenta y pruebas negativas E2E para cada ruta, exportación, archivo y trabajo asíncrono.
 - Resolver backups/restore, logs/auditoría inmutables, rate limiting, recuperación ante fallas y concurrencia. Validar reglas fiscales/financieras con el dueño y sus asesores.

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Layaway } from '../../types';
 import { BarcodeSvg } from '../common/BarcodeSvg';
+import { resolveIndustryTemplate, COMPANY_INDUSTRIES } from '../../domain/companyIndustries';
 import { MakdLogo } from '../common/MakdLogo';
 
 interface LayawayReceiptModalProps {
@@ -23,6 +24,9 @@ interface LayawayReceiptModalProps {
 }
 
 export const LayawayReceiptModal: React.FC<LayawayReceiptModalProps> = ({ layaway, onClose }) => {
+  const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
+  const isFootwear = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry')) === 'footwear';
+  const companyName = localStorage.getItem('nexoss_active_company_name') || 'Empresa';
   const [activeView, setActiveView] = useState<'thermal' | 'digital'>('thermal');
   const [thermalWidth, setThermalWidth] = useState<'80mm' | '58mm'>('80mm');
   const [copiedText, setCopiedText] = useState(false);
@@ -42,8 +46,8 @@ export const LayawayReceiptModal: React.FC<LayawayReceiptModalProps> = ({ layawa
       `Fecha de Apartado: ${new Date(layaway.fecha_apartado).toLocaleDateString('es-VE')}\n` +
       `*FECHA LÍMITE DE RETIRO: ${new Date(layaway.fecha_vencimiento).toLocaleDateString('es-VE')}*\n` +
       `Estado: ${layaway.estado.toUpperCase()}\n\n` +
-      `*Calzados Reservados:*\n` +
-      layaway.items.map((it) => `• ${it.nombre_producto} (Talla: ${it.talla}) x${it.cantidad} = $${it.subtotal.toFixed(2)}`).join('\n') +
+      `${isFootwear ? "*Calzados Reservados:*" : "*Productos Reservados:*"}\n` +
+      layaway.items.map((it) => `• ${it.nombre_producto} (${industry.variantLabel}: ${it.talla}) x${it.cantidad} = $${it.subtotal.toFixed(2)}`).join('\n') +
       `\n\n*Resumen Financiero:*\n` +
       `Total Apartado: $${Number(layaway.total_usd ?? 0).toFixed(2)}\n` +
       `Total Abonado: $${Number(layaway.total_abonado_usd ?? 0).toFixed(2)}\n` +
@@ -184,7 +188,7 @@ export const LayawayReceiptModal: React.FC<LayawayReceiptModalProps> = ({ layawa
                   NEXOSS
                 </h2>
                 <p className="text-[10px] font-bold text-stone-600 uppercase tracking-widest">
-                  Tienda Especializada en Calzado
+                  {isFootwear ? "Tienda Especializada en Calzado" : companyName}
                 </p>
                 <p className="text-[10px] text-stone-600 font-semibold">
                   RIF: RIF de demostración
@@ -241,7 +245,7 @@ export const LayawayReceiptModal: React.FC<LayawayReceiptModalProps> = ({ layawa
               {/* Items Table */}
               <div className="py-2.5 border-b border-dashed border-stone-400">
                 <div className="flex justify-between text-[10px] font-black uppercase text-stone-500 pb-1 border-b border-stone-300">
-                  <span>CALZADO RESERVADO</span>
+                  <span>{isFootwear ? "CALZADO RESERVADO" : "PRODUCTOS RESERVADOS"}</span>
                   <span>TOTAL ($)</span>
                 </div>
 
@@ -254,7 +258,7 @@ export const LayawayReceiptModal: React.FC<LayawayReceiptModalProps> = ({ layawa
                             {item.cantidad}x {item.nombre_producto}
                           </p>
                           <p className="text-[10px] text-stone-600 mt-0.5">
-                            Talla: <strong>{item.talla}</strong> • P.U: ${Number(item.precio_unitario ?? 0).toFixed(2)}
+                            {industry.variantLabel}: <strong>{item.talla}</strong> • P.U: ${Number(item.precio_unitario ?? 0).toFixed(2)}
                           </p>
                         </div>
                         <div className="font-black text-stone-950 font-mono shrink-0 text-right">
@@ -355,7 +359,7 @@ export const LayawayReceiptModal: React.FC<LayawayReceiptModalProps> = ({ layawa
                     </div>
                     <div>
                       <h2 className="text-base font-black tracking-tight uppercase">NEXOSS</h2>
-                      <p className="text-[10px] text-amber-200">Reserva Oficial de Calzado</p>
+                      <p className="text-[10px] text-amber-200">{isFootwear ? "Reserva Oficial de Calzado" : "Comprobante de Apartado"}</p>
                     </div>
                   </div>
 
@@ -402,7 +406,7 @@ export const LayawayReceiptModal: React.FC<LayawayReceiptModalProps> = ({ layawa
                 {/* Reserved items */}
                 <div className="space-y-2">
                   <span className="text-xs font-black uppercase text-slate-500 tracking-wider block">
-                    Calzados en Reserva ({layaway.items.reduce((acc, it) => acc + it.cantidad, 0)} pares)
+                    {isFootwear ? "Calzados en reserva (" : "Productos en reserva ("}{layaway.items.reduce((acc, it) => acc + it.cantidad, 0)} {industry.unitLabel})
                   </span>
 
                   <div className="space-y-2">
@@ -414,10 +418,10 @@ export const LayawayReceiptModal: React.FC<LayawayReceiptModalProps> = ({ layawa
                           </p>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 text-[10px] font-bold">
-                              Talla {it.talla}
+                              {industry.variantLabel} {it.talla}
                             </span>
                             <span className="text-xs text-slate-500 font-mono">
-                              {it.cantidad} {it.cantidad > 1 ? 'pares' : 'par'} x ${it.precio_unitario.toFixed(2)}
+                              {it.cantidad} {industry.unitLabel} x ${it.precio_unitario.toFixed(2)}
                             </span>
                           </div>
                         </div>

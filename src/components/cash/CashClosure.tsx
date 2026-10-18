@@ -18,10 +18,13 @@ import {
   X
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
+import { COMPANY_INDUSTRIES, resolveIndustryTemplate } from '../../domain/companyIndustries';
 import { DailyCashClosure, AccountBalance } from '../../types';
 import { getTodayVenezuela, getSaleDateKey } from '../../utils/dateUtils';
 
 export const CashClosure: React.FC = () => {
+  const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
+  const isFootwear = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry')) === 'footwear';
   const {
     accounts,
     sales,
@@ -218,9 +221,9 @@ export const CashClosure: React.FC = () => {
               </div>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Pares Vendidos</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase">{isFootwear ? 'Pares Vendidos' : 'Unidades Vendidas'}</span>
               <div className="text-xl font-bold text-slate-900 font-mono mt-0.5">
-                {todayPairsSold} <span className="text-xs font-normal text-slate-500">pares</span>
+                {todayPairsSold} <span className="text-xs font-normal text-slate-500">{industry.unitLabel}</span>
               </div>
             </div>
           </div>
@@ -320,7 +323,7 @@ export const CashClosure: React.FC = () => {
                   </div>
 
                   <div className="flex justify-between items-baseline font-mono">
-                    <span className="text-xs text-slate-500">{cl.cantidad_transacciones} ventas ({cl.pares_vendidos} pares):</span>
+                    <span className="text-xs text-slate-500">{cl.cantidad_transacciones} ventas ({cl.pares_vendidos} {industry.unitLabel}):</span>
                     <span className="text-sm font-bold text-indigo-600">${cl.total_ventas_usd.toFixed(2)}</span>
                   </div>
 
@@ -389,8 +392,8 @@ export const CashClosure: React.FC = () => {
                 <span>{selectedClosureForPrint.cantidad_transacciones}</span>
               </div>
               <div className="flex justify-between">
-                <span>PARES DESPACHADOS:</span>
-                <span>{selectedClosureForPrint.pares_vendidos} pares</span>
+                <span>{isFootwear ? "PARES DESPACHADOS:" : "UNIDADES VENDIDAS:"}</span>
+                <span>{selectedClosureForPrint.pares_vendidos} {industry.unitLabel}</span>
               </div>
             </div>
 

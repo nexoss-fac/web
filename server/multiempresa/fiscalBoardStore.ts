@@ -18,7 +18,11 @@ export function createDefaultFiscalBoard(requirements: FiscalRequirement[]): Fis
 
 export function readFiscalBoard(filePath: string, requirements: FiscalRequirement[]): FiscalBoardState {
   const parsed = readJsonFileWithBackup(filePath);
-  if (parsed === undefined) return createDefaultFiscalBoard(requirements);
+  return normalizeFiscalBoard(parsed, requirements);
+}
+
+export function normalizeFiscalBoard(parsed: unknown, requirements: FiscalRequirement[]): FiscalBoardState {
+  if (parsed === undefined || parsed === null) return createDefaultFiscalBoard(requirements);
   if (!parsed || typeof parsed !== 'object') throw new Error('El expediente fiscal almacenado no es válido.');
   const value = parsed as Partial<FiscalBoardState>;
   if (!Array.isArray(value.documents) || !Array.isArray(value.requirements)) {

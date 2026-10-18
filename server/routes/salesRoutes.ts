@@ -6,9 +6,9 @@ import type { ServerStoreState } from '../../server.ts';
 
 /** Lo que las rutas de ventas necesitan del servidor; se inyecta para poder probarlas sin disco ni Neon. */
 export interface SalesRouteDeps {
-  readServerStore: () => ServerStoreState;
-  writeServerStore: (state: ServerStoreState) => void;
-  readLocalSales: () => any[];
+  readServerStore: () => ServerStoreState | Promise<ServerStoreState>;
+  writeServerStore: (state: ServerStoreState) => void | Promise<void>;
+  readLocalSales: () => any[] | Promise<any[]>;
   getNeonSql: () => any;
   normalizeSales: (rows: any[]) => any[];
   updateSale: (id: string, updates: Record<string, unknown>) => Promise<unknown>;
@@ -28,9 +28,10 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
         return res.json({ source: 'neon_postgres', data: normalizeSales(rows as any[]) });
       } catch (err) {
         logger.error('Neon sales fetch error, using local fallback:', err);
+        if (process.env.NODE_ENV === 'production') return res.status(503).json({ error: 'No se pudieron cargar las ventas de esta empresa.' });
       }
     }
-    const local = readLocalSales();
+    const local = await readLocalSales();
     res.json({ source: 'local_file', data: local });
   });
 
@@ -41,7 +42,7 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
       return res.status(400).json({ saved: false, error: 'Datos de venta inválidos' });
     }
 
-    const store = readServerStore();
+    const store = await readServerStore();
 
     // Una venta nueva no puede traer totales inventados por el navegador. Con
     // NEXOSS_SALE_TOTALS=warn solo se registra el aviso (útil al migrar datos viejos).
@@ -66,7 +67,7 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
       logger.debug(`[Venta] Stock descontado para ${product.nombre} (${product.talla}): ${previous} -> ${next}`);
     });
 
-    writeServerStore(store);
+    await writeServerStore(store);
 
     let neonInserted = false;
     const sql = getNeonSql();
@@ -169,11 +170,23 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
     const { id } = req.params;
     const rawUpdates = req.body || {};
     const updates = pickUpdatableSaleFields(rawUpdates);
-    const store = readServerStore();
+    const store = await readServerStore();
     const saleIndex = store.sales.findIndex((item: any) => item.id === id);
+    if (saleIndex < 0) {
+      if (!getNeonSql()) return res.status(404).json({ success: false, error: 'Venta no encontrada' });
+      try {
+        const updated = await updateSale(id, updates);
+        return updated
+          ? res.json({ success: true })
+          : res.status(404).json({ success: false, error: 'Venta no encontrada o no hay campos actualizables.' });
+      } catch (err) {
+        logger.error('Error actualizando venta existente en Neon:', err);
+        return res.status(502).json({ success: false, error: 'No se pudo guardar el cambio en Neon.' });
+      }
+    }
     if (saleIndex >= 0) {
       store.sales[saleIndex] = { ...store.sales[saleIndex], ...updates };
-      writeServerStore(store);
+      await writeServerStore(store);
 
       const sql = getNeonSql();
       if (sql) {
@@ -201,11 +214,11 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
     try {
       if (!getNeonSql()) {
         // Modo local-demo: anular sobre el almacenamiento JSON de la empresa.
-        const store = readServerStore();
+        const store = await readServerStore();
         const outcome = voidSaleInStore(store, id, String(motivo || ''));
         if (outcome.status === 'not_found') return res.status(404).json({ success: false, error: 'Venta no encontrada.' });
         if (outcome.status === 'already_voided') return res.json({ success: true, id, items: [], alreadyVoided: true });
-        writeServerStore(store);
+        await writeServerStore(store);
         return res.json({ success: true, id, items: outcome.restored });
       }
       const result = await voidSale(id, motivo || '');

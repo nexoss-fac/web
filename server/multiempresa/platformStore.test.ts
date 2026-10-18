@@ -105,7 +105,13 @@ test('acepta membresía válida y aplica el rol del servidor, nunca el rol del n
   try {
     const owner = invoke(createCompanyAccessMiddleware(store), company.id);
     assert.equal(owner.next, true);
-    assert.deepEqual(owner.tenant, { companyId: company.id, uid: 'uid-owner', role: 'owner' });
+    assert.deepEqual(owner.tenant, {
+      companyId: company.id,
+      uid: 'uid-owner',
+      role: 'owner',
+      industryTemplate: 'other',
+      maxProducts: 500,
+    });
     store.update((state) => { state.memberships[0].role = 'cashier'; });
     assert.equal(invoke(createCompanyAccessMiddleware(store), company.id, 'uid-owner', 'POST', '/api/products').status, 403);
     assert.equal(invoke(createCompanyAccessMiddleware(store), company.id, 'uid-owner', 'POST', '/api/sales').next, true);

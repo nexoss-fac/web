@@ -85,6 +85,50 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     this.pool = pool;
   }
 
+  async findPublicBoardTenant(companyId: string): Promise<{ companyId: string; companyName: string; secretReference: string } | null> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT c.id, COALESCE(NULLIF(c.trade_name, ''), c.legal_name) AS company_name,
+                t.secret_reference
+         FROM platform_companies c
+         JOIN tenant_database_connections t ON t.company_id = c.id AND t.status = 'ready'
+         WHERE c.id = $1 AND c.status = 'active' AND t.secret_reference IS NOT NULL
+         LIMIT 1`,
+        [companyId],
+      );
+      const row = result.rows[0];
+      return row ? { companyId: row.id, companyName: row.company_name, secretReference: row.secret_reference } : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async setTenantDatabaseConnection(companyId: string, secretReference: string, actorUid: string): Promise<boolean> {
+    return this.transaction(async (client) => {
+      const company = await client.query(`SELECT id FROM platform_companies WHERE id = $1`, [companyId]);
+      if (!company.rows[0]) return false;
+      const assigned = await client.query(
+        `SELECT company_id FROM tenant_database_connections WHERE secret_reference = $1 AND company_id <> $2 LIMIT 1`,
+        [secretReference, companyId],
+      );
+      if (assigned.rows.length) return false;
+      await client.query(
+        `INSERT INTO tenant_database_connections
+           (company_id, provider, secret_reference, status, schema_version, provisioned_at, last_health_check_at)
+         VALUES ($1, 'neon', $2, 'ready', '1', NOW(), NOW())
+         ON CONFLICT (company_id) DO UPDATE SET
+           provider = 'neon', secret_reference = EXCLUDED.secret_reference,
+           encrypted_connection_secret = NULL, encryption_key_version = NULL,
+           status = 'ready', schema_version = EXCLUDED.schema_version,
+           provisioned_at = NOW(), last_health_check_at = NOW(), updated_at = NOW()`,
+        [companyId, secretReference],
+      );
+      await this.audit(client, actorUid, 'platform.tenant_database.connected', companyId, { provider: 'neon' });
+      return true;
+    });
+  }
+
   static fromEnvironment(): PostgresControlPlaneRepository {
     const connectionString = process.env.CONTROL_PLANE_DATABASE_URL?.trim();
     if (!connectionString) throw new Error('CONTROL_PLANE_DATABASE_URL es obligatoria para el repositorio PostgreSQL.');
@@ -151,14 +195,14 @@ export class PostgresControlPlaneRepository implements TenantRepository {
           `SELECT c.id AS company_id, c.slug, c.status AS company_status,
                   c.economic_activity, c.workspace,
                   m.status AS membership_status, m.role, t.secret_reference,
-                  t.status AS connection_status, p.modules
+                  t.status AS connection_status, p.modules, p.max_products,
+                  COALESCE(s.status IN ('trialing', 'active') AND s.current_period_end > NOW() AND p.active = TRUE, FALSE) AS subscription_active
            FROM platform_users u
            JOIN company_memberships m ON m.user_id = u.id
            JOIN platform_companies c ON c.id = m.company_id
-           JOIN company_subscriptions s ON s.company_id = c.id
-             AND s.status IN ('trialing', 'active') AND s.current_period_end > NOW()
-           JOIN platform_plans p ON p.id = s.plan_id AND p.active = TRUE
-           JOIN tenant_database_connections t ON t.company_id = c.id
+           LEFT JOIN company_subscriptions s ON s.company_id = c.id
+           LEFT JOIN platform_plans p ON p.id = s.plan_id
+           LEFT JOIN tenant_database_connections t ON t.company_id = c.id
            WHERE u.auth_provider = $1 AND u.auth_subject = $2
              AND c.id = $3 AND m.status = 'active'
            LIMIT 1`,
@@ -176,6 +220,8 @@ export class PostgresControlPlaneRepository implements TenantRepository {
       membershipStatus: row.membership_status, role: row.role,
       secretReference: row.secret_reference, connectionStatus: row.connection_status || 'provisioning',
       modules: Array.isArray(row.modules) ? row.modules.filter((module: unknown): module is string => typeof module === 'string') : [],
+      maxProducts: Number(row.max_products) || 0,
+      subscriptionActive: row.subscription_active === true,
     };
   }
 
@@ -615,13 +661,16 @@ export class PostgresControlPlaneRepository implements TenantRepository {
   async updateCompanyProfile(
     companyId: string,
     actorUid: string,
-    profile: { legalName: string; tradeName: string; taxId: string; activity: string; address: string; phone: string; email: string; industryTemplate: string },
+    profile: { legalName: string; tradeName: string; taxId: string; activity: string; address: string; phone: string; email: string; industryTemplate: string; logoUrl: string; mainBranchName: string; mainBranchAddress: string },
   ): Promise<boolean> {
     return this.transaction(async (client) => {
       const result = await client.query(
         `UPDATE platform_companies c SET legal_name = $3, trade_name = $4, rif = $5,
            economic_activity = $6, address = $7, phone = $8, email = $9,
-           workspace = workspace || jsonb_build_object('industryTemplate', $10),
+           logo_url = $10,
+           workspace = COALESCE(workspace, '{}'::jsonb) || jsonb_build_object(
+             'industryTemplate', $11, 'mainBranchName', $12, 'mainBranchAddress', $13
+           ),
            updated_at = NOW()
          WHERE c.id = $1
            AND EXISTS (
@@ -632,12 +681,33 @@ export class PostgresControlPlaneRepository implements TenantRepository {
            )
          RETURNING c.id`,
         [companyId, actorUid, profile.legalName, profile.tradeName, profile.taxId,
-          profile.activity, profile.address, profile.phone, profile.email, profile.industryTemplate],
+          profile.activity, profile.address, profile.phone, profile.email, profile.logoUrl,
+          profile.industryTemplate, profile.mainBranchName, profile.mainBranchAddress],
       );
       if (!result.rowCount) return false;
       await this.audit(client, actorUid, 'company.profile_updated', companyId, { industryTemplate: profile.industryTemplate });
       return true;
     });
+  }
+
+  async getCompanyIdentity(companyId: string): Promise<Pick<PlatformCompany, 'legalName' | 'tradeName' | 'address' | 'logoUrl' | 'workspace'> | null> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT legal_name, trade_name, address, logo_url, workspace FROM platform_companies WHERE id = $1 LIMIT 1`,
+        [companyId],
+      );
+      const row = result.rows[0];
+      return row ? {
+        legalName: row.legal_name,
+        tradeName: row.trade_name || '',
+        address: row.address || '',
+        logoUrl: row.logo_url || '',
+        workspace: row.workspace || {},
+      } : null;
+    } finally {
+      client.release();
+    }
   }
 
   async getManagedCompanyProfile(companyId: string, actorUid: string): Promise<PlatformCompany | null> {
@@ -663,11 +733,13 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     try {
       const [companies, plans, audit] = await Promise.all([
         client.query(
-          `SELECT c.*, to_jsonb(s) AS subscription, count(m.user_id)::integer AS memberships
+          `SELECT c.*, to_jsonb(s) AS subscription, t.status AS tenant_connection_status,
+                  count(m.user_id)::integer AS memberships
            FROM platform_companies c
            LEFT JOIN company_subscriptions s ON s.company_id = c.id
+           LEFT JOIN tenant_database_connections t ON t.company_id = c.id
            LEFT JOIN company_memberships m ON m.company_id = c.id
-           GROUP BY c.id, s.company_id`,
+           GROUP BY c.id, s.company_id, t.company_id`,
         ),
         client.query(`SELECT * FROM platform_plans ORDER BY name`),
         client.query(
@@ -677,7 +749,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
         ),
       ]);
       return {
-        companies: companies.rows.map((row) => ({ ...mapCompany(row as CompanyRow), subscription: row.subscription, memberships: Number(row.memberships) })),
+        companies: companies.rows.map((row) => ({ ...mapCompany(row as CompanyRow), subscription: row.subscription, memberships: Number(row.memberships), tenantDatabaseStatus: row.tenant_connection_status || 'provisioning' })),
         plans: plans.rows.map(mapPlan),
         audit: audit.rows.map(mapAudit),
       };

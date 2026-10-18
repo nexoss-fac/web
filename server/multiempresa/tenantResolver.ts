@@ -23,6 +23,9 @@ export interface MembershipRecord {
   secretReference: string | null;
   connectionStatus: 'provisioning' | 'ready' | 'degraded' | 'disabled';
   modules: string[];
+  maxProducts?: number;
+  /** False cuando falta una suscripción vigente o un plan activo. */
+  subscriptionActive?: boolean;
 }
 
 export interface TenantRepository {
@@ -40,6 +43,7 @@ export interface AuthorizedTenantContext {
   industryTemplate: IndustryTemplate;
   role: TenantRole;
   modules: string[];
+  maxProducts: number;
   connectionString: string;
 }
 
@@ -92,8 +96,14 @@ export async function resolveAuthorizedTenant(input: {
   if (!membership || membership.companyId !== requestedCompanyId || membership.membershipStatus !== 'active') {
     throw new TenantResolutionError(403, 'MEMBERSHIP_DENIED', 'No existe una membresía activa para esta empresa.');
   }
-  if (membership.companyStatus !== 'active' || membership.connectionStatus !== 'ready' || !membership.secretReference) {
+  if (membership.subscriptionActive === false) {
+    throw new TenantResolutionError(503, 'TENANT_UNAVAILABLE', 'La suscripción de esta empresa no está activa. Contacta al administrador de la plataforma.');
+  }
+  if (membership.companyStatus !== 'active') {
     throw new TenantResolutionError(503, 'TENANT_UNAVAILABLE', 'La empresa no está habilitada para operar.');
+  }
+  if (!membership.secretReference || membership.connectionStatus !== 'ready') {
+    throw new TenantResolutionError(503, 'TENANT_UNAVAILABLE', 'La conexión de datos de esta empresa no está lista. El administrador debe conectarla desde la configuración de empresa.');
   }
 
   let connectionString: string;
@@ -113,6 +123,7 @@ export async function resolveAuthorizedTenant(input: {
     industryTemplate: membership.industryTemplate,
     role: membership.role,
     modules: membership.modules,
+    maxProducts: membership.maxProducts || 0,
     connectionString,
   };
 }

@@ -84,6 +84,8 @@ export const CompanyWorkspaceGate: React.FC<Props> = ({ user, loading, onTenantS
 
   const [adminData, setAdminData] = useState<any>(null);
 
+  const [tenantDatabaseEnvNames, setTenantDatabaseEnvNames] = useState<Record<string, string>>({});
+
 
 
   const loadCompanies = useCallback(async (): Promise<Company[]> => {
@@ -122,6 +124,26 @@ export const CompanyWorkspaceGate: React.FC<Props> = ({ user, loading, onTenantS
 
 
   useEffect(() => { if (user?.emailVerified) void loadCompanies(); }, [user, loadCompanies]);
+
+  useEffect(() => {
+    const syncSelectedCompany = () => {
+      const selectedId = localStorage.getItem('nexoss_active_company_id') || '';
+      const selected = companies.find((company) => company.id === selectedId);
+      const subscription = selected?.subscription;
+      const subscriptionIsActive = Boolean(subscription
+        && ['active', 'trialing'].includes(subscription.status)
+        && Date.parse(subscription.currentPeriodEnd) > Date.now());
+      if (selected?.status === 'active' && subscriptionIsActive) {
+        setActiveCompany(selected);
+        setMode('list');
+      } else {
+        setActiveCompany(null);
+      }
+    };
+    syncSelectedCompany();
+    window.addEventListener('nexoss:company-selected', syncSelectedCompany);
+    return () => window.removeEventListener('nexoss:company-selected', syncSelectedCompany);
+  }, [companies]);
 
 
 
@@ -358,7 +380,19 @@ onTenantSelected(company.id, company.role);
 
   };
 
-  const updatePlan = async (plan: any, body: Record<string, unknown>) => {
+  const connectTenantDatabase = async (company: any) => {
+    const name = (tenantDatabaseEnvNames[company.id] || '').trim();
+    if (!/^[A-Z][A-Z0-9_]*_DATABASE_URL$/.test(name) || ['DATABASE_URL', 'CONTROL_PLANE_DATABASE_URL'].includes(name)) {
+      throw new Error('Escribe una variable exclusiva de la empresa, por ejemplo MAKD_SHOP_DATABASE_URL.');
+    }
+    const prefix = import.meta.env.PROD ? 'render-env:' : 'local-env:';
+    const response = await fetch(`/api/platform/admin/companies/${company.id}/database`, { method: 'PUT', headers, body: JSON.stringify({ secretReference: prefix + name }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'No se pudo conectar la base de datos.');
+    await loadAdmin();
+  };
+
+  const updatePlan = async (plan: any, body: Record<string, unknown>) => {
 
     const response = await fetch(`/api/platform/admin/plans/${plan.id}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
 
@@ -522,7 +556,7 @@ onTenantSelected(company.id, company.role);
 
           <div className="flex items-center justify-between pt-2"><h2 className="font-semibold">Planes y límites</h2><button onClick={() => void createPlan().catch((e) => setError(e.message))} className="rounded border border-slate-700 px-3 py-2 text-xs">Crear plan</button></div>{(adminData?.plans || []).map((plan:any)=><div key={plan.id} className="rounded-xl border border-slate-700 p-4"><div className="flex justify-between"><div className="grid grid-cols-2 gap-2 sm:grid-cols-5"><input aria-label="Nombre del plan" value={plan.name} onChange={(e)=>setAdminData((current:any)=>({...current,plans:current.plans.map((p:any)=>p.id===plan.id?{...p,name:e.target.value}:p)}))} className="rounded bg-slate-950 p-2 text-sm"/><input aria-label="Precio del plan" type="number" min="0" step="0.01" value={plan.price} onChange={(e)=>setAdminData((current:any)=>({...current,plans:current.plans.map((p:any)=>p.id===plan.id?{...p,price:Number(e.target.value)}:p)}))} className="rounded bg-slate-950 p-2 text-sm"/><select aria-label="Moneda" value={plan.currency} onChange={(e)=>setAdminData((current:any)=>({...current,plans:current.plans.map((p:any)=>p.id===plan.id?{...p,currency:e.target.value}:p)}))} className="rounded bg-slate-950 p-2 text-sm"><option>USD</option><option>VES</option><option>EUR</option><option>COP</option></select><select aria-label="Frecuencia" value={plan.interval} onChange={(e)=>setAdminData((current:any)=>({...current,plans:current.plans.map((p:any)=>p.id===plan.id?{...p,interval:e.target.value}:p)}))} className="rounded bg-slate-950 p-2 text-sm"><option value="month">Mensual</option><option value="year">Anual</option></select><button onClick={()=>void updatePlan(plan,{name:plan.name,price:plan.price,currency:plan.currency,interval:plan.interval}).catch((e)=>setError(e.message))} className="rounded bg-slate-800 px-3 py-2 text-xs">Guardar precio</button></div><span className="text-xs text-slate-400">{plan.active?'Activo':'Inactivo'}</span></div><div className="mt-3 grid gap-2 sm:grid-cols-5"><label className="text-xs text-slate-400">Usuarios<input type="number" min="1" value={plan.limits.users} onChange={(e)=>setAdminData((current:any)=>({...current,plans:current.plans.map((p:any)=>p.id===plan.id?{...p,limits:{...p.limits,users:Number(e.target.value)}}:p)}))} className="mt-1 w-full rounded bg-slate-950 p-2 text-white"/></label><label className="text-xs text-slate-400">Productos<input type="number" min="1" value={plan.limits.products} onChange={(e)=>setAdminData((current:any)=>({...current,plans:current.plans.map((p:any)=>p.id===plan.id?{...p,limits:{...p.limits,products:Number(e.target.value)}}:p)}))} className="mt-1 w-full rounded bg-slate-950 p-2 text-white"/></label><label className="text-xs text-slate-400">Sucursales<input type="number" min="1" value={plan.limits.branches} onChange={(e)=>setAdminData((current:any)=>({...current,plans:current.plans.map((p:any)=>p.id===plan.id?{...p,limits:{...p.limits,branches:Number(e.target.value)}}:p)}))} className="mt-1 w-full rounded bg-slate-950 p-2 text-white"/></label><label className="text-xs text-slate-400">Depósitos<input type="number" min="1" value={plan.limits.warehouses} onChange={(e)=>setAdminData((current:any)=>({...current,plans:current.plans.map((p:any)=>p.id===plan.id?{...p,limits:{...p.limits,warehouses:Number(e.target.value)}}:p)}))} className="mt-1 w-full rounded bg-slate-950 p-2 text-white"/></label><div className="flex items-end gap-2"><button onClick={()=>void updatePlan(plan,{limits:plan.limits}).catch((e)=>setError(e.message))} className="rounded bg-slate-800 px-3 py-2 text-xs">Guardar límites</button><button onClick={()=>void updatePlan(plan,{active:!plan.active}).catch((e)=>setError(e.message))} className="rounded bg-slate-800 px-3 py-2 text-xs">{plan.active?'Desactivar':'Activar'}</button></div></div></div>)}
 
-          <h2 className="pt-3 font-semibold">Empresas</h2>{(adminData?.companies || []).map((company:any)=><div key={company.id} className="rounded-xl border border-slate-700 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong>{company.tradeName || company.legalName}</strong><p className="text-xs text-slate-400">{company.status} · {company.subscription?.status || 'sin suscripción'} · {company.memberships} miembros</p></div><button onClick={() => void updateCompany(company,{status:company.status==='suspended'?'active':'suspended'}).catch((e)=>setError(e.message))} className="rounded-lg border border-slate-600 px-3 py-2 text-xs">{company.status==='suspended'?'Reactivar':'Suspender'}</button></div><div className="mt-3 grid gap-2 sm:grid-cols-3"><select defaultValue={company.subscription?.planId || ''} onChange={(e)=>void updateCompany(company,{planId:e.target.value,subscriptionStatus:'active'}).catch((err)=>setError(err.message))} className="rounded bg-slate-950 p-2 text-sm"><option value="" disabled>Asignar plan</option>{(adminData?.plans || []).filter((plan:any)=>plan.active).map((plan:any)=><option key={plan.id} value={plan.id}>{plan.name}</option>)}</select><input type="date" defaultValue={company.subscription?.currentPeriodEnd?.slice(0,10) || ''} onChange={(e)=>setAdminData((current:any)=>({...current,companies:current.companies.map((item:any)=>item.id===company.id?{...item,renewalDate:e.target.value}:item)}))} className="rounded bg-slate-950 p-2 text-sm"/><button onClick={() => void updateCompany(company,{subscriptionStatus:'active',currentPeriodEnd:company.renewalDate?new Date(`${company.renewalDate}T23:59:59.000Z`).toISOString():company.subscription?.currentPeriodEnd}).catch((e)=>setError(e.message))} className="rounded bg-emerald-700 px-3 py-2 text-xs">Activar / renovar</button></div><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => void updateCompany(company,{subscriptionStatus:'past_due'}).catch((e)=>setError(e.message))} className="rounded bg-slate-800 px-3 py-2 text-xs">Marcar vencido</button><button onClick={() => void updateCompany(company,{subscriptionStatus:'canceled'}).catch((e)=>setError(e.message))} className="rounded bg-slate-800 px-3 py-2 text-xs">Cancelar</button></div></div>)}</div>}
+          <h2 className="pt-3 font-semibold">Empresas</h2>{(adminData?.companies || []).map((company:any)=><div key={company.id} className="rounded-xl border border-slate-700 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong>{company.tradeName || company.legalName}</strong><p className="text-xs text-slate-400">{company.status} · {company.subscription?.status || 'sin suscripción'} · {company.memberships} miembros · Neon {company.tenantDatabaseStatus === 'ready' ? 'conectado' : 'pendiente'}</p></div><button onClick={() => void updateCompany(company,{status:company.status==='suspended'?'active':'suspended'}).catch((e)=>setError(e.message))} className="rounded-lg border border-slate-600 px-3 py-2 text-xs">{company.status==='suspended'?'Reactivar':'Suspender'}</button></div><div className="mt-3 grid gap-2 sm:grid-cols-3"><select defaultValue={company.subscription?.planId || ''} onChange={(e)=>void updateCompany(company,{planId:e.target.value,subscriptionStatus:'active'}).catch((err)=>setError(err.message))} className="rounded bg-slate-950 p-2 text-sm"><option value="" disabled>Asignar plan</option>{(adminData?.plans || []).filter((plan:any)=>plan.active).map((plan:any)=><option key={plan.id} value={plan.id}>{plan.name}</option>)}</select><input type="date" defaultValue={company.subscription?.currentPeriodEnd?.slice(0,10) || ''} onChange={(e)=>setAdminData((current:any)=>({...current,companies:current.companies.map((item:any)=>item.id===company.id?{...item,renewalDate:e.target.value}:item)}))} className="rounded bg-slate-950 p-2 text-sm"/><button onClick={() => void updateCompany(company,{subscriptionStatus:'active',currentPeriodEnd:company.renewalDate?new Date(`${company.renewalDate}T23:59:59.000Z`).toISOString():company.subscription?.currentPeriodEnd}).catch((e)=>setError(e.message))} className="rounded bg-emerald-700 px-3 py-2 text-xs">Activar / renovar</button></div><div className="mt-3 flex flex-wrap gap-2"><button onClick={() => void updateCompany(company,{subscriptionStatus:'past_due'}).catch((e)=>setError(e.message))} className="rounded bg-slate-800 px-3 py-2 text-xs">Marcar vencido</button><button onClick={() => void updateCompany(company,{subscriptionStatus:'canceled'}).catch((e)=>setError(e.message))} className="rounded bg-slate-800 px-3 py-2 text-xs">Cancelar</button></div><div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-slate-700 p-3"><label className="min-w-64 flex-1 text-xs text-slate-400">Variable de conexión Neon en Render<input aria-label={`Variable Neon para ${company.tradeName || company.legalName}`} value={tenantDatabaseEnvNames[company.id] || ''} onChange={(e)=>setTenantDatabaseEnvNames((current)=>({...current,[company.id]:e.target.value.toUpperCase()}))} placeholder="MAKD_SHOP_DATABASE_URL" className="mt-1 w-full rounded bg-slate-950 p-2 text-white"/></label><button onClick={()=>void connectTenantDatabase(company).catch((e)=>setError(e.message))} className="rounded bg-emerald-700 px-3 py-2 text-xs">Verificar y conectar Neon</button></div></div>)}</div>}
 
       </section>
 

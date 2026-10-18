@@ -34,8 +34,13 @@ import { ExcelImportModal } from './ExcelImportModal';
 import { ShoeAiScannerModal } from './ShoeAiScannerModal';
 import { BatchWhiteBackgroundModal } from './BatchWhiteBackgroundModal';
 import { ShoeAiResult } from '../../services/aiShoeService';
+import { COMPANY_INDUSTRIES, resolveIndustryTemplate } from '../../domain/companyIndustries';
 
 export const InventoryManager: React.FC = () => {
+  const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
+  const isFootwear = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry')) === 'footwear';
+  const stockUnit = industry.unitLabel;
+  const productLabel = industry.productLabel;
   const {
     products,
     movements,
@@ -46,7 +51,6 @@ export const InventoryManager: React.FC = () => {
     adjustStock,
     deleteProduct,
     userRole,
-    restoreFromBackup,
   } = useStore();
 
   const [activeSubTab, setActiveSubTab] = useState<'catalog' | 'kardex' | 'alerts'>('catalog');
@@ -165,7 +169,7 @@ export const InventoryManager: React.FC = () => {
       if (!p || !p.activo) return false;
 
       const matchCategory =
-        selectedCategory === 'Todas' || (p.categoria || 'Calzado') === selectedCategory;
+        selectedCategory === 'Todas' || (p.categoria || industry.initialCategories[0]) === selectedCategory;
 
       const nombre = (p.nombre || '').toLowerCase();
       const sku = (p.sku || '').toLowerCase();
@@ -221,7 +225,7 @@ export const InventoryManager: React.FC = () => {
   };
 
   const handleQuickRestock = (p: ShoeProduct, qty: number = 10) => {
-    adjustStock(p.id, qty, `Reabastecimiento rápido de ${qty} pares`, 'entrada');
+    adjustStock(p.id, qty, `Reabastecimiento de ${qty} ${stockUnit}`, 'entrada');
   };
 
   return (
@@ -235,7 +239,7 @@ export const InventoryManager: React.FC = () => {
             <span>Compras / Inventario / Entradas</span>
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Monitoreo continuo de pares físicos, entradas de lotes, mermas y alertas de reposición.
+            {isFootwear ? 'Monitoreo de pares, tallas y reposicion.' : 'Control de existencias, entradas, mermas y reposicion.'}
           </p>
         </div>
 
@@ -256,7 +260,8 @@ export const InventoryManager: React.FC = () => {
             <span>Producto nuevo</span>
           </button>
 
-          <button
+          {isFootwear && (
+<button
             id="open-ai-scanner-btn"
             type="button"
             onClick={() => setIsAiScannerOpen(true)}
@@ -266,6 +271,7 @@ export const InventoryManager: React.FC = () => {
             <Sparkles className="w-4 h-4 text-cyan-400" />
             <span>Cámara IA</span>
           </button>
+          )}
 
           <button
             id="export-inventory-excel-btn"
@@ -289,7 +295,8 @@ export const InventoryManager: React.FC = () => {
             <span>Excel / CSV</span>
           </button>
 
-          <button
+{isFootwear && (
+<button
             id="batch-white-bg-btn"
             type="button"
             onClick={() => setIsBatchWhiteBgOpen(true)}
@@ -299,38 +306,10 @@ export const InventoryManager: React.FC = () => {
             <Sparkles className="w-4 h-4 text-amber-500" />
             <span>Fondo Blanco</span>
           </button>
+          )}
         </div>
       </div>
 
-      {/* Alerta de Recuperación si el inventario está vacío */}
-      {products.length === 0 && (
-        <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-              <RotateCcw className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-xs font-bold text-amber-900">
-                ¿Tenías calzados guardados que no aparecen?
-              </h3>
-              <p className="text-[11px] text-amber-700 mt-0.5">
-                Cuentas con copias de seguridad locales automáticas y sincronización web en tiempo real.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button
-              id="quick-restore-inventory-btn"
-              type="button"
-              onClick={() => restoreFromBackup()}
-              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Restaurar Copia Local</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* KPI Cards Grid (High Density 4-Card Pattern) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -344,10 +323,10 @@ export const InventoryManager: React.FC = () => {
             </div>
           </div>
           <div className="mt-2 text-2xl font-bold text-slate-900 font-mono">
-            {totalPairs} <span className="text-xs font-normal text-slate-500">pares</span>
+            {totalPairs} <span className="text-xs font-normal text-slate-500">{stockUnit}</span>
           </div>
           <div className="text-[10px] text-slate-400 mt-1 font-medium">
-            En {products.filter((p) => p.activo).length} modelos y tallas
+            En {products.filter((p) => p.activo).length} {isFootwear ? 'modelos y tallas' : 'articulos registrados'}
           </div>
         </div>
 
@@ -457,7 +436,7 @@ export const InventoryManager: React.FC = () => {
             {/* Category Quick Filter Pills */}
             <div className="flex flex-wrap items-center gap-1.5 pb-1 border-b border-slate-100 text-xs">
               <span className="text-slate-400 font-semibold mr-1 text-[11px]">Categoría:</span>
-              {[
+              {(isFootwear ? [
                 { id: 'Todas', label: 'Todas' },
                 { id: 'Calzado', label: '👟 Calzado' },
                 { id: 'Gorras', label: '🧢 Gorras' },
@@ -465,7 +444,7 @@ export const InventoryManager: React.FC = () => {
                 { id: 'Accesorios', label: '🎒 Accesorios' },
                 { id: 'Ropa', label: '👕 Ropa' },
                 { id: 'Otros', label: '📦 Otros' },
-              ].map((cat) => (
+              ] : industry.initialCategories.map((category) => ({ id: category, label: category }))).map((cat) => (
                 <button
                   key={cat.id}
                   type="button"
@@ -509,7 +488,8 @@ export const InventoryManager: React.FC = () => {
                 </select>
               </div>
 
-              {/* Type Filter */}
+{/* Type Filter */}
+              {isFootwear && (
               <div>
                 <select
                   value={selectedType}
@@ -521,6 +501,7 @@ export const InventoryManager: React.FC = () => {
                   ))}
                 </select>
               </div>
+          )}
 
               {/* Stock Status Filter */}
               <div>
@@ -531,7 +512,7 @@ export const InventoryManager: React.FC = () => {
                 >
                   <option value="todos">Todos los Estados</option>
                   <option value="critico">⚠️ Stock Crítico (≤ Mínimo)</option>
-                  <option value="agotado">⛔ Agotados (0 pares)</option>
+                  <option value="agotado">{isFootwear ? 'Agotados (0 pares)' : 'Sin existencias (0)'}</option>
                   <option value="optimo">✅ Stock Óptimo</option>
                 </select>
               </div>
@@ -539,6 +520,7 @@ export const InventoryManager: React.FC = () => {
             </div>
 
             {/* Quick Size filter pills */}
+            {isFootwear && (
             <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
               <span className="text-slate-400 font-semibold mr-1 text-[11px]">Tallas:</span>
               {shoeSizes.map((sz) => (
@@ -555,6 +537,7 @@ export const InventoryManager: React.FC = () => {
                 </button>
               ))}
             </div>
+            )}
           </div>
 
           {/* Table Container (High Density Design Theme) */}
@@ -563,8 +546,8 @@ export const InventoryManager: React.FC = () => {
               <table className="w-full text-left text-xs min-w-[850px]">
                 <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] font-bold border-b border-slate-200">
                   <tr>
-                    <th className="py-3 px-4 min-w-[220px]">Calzado / Modelo</th>
-                    <th className="py-3 px-2.5 text-center min-w-[65px]">Talla</th>
+                    <th className="py-3 px-4 min-w-[220px]">{isFootwear ? 'Calzado / Modelo' : productLabel}</th>
+                    <th className="py-3 px-2.5 text-center min-w-[65px]">{industry.variantLabel}</th>
                     <th className="py-3 px-3 min-w-[110px]">Marca / Tipo</th>
                     <th className="py-3 px-3 text-right min-w-[75px]">Costo ($)</th>
                     <th className="py-3 px-3 text-right min-w-[85px]">PVP ($)</th>
@@ -585,18 +568,6 @@ export const InventoryManager: React.FC = () => {
                               ? 'No hay modelos registrados en el almacén.'
                               : 'No se encontraron modelos con los filtros seleccionados.'}
                           </p>
-                          {products.length === 0 && (
-                            <div className="flex items-center gap-2 mt-2">
-                              <button
-                                type="button"
-                                onClick={() => restoreFromBackup()}
-                                className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-lg flex items-center gap-1.5 transition cursor-pointer"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5" />
-                                <span>Restaurar Copia Local</span>
-                              </button>
-                            </div>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -700,7 +671,7 @@ export const InventoryManager: React.FC = () => {
                                     : 'bg-emerald-100 text-emerald-700'
                                 }`}
                               >
-                                {isOutOfStock ? 'Agotado' : isLowStock ? `${p.stock} pares (Bajo)` : `${p.stock} pares`}
+                                {isOutOfStock ? 'Agotado' : isLowStock ? `${p.stock} ${stockUnit} (Bajo)` : `${p.stock} ${stockUnit}`}
                               </span>
                               <span className="text-[9px] text-slate-400 mt-0.5">
                                 Mínimo: {p.stock_minimo}
@@ -724,21 +695,26 @@ export const InventoryManager: React.FC = () => {
                               {/* Quick +1 */}
                               <button
                                 onClick={() => adjustStock(p.id, 1, 'Ingreso rápido manual (+1 par)', 'entrada')}
-                                title="Sumar 1 par"
+                                title={`Sumar 1 ${stockUnit}`}
                                 className="w-6 h-6 flex items-center justify-center rounded bg-slate-50 border border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-slate-100 cursor-pointer shrink-0"
                               >
                                 <Plus className="w-3 h-3" />
                               </button>
 
+
                               {/* Imprimir Etiqueta (SKU, Descripción y Costo) */}
-                              <button
+                              {isFootwear && (
+
+<button
                                 onClick={() => handleOpenLabelModal(p)}
-                                title="Imprimir Etiqueta para Zapato (SKU, Descripción y Costo)"
+                                title="Imprimir etiqueta de producto (SKU, Descripción y Costo)"
                                 className="px-2 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-semibold border border-indigo-200 cursor-pointer transition-colors flex items-center gap-1 shrink-0"
                               >
                                 <Tag className="w-3 h-3 text-indigo-600" />
                                 <span className="hidden xl:inline">Etiqueta</span>
                               </button>
+)}
+
 
                               {/* Open Movement Modal */}
                               <button
@@ -754,7 +730,7 @@ export const InventoryManager: React.FC = () => {
                                   {/* Edit */}
                                   <button
                                     onClick={() => handleOpenEdit(p)}
-                                    title="Editar calzado"
+                                    title={isFootwear ? "Editar calzado" : `Editar ${productLabel.toLowerCase()}`}
                                     className="w-6 h-6 flex items-center justify-center rounded bg-slate-50 border border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 cursor-pointer shrink-0"
                                   >
                                     <Edit2 className="w-3 h-3" />
@@ -763,7 +739,7 @@ export const InventoryManager: React.FC = () => {
                                   {/* Delete */}
                                   <button
                                     onClick={() => {
-                                      if (confirm(`¿Retirar ${p.nombre} (Talla ${p.talla}) del catálogo?`)) {
+                                      if (confirm(`¿Retirar ${p.nombre} (${industry.variantLabel} ${p.talla}) del catálogo?`)) {
                                         deleteProduct(p.id);
                                       }
                                     }}
@@ -843,7 +819,7 @@ export const InventoryManager: React.FC = () => {
                 <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] font-bold border-b border-slate-200">
                   <tr>
                     <th className="py-3 px-4">Fecha / Hora</th>
-                    <th className="py-3 px-4">Calzado & Talla</th>
+                    <th className="py-3 px-4">{productLabel} & {industry.variantLabel}</th>
                     <th className="py-3 px-3">Tipo de Operación</th>
                     <th className="py-3 px-3 text-center">Variación</th>
                     <th className="py-3 px-3 text-center">Stock (Previo ➔ Nuevo)</th>
@@ -871,7 +847,7 @@ export const InventoryManager: React.FC = () => {
                           <td className="py-3 px-4">
                             <div className="font-bold text-slate-900">{mov.producto_nombre}</div>
                             <div className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                              <span className="font-semibold text-indigo-600">Talla: {mov.talla}</span>
+                              <span className="font-semibold text-indigo-600">{industry.variantLabel}: {mov.talla}</span>
                               <span>•</span>
                               <span>SKU: {mov.sku}</span>
                             </div>
@@ -899,7 +875,7 @@ export const InventoryManager: React.FC = () => {
 
                           <td className="py-3 px-3 text-center font-mono font-bold">
                             <span className={isPositive ? 'text-emerald-600' : 'text-rose-600'}>
-                              {isPositive ? `+${mov.cantidad}` : mov.cantidad} pares
+                              {isPositive ? `+${mov.cantidad}` : mov.cantidad} {stockUnit}
                             </span>
                           </td>
 
@@ -935,10 +911,10 @@ export const InventoryManager: React.FC = () => {
             <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
             <div>
               <h3 className="font-bold text-sm text-rose-800">
-                Calzados que alcanzaron o cayeron bajo el Stock Mínimo ({criticalItems.length})
+                {isFootwear ? 'Calzados que alcanzaron o cayeron bajo el stock minimo' : 'Articulos que alcanzaron o cayeron bajo el stock minimo'} ({criticalItems.length})
               </h3>
               <p className="text-xs text-rose-600 mt-0.5">
-                Para evitar pérdidas de ventas en la zapatería, reabastece estos modelos y tallas con prioridad. Puedes pulsar "Reabastecer +10" para registrar la entrada inmediata del lote.
+                {isFootwear ? 'Reabastece estos modelos y tallas con prioridad.' : 'Reabastece estos articulos con prioridad.'} Usa Reabastecer +10 para registrar la entrada del lote.
               </p>
             </div>
           </div>
@@ -947,8 +923,8 @@ export const InventoryManager: React.FC = () => {
             {criticalItems.length === 0 ? (
               <div className="col-span-3 py-12 text-center text-slate-500 bg-white rounded-xl border border-slate-200">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                <p className="text-sm font-bold text-slate-900">¡Excelente! Todos los modelos tienen stock óptimo.</p>
-                <p className="text-xs text-slate-400 mt-1">Ningún calzado se encuentra por debajo de su umbral de seguridad.</p>
+                <p className="text-sm font-bold text-slate-900">Todos los productos tienen stock optimo.</p>
+                <p className="text-xs text-slate-400 mt-1">Ningun producto se encuentra por debajo de su umbral de seguridad.</p>
               </div>
             ) : (
               criticalItems.map((p) => {
@@ -963,7 +939,7 @@ export const InventoryManager: React.FC = () => {
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700">
-                          Talla {p.talla}
+                          {industry.variantLabel} {p.talla}
                         </span>
                         <span
                           className={`text-xs font-bold font-mono px-2 py-0.5 rounded ${
@@ -972,7 +948,7 @@ export const InventoryManager: React.FC = () => {
                               : 'bg-amber-100 text-amber-700'
                           }`}
                         >
-                          {isOutOfStock ? 'AGOTADO' : `Quedan ${p.stock} pares`}
+                          {isOutOfStock ? 'AGOTADO' : `Quedan ${p.stock} ${stockUnit}`}
                         </span>
                       </div>
 
@@ -983,14 +959,14 @@ export const InventoryManager: React.FC = () => {
 
                       <div className="mt-3 p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-mono flex justify-between">
                         <span className="text-slate-500">Umbral mínimo fijado:</span>
-                        <span className="text-slate-900 font-bold">{p.stock_minimo} pares</span>
+                        <span className="text-slate-900 font-bold">{p.stock_minimo} {stockUnit}</span>
                       </div>
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
                       <button
                         onClick={() => handleOpenLabelModal(p)}
-                        title="Imprimir etiqueta para zapato"
+                        title="Imprimir etiqueta"
                         className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-xs cursor-pointer border border-indigo-200 transition-colors flex items-center gap-1"
                       >
                         <Tag className="w-3.5 h-3.5" />
