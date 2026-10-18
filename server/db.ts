@@ -177,6 +177,22 @@ export async function writeTenantWorkspaceState(state: Record<string, unknown>):
   `;
 }
 
+export async function readTenantFiscalBoardState(): Promise<Record<string, unknown> | null> {
+  const sql = getNeonSql();
+  if (!sql) return null;
+  await sql`CREATE TABLE IF NOT EXISTS fiscal_board_state (id TEXT PRIMARY KEY CHECK (id = 'current'), board JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`;
+  const rows = await sql`SELECT board FROM fiscal_board_state WHERE id = 'current' LIMIT 1`;
+  const board = rows[0]?.board;
+  return board && typeof board === 'object' && !Array.isArray(board) ? board as Record<string, unknown> : null;
+}
+
+export async function writeTenantFiscalBoardState(board: Record<string, unknown>): Promise<void> {
+  const sql = getNeonSql();
+  if (!sql) throw new Error('No existe una conexión Neon operativa para la empresa autorizada.');
+  await sql`CREATE TABLE IF NOT EXISTS fiscal_board_state (id TEXT PRIMARY KEY CHECK (id = 'current'), board JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`;
+  await sql`INSERT INTO fiscal_board_state (id, board, updated_at) VALUES ('current', ${JSON.stringify(board)}::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET board = EXCLUDED.board, updated_at = NOW()`;
+}
+
 export async function checkDatabaseConnection(): Promise<{
   connected: boolean;
   message: string;
@@ -550,6 +566,10 @@ export async function initDatabaseSchema() {
         UNIQUE (kind, name)
       );
     `;
+    await sql`CREATE TABLE IF NOT EXISTS fiscal_board_state (
+      id TEXT PRIMARY KEY CHECK (id = 'current'), board JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`;
 
     // Las categorías del onboarding se siembran en la base aislada de esta empresa.
     for (const [index, name] of (tenant?.inventoryCategories ?? []).entries()) {

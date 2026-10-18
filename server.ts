@@ -12,6 +12,8 @@ import {
   getNeonSql, 
   readTenantWorkspaceState,
   writeTenantWorkspaceState,
+  readTenantFiscalBoardState,
+  writeTenantFiscalBoardState,
   initDatabaseSchema, 
   getNeonTables, 
   getNeonTableData,
@@ -321,6 +323,8 @@ async function writeLocalSales(sales: any[]): Promise<void> {
 
 async function readTenantFiscalBoard(): Promise<FiscalBoardState> {
   if (process.env.NODE_ENV === 'production') {
+    const dedicatedBoard = await readTenantFiscalBoardState();
+    if (dedicatedBoard) return normalizeFiscalBoard(dedicatedBoard, NATIONAL_FISCAL_REQUIREMENTS);
     const store = await readServerStore();
     return normalizeFiscalBoard(store.fiscalBoard, NATIONAL_FISCAL_REQUIREMENTS);
   }
@@ -329,9 +333,7 @@ async function readTenantFiscalBoard(): Promise<FiscalBoardState> {
 
 async function writeTenantFiscalBoard(board: FiscalBoardState): Promise<void> {
   if (process.env.NODE_ENV === 'production') {
-    const store = await readServerStore();
-    store.fiscalBoard = board;
-    await writeServerStore(store);
+    await writeTenantFiscalBoardState(board as unknown as Record<string, unknown>);
     return;
   }
   saveFiscalBoard(getTenantFiles().fiscalBoard, board);
