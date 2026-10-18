@@ -12,6 +12,7 @@ import { CompanyProfileId } from './components/companies/CompanyProfileSelector'
 import { FiscalFolder } from './components/fiscal/FiscalFolder';
 import { PublicFiscalBoard } from './components/fiscal/PublicFiscalBoard';
 import { PushNotificationSettings } from './components/common/PushNotificationSettings';
+import { HealthWorkspace } from './components/health/HealthWorkspace';
 
 // Lazy load view components for maximum initial load performance and lightweight bundle
 const PointOfSale = lazy(() => import('./components/pos/PointOfSale').then((m) => ({ default: m.PointOfSale })));
@@ -36,7 +37,7 @@ function ViewFallback() {
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<NavigationTab>('pos');
+  const [activeTab, setActiveTab] = useState<NavigationTab>(() => localStorage.getItem('nexoss_active_company_industry') === 'health' ? 'health' : 'pos');
   // Escáner de gastos con cámara: se abre desde la barra inferior del teléfono.
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [activeCompanyId, setActiveCompanyId] = useState<CompanyProfileId>(() => localStorage.getItem('nexoss_active_company_id') || '');
@@ -49,7 +50,9 @@ function AppContent() {
   useEffect(() => {
     const syncRole = () => {
       setCompanyRole(localStorage.getItem('nexoss_active_company_role') || '');
-      setCompanyIndustry(localStorage.getItem('nexoss_active_company_industry') || 'other');
+      const industry = localStorage.getItem('nexoss_active_company_industry') || 'other';
+      setCompanyIndustry(industry);
+      setActiveTab(industry === 'health' ? 'health' : 'pos');
     };
     window.addEventListener('nexoss:company-selected', syncRole);
     return () => window.removeEventListener('nexoss:company-selected', syncRole);
@@ -57,7 +60,9 @@ function AppContent() {
   useEffect(() => {
     const syncCompanyName = () => {
       setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
-      setCompanyIndustry(localStorage.getItem('nexoss_active_company_industry') || 'other');
+      const industry = localStorage.getItem('nexoss_active_company_industry') || 'other';
+      setCompanyIndustry(industry);
+      setActiveTab(industry === 'health' ? 'health' : 'pos');
     };
     window.addEventListener('nexoss:company-profile-updated', syncCompanyName);
     return () => window.removeEventListener('nexoss:company-profile-updated', syncCompanyName);
@@ -71,6 +76,7 @@ function AppContent() {
     setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
     setCompanyRole(localStorage.getItem('nexoss_active_company_role') || '');
     setCompanyIndustry(localStorage.getItem('nexoss_active_company_industry') || 'other');
+    setActiveTab(localStorage.getItem('nexoss_active_company_industry') === 'health' ? 'health' : 'pos');
   };
 
   return (
@@ -90,6 +96,7 @@ function AppContent() {
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
         isCompanyAdmin={isCompanyAdmin}
+        isHealthIndustry={companyIndustry === 'health'}
       />
 
       {/* Main Content Area */}
@@ -121,6 +128,7 @@ function AppContent() {
             {activeTab === 'contabilidad' && <AccountingManager />}
             {activeTab === 'admin' && isCompanyAdmin && <CompanyAdminPanel companyId={activeCompanyId} />}
             {activeTab === 'fiscal' && <FiscalFolder key={activeCompanyId} companyId={activeCompanyId} companyName={selectedCompanyName} />}
+            {activeTab === 'health' && companyIndustry === 'health' && isCompanyAdmin && <HealthWorkspace key={activeCompanyId} />}
           </Suspense>
         </main>
 

@@ -608,6 +608,67 @@ export async function initDatabaseSchema() {
       await sql`CREATE INDEX IF NOT EXISTS manufacturing_consumptions_lot_idx ON manufacturing_consumptions (lot_id)`;
     }
 
+    if (tenant?.industryTemplate === 'health') {
+      await sql`CREATE TABLE IF NOT EXISTS health_patients (
+        id VARCHAR(64) PRIMARY KEY, patient_number VARCHAR(32) NOT NULL UNIQUE,
+        first_name VARCHAR(120) NOT NULL, last_name VARCHAR(120) NOT NULL,
+        birth_date DATE, phone VARCHAR(40), email VARCHAR(180), address TEXT,
+        emergency_contact_name VARCHAR(180), emergency_contact_phone VARCHAR(40),
+        general_clinical_info TEXT, allergies TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS health_patients_name_idx ON health_patients (LOWER(last_name), LOWER(first_name))`;
+      await sql`CREATE TABLE IF NOT EXISTS health_appointments (
+        id VARCHAR(64) PRIMARY KEY, patient_id VARCHAR(64) NOT NULL REFERENCES health_patients(id) ON DELETE RESTRICT,
+        starts_at TIMESTAMPTZ NOT NULL, duration_minutes INTEGER NOT NULL DEFAULT 30 CHECK (duration_minutes BETWEEN 5 AND 720),
+        provider_name VARCHAR(180) NOT NULL, reason TEXT, status VARCHAR(20) NOT NULL DEFAULT 'scheduled'
+          CHECK (status IN ('scheduled','confirmed','completed','cancelled','no_show')),
+        notes TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS health_appointments_start_idx ON health_appointments (starts_at, status)`;
+      await sql`CREATE TABLE IF NOT EXISTS health_consultations (
+        id VARCHAR(64) PRIMARY KEY, patient_id VARCHAR(64) NOT NULL REFERENCES health_patients(id) ON DELETE RESTRICT,
+        appointment_id VARCHAR(64) REFERENCES health_appointments(id) ON DELETE SET NULL,
+        consulted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), provider_name VARCHAR(180) NOT NULL,
+        reason TEXT, symptoms TEXT, findings TEXT, diagnosis TEXT, treatment_plan TEXT, internal_notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS health_consultations_patient_idx ON health_consultations (patient_id, consulted_at DESC)`;
+      await sql`CREATE TABLE IF NOT EXISTS health_prescriptions (
+        id VARCHAR(64) PRIMARY KEY, patient_id VARCHAR(64) NOT NULL REFERENCES health_patients(id) ON DELETE RESTRICT,
+        consultation_id VARCHAR(64) REFERENCES health_consultations(id) ON DELETE SET NULL,
+        issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), provider_name VARCHAR(180) NOT NULL,
+        medication_name VARCHAR(240) NOT NULL, dosage VARCHAR(160), frequency VARCHAR(160), duration VARCHAR(120),
+        instructions TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS health_prescriptions_patient_idx ON health_prescriptions (patient_id, issued_at DESC)`;
+      await sql`CREATE TABLE IF NOT EXISTS health_exam_orders (
+        id VARCHAR(64) PRIMARY KEY, patient_id VARCHAR(64) NOT NULL REFERENCES health_patients(id) ON DELETE RESTRICT,
+        consultation_id VARCHAR(64) REFERENCES health_consultations(id) ON DELETE SET NULL,
+        ordered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), provider_name VARCHAR(180) NOT NULL,
+        exam_name VARCHAR(240) NOT NULL, instructions TEXT, status VARCHAR(20) NOT NULL DEFAULT 'ordered'
+          CHECK (status IN ('ordered','scheduled','completed','cancelled')),
+        result_summary TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS health_exam_orders_patient_idx ON health_exam_orders (patient_id, ordered_at DESC)`;
+      await sql`CREATE TABLE IF NOT EXISTS health_patient_reports (
+        id VARCHAR(64) PRIMARY KEY, patient_id VARCHAR(64) NOT NULL REFERENCES health_patients(id) ON DELETE RESTRICT,
+        consultation_id VARCHAR(64) REFERENCES health_consultations(id) ON DELETE SET NULL,
+        title VARCHAR(240) NOT NULL, patient_visible_content TEXT NOT NULL,
+        issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), provider_name VARCHAR(180) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS health_patient_reports_patient_idx ON health_patient_reports (patient_id, issued_at DESC)`;
+      await sql`CREATE TABLE IF NOT EXISTS health_payments (
+        id VARCHAR(64) PRIMARY KEY, patient_id VARCHAR(64) NOT NULL REFERENCES health_patients(id) ON DELETE RESTRICT,
+        sale_id VARCHAR(64), concept VARCHAR(240) NOT NULL, amount NUMERIC(14, 2) NOT NULL CHECK (amount >= 0),
+        currency VARCHAR(3) NOT NULL DEFAULT 'USD' CHECK (currency IN ('USD','VES')),
+        method VARCHAR(80), status VARCHAR(20) NOT NULL DEFAULT 'paid' CHECK (status IN ('pending','paid','refunded','cancelled')),
+        paid_at TIMESTAMPTZ, notes TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS health_payments_patient_idx ON health_payments (patient_id, created_at DESC)`;
+    }
+
 
     initializedTenantSchemas.add(schemaKey);
     logger.info('✅ Esquema Neon PostgreSQL verificado e inicializado correctamente.');

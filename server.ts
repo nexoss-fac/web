@@ -6,6 +6,7 @@ import fs from 'fs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { addMoney, subtractMoney } from './server/money.ts';
 import { registerSalesRoutes } from './server/routes/salesRoutes.ts';
+import { registerHealthRoutes } from './server/routes/healthRoutes.ts';
 import { createServer as createViteServer } from 'vite';
 import { 
   checkDatabaseConnection, 
@@ -910,6 +911,7 @@ async function startServer() {
     : createCompanyAccessMiddleware(PLATFORM_STORE));
 
   const adminOnly = requireTenantRole('owner', 'admin');
+  registerHealthRoutes(app, adminOnly);
 
   // Web Push: solo propietarios/administradores con membresía activa pueden registrar dispositivos.
   app.get('/api/push/public-key', adminOnly, (_req, res) => {

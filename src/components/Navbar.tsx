@@ -29,14 +29,15 @@ import {
   FolderOpen,
   Settings,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  HeartPulse
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { MakdLogo } from './common/MakdLogo';
 import { UserWindowModal } from './common/UserWindowModal';
 import { CompanyProfileId, CompanyProfileSelector } from './companies/CompanyProfileSelector';
 
-export type NavigationTab = 'pos' | 'inventory' | 'layaways' | 'reports' | 'cash' | 'expenses' | 'conciliacion' | 'contabilidad' | 'inventoryReport' | 'fiscal' | 'admin';
+export type NavigationTab = 'pos' | 'health' | 'inventory' | 'layaways' | 'reports' | 'cash' | 'expenses' | 'conciliacion' | 'contabilidad' | 'inventoryReport' | 'fiscal' | 'admin';
 
 interface NavbarProps {
   activeTab: NavigationTab;
@@ -51,7 +52,8 @@ export const Sidebar: React.FC<{
   mobileOpen: boolean;
   setMobileOpen: (open: boolean) => void;
   isCompanyAdmin?: boolean;
-}> = ({ activeTab, setActiveTab, mobileOpen, setMobileOpen, isCompanyAdmin = false }) => {
+  isHealthIndustry?: boolean;
+}> = ({ activeTab, setActiveTab, mobileOpen, setMobileOpen, isCompanyAdmin = false, isHealthIndustry = false }) => {
   const { criticalStockProducts, userRole, layaways, logoutSession } = useStore();
   const activeLayawaysCount = layaways ? layaways.filter((l) => l.estado === 'activo').length : 0;
   const navGroups = [
@@ -86,7 +88,8 @@ export const Sidebar: React.FC<{
       ],
     },
   ];
-  const visibleNavGroups = userRole === 'cajera'
+  const healthNavGroups = [{ id: 'health', label: 'Clínica', icon: HeartPulse, items: [{ id: 'health' as const, label: 'Salud', subtitle: 'Pacientes y atención', icon: HeartPulse, count: null }] }];
+  const visibleNavGroups = isHealthIndustry ? healthNavGroups : userRole === 'cajera'
     ? navGroups.slice(0, 1).map((group) => ({ ...group, items: group.items.filter((item) => item.id === 'pos') }))
     : navGroups;
   const activeGroup = visibleNavGroups.find((group) => group.items.some((item) => item.id === activeTab))?.id;
