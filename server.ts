@@ -165,11 +165,15 @@ async function provisionTenantDatabase(companyId: string, actorUid: string, indu
     const encrypted = encryptTenantConnectionString(connectionString);
     return await getPostgresControlPlane().setProvisionedTenantDatabaseConnection(companyId, encrypted, actorUid);
   } catch (error) {
-    const safeError = error as { code?: unknown; name?: unknown } | null;
+    const safeError = error as { code?: unknown; name?: unknown; message?: unknown } | null;
+    const safeMessage = typeof safeError?.message === 'string'
+      ? safeError.message.replace(/postgres(?:ql)?:\/\/\S+/gi, '[url oculta]').slice(0, 300)
+      : undefined;
     logger.warn('[Tenant provisioning] Neon no pudo completar el alta automática:', {
       companyId,
       code: typeof safeError?.code === 'string' ? safeError.code : 'provisioning_failed',
       name: typeof safeError?.name === 'string' ? safeError.name : 'Error',
+      ...(safeMessage ? { message: safeMessage } : {}),
     });
     return false;
   } finally {
