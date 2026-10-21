@@ -36,6 +36,25 @@ export function assertFirebaseAdminCredentialSource(
 ): void {
   if (environment.FIREBASE_AUTH_EMULATOR_HOST?.trim()) return;
 
+  const inlineCredentials = environment.FIREBASE_ADMIN_CREDENTIALS_JSON?.trim();
+  if (inlineCredentials) {
+    try {
+      const credentials = JSON.parse(inlineCredentials) as Record<string, unknown>;
+      const expectedProjectId = environment.FIREBASE_PROJECT_ID?.trim() || environment.GOOGLE_CLOUD_PROJECT?.trim();
+      if (
+        typeof credentials.project_id === 'string'
+        && (!expectedProjectId || credentials.project_id === expectedProjectId)
+        && typeof credentials.client_email === 'string'
+        && credentials.client_email.includes('@')
+        && typeof credentials.private_key === 'string'
+        && credentials.private_key.includes('PRIVATE KEY')
+      ) return;
+    } catch {
+      // Never log or expose the credential payload.
+    }
+    throw new FirebaseAdminConfigurationError();
+  }
+
   const credentialPath = environment.GOOGLE_APPLICATION_CREDENTIALS?.trim();
   if (credentialPath) {
     if (fileExists(credentialPath)) return;
@@ -55,12 +74,24 @@ function getFirebaseAdminApp(): App {
   const emulatorEnabled = Boolean(process.env.FIREBASE_AUTH_EMULATOR_HOST?.trim());
   assertFirebaseAdminCredentialSource();
   const credentialPath = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+  const inlineCredentials = process.env.FIREBASE_ADMIN_CREDENTIALS_JSON?.trim();
+  let credential;
+  if (inlineCredentials) {
+    const parsed = JSON.parse(inlineCredentials) as Record<string, unknown>;
+    credential = cert({
+      projectId: String(parsed.project_id),
+      clientEmail: String(parsed.client_email),
+      privateKey: String(parsed.private_key),
+    });
+  } else if (credentialPath) {
+    credential = cert(credentialPath);
+  } else {
+    credential = applicationDefault();
+  }
   const existingApp = getApps().find((app) => app.name === 'nexoss-auth');
   adminApp = existingApp || initializeApp({
     projectId,
-    ...(emulatorEnabled
-      ? {}
-      : { credential: credentialPath ? cert(credentialPath) : applicationDefault() }),
+    ...(emulatorEnabled ? {} : { credential }),
   }, 'nexoss-auth');
   return adminApp;
 }
