@@ -162,6 +162,21 @@ async function provisionTenantDatabase(companyId: string, actorUid: string, indu
       inventoryCategories: categories,
       connectionString,
     }, () => initDatabaseSchema());
+
+    // Do not mark a tenant ready unless its core operational schema is queryable.
+    const tenantSql = neon(connectionString);
+    const schemaCheck = await tenantSql`
+      SELECT
+        to_regclass('public.shoe_products') IS NOT NULL AS shoe_products,
+        to_regclass('public.sales_transactions') IS NOT NULL AS sales_transactions,
+        to_regclass('public.expenses') IS NOT NULL AS expenses,
+        to_regclass('public.accounting_entries') IS NOT NULL AS accounting_entries
+    `;
+    const schema = schemaCheck[0] as Record<string, unknown> | undefined;
+    if (!schema || !schema.shoe_products || !schema.sales_transactions || !schema.expenses || !schema.accounting_entries) {
+      throw new Error('Neon tenant schema validation failed: core operational tables are missing.');
+    }
+
     const encrypted = encryptTenantConnectionString(connectionString);
     return await getPostgresControlPlane().setProvisionedTenantDatabaseConnection(companyId, encrypted, actorUid);
   } catch (error) {
