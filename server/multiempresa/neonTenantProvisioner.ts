@@ -49,8 +49,10 @@ export class NeonTenantProvisioner {
     if (!project?.id) throw new Error('Neon project could not be resolved.');
     const connectionQuery = new URLSearchParams({ database_name: 'nexoss', role_name: 'nexoss_owner', pooled: 'true' });
     const connectionData = await this.request(`/projects/${encodeURIComponent(project.id)}/connection_uri?${connectionQuery}`, apiKey);
+    // Neon may return { uri: "postgresql://..." }; retain compatibility with connection_uris.
+    const directUri = typeof connectionData.uri === 'string' ? connectionData.uri.trim() : '';
     const rows = Array.isArray(connectionData.connection_uris) ? connectionData.connection_uris as Array<{ connection_uri?: string }> : [];
-    const connectionString = rows.find((item) => typeof item.connection_uri === 'string')?.connection_uri?.trim();
+    const connectionString = directUri || rows.find((item) => typeof item.connection_uri === 'string')?.connection_uri?.trim();
     if (!connectionString) throw new Error('Neon did not return a tenant database connection URI.');
     const parsed = new URL(connectionString);
     if (!['postgres:', 'postgresql:'].includes(parsed.protocol) || !parsed.hostname || !parsed.password) {
