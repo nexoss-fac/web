@@ -1,0 +1,61 @@
+name: NEXOSS CI
+
+on:
+  push:
+    branches:
+      - codex/deploy-nexoss
+  pull_request:
+    branches:
+      - codex/deploy-nexoss
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexoss-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify (Node.js 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Type-check
+        run: npm run lint
+      - name: Authentication tests
+        run: npm run test:auth
+      - name: Multi-company and domain tests
+        run: npm run test:multiempresa
+      - name: PostgreSQL integration tests
+        run: npm run test:multiempresa:postgres
+      - name: Production build
+        run: npm run build
+
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+        continue-on-error: true
