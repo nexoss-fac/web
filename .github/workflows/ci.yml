@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - codex/deploy-nexoss
+      - codex/fix-render-production
   pull_request:
     branches:
       - codex/deploy-nexoss
+      - codex/fix-render-production
   workflow_dispatch:
 
 permissions:

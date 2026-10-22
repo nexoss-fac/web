@@ -7,6 +7,20 @@ export class ProductionRuntimeBlockedError extends Error {
   }
 }
 
+function hasInlineFirebaseAdminCredentials(value: string | undefined, expectedProjectId: string): boolean {
+  if (!value?.trim()) return false;
+  try {
+    const credentials = JSON.parse(value) as Record<string, unknown>;
+    return credentials.project_id === expectedProjectId
+      && typeof credentials.client_email === 'string'
+      && credentials.client_email.includes('@')
+      && typeof credentials.private_key === 'string'
+      && credentials.private_key.includes('PRIVATE KEY');
+  } catch {
+    return false;
+  }
+}
+
 export function assertProductionRuntimeSupported(environment: NodeJS.ProcessEnv = process.env): void {
   if (environment.NODE_ENV !== 'production') return;
 
@@ -23,8 +37,15 @@ export function assertProductionRuntimeSupported(environment: NodeJS.ProcessEnv 
   if (!(environment.FIREBASE_PROJECT_ID?.trim() || environment.GOOGLE_CLOUD_PROJECT?.trim())) {
     throw new ProductionRuntimeBlockedError('Producción bloqueada: falta el ID del proyecto Firebase.');
   }
+  const projectId = environment.FIREBASE_PROJECT_ID?.trim() || environment.GOOGLE_CLOUD_PROJECT?.trim() || '';
+  const inlineCredentials = environment.FIREBASE_ADMIN_CREDENTIALS_JSON?.trim();
+  if (inlineCredentials) {
+    if (hasInlineFirebaseAdminCredentials(inlineCredentials, projectId)) return;
+    throw new ProductionRuntimeBlockedError('Producción bloqueada: FIREBASE_ADMIN_CREDENTIALS_JSON no contiene credenciales válidas para el proyecto configurado.');
+  }
+
   const credentialPath = environment.GOOGLE_APPLICATION_CREDENTIALS?.trim();
   if (!credentialPath || !existsSync(credentialPath)) {
-    throw new ProductionRuntimeBlockedError('Producción bloqueada: configura GOOGLE_APPLICATION_CREDENTIALS con un archivo secreto de Firebase Admin disponible en Render.');
+    throw new ProductionRuntimeBlockedError('Producción bloqueada: configura FIREBASE_ADMIN_CREDENTIALS_JSON como secreto o GOOGLE_APPLICATION_CREDENTIALS con un archivo secreto de Firebase Admin disponible en Render.');
   }
 }

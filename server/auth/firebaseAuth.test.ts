@@ -48,6 +48,32 @@ test('falla cerrado con HTTP 503 si Firebase Admin no está configurado', async 
   assert.equal(result.nextCalled, false);
 });
 
+test('acepta credencial Firebase Admin JSON cuando coincide con el proyecto', () => {
+  assert.doesNotThrow(() => assertFirebaseAdminCredentialSource({
+    FIREBASE_PROJECT_ID: 'nexoss-dabfe',
+    FIREBASE_ADMIN_CREDENTIALS_JSON: JSON.stringify({
+      project_id: 'nexoss-dabfe',
+      client_email: 'firebase-admin@nexoss-dabfe.iam.gserviceaccount.com',
+      private_key: '-----BEGIN PRIVATE KEY-----\\nprivate-key-material\\n-----END PRIVATE KEY-----',
+    }),
+  }, () => false));
+});
+
+test('rechaza credencial Firebase Admin JSON de otro proyecto o malformada', () => {
+  assert.throws(() => assertFirebaseAdminCredentialSource({
+    FIREBASE_PROJECT_ID: 'nexoss-dabfe',
+    FIREBASE_ADMIN_CREDENTIALS_JSON: JSON.stringify({
+      project_id: 'otro-proyecto',
+      client_email: 'firebase-admin@otro-proyecto.iam.gserviceaccount.com',
+      private_key: '-----BEGIN PRIVATE KEY-----\\nprivate-key-material\\n-----END PRIVATE KEY-----',
+    }),
+  }, () => false), FirebaseAdminConfigurationError);
+  assert.throws(() => assertFirebaseAdminCredentialSource({
+    FIREBASE_PROJECT_ID: 'nexoss-dabfe',
+    FIREBASE_ADMIN_CREDENTIALS_JSON: '{malformed',
+  }, () => false), FirebaseAdminConfigurationError);
+});
+
 test('acepta Application Default Credentials de Cloud Run sin exigir una clave descargada', () => {
   assert.doesNotThrow(() => assertFirebaseAdminCredentialSource({
     K_SERVICE: 'nexoss-api',
