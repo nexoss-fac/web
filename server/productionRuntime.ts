@@ -38,7 +38,11 @@ export function assertProductionRuntimeSupported(environment: NodeJS.ProcessEnv 
     throw new ProductionRuntimeBlockedError('Producción bloqueada: falta el ID del proyecto Firebase.');
   }
   const projectId = environment.FIREBASE_PROJECT_ID?.trim() || environment.GOOGLE_CLOUD_PROJECT?.trim() || '';
-  if (hasInlineFirebaseAdminCredentials(environment.FIREBASE_ADMIN_CREDENTIALS_JSON, projectId)) return;
+  const inlineCredentials = environment.FIREBASE_ADMIN_CREDENTIALS_JSON?.trim();
+  if (inlineCredentials) {
+    if (hasInlineFirebaseAdminCredentials(inlineCredentials, projectId)) return;
+    throw new ProductionRuntimeBlockedError('Producción bloqueada: FIREBASE_ADMIN_CREDENTIALS_JSON no contiene credenciales válidas para el proyecto configurado.');
+  }
 
   const credentialPath = environment.GOOGLE_APPLICATION_CREDENTIALS?.trim();
   if (!credentialPath || !existsSync(credentialPath)) {
