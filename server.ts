@@ -40,6 +40,7 @@ import {
 import { verifyBdvPayment, getBdvApiConfig, getRecentVerifications } from './server/bdv.ts';
 import { analyzeShoeImage } from './server/shoeAi.ts';
 import { analyzeReceiptImage } from './server/receiptAi.ts';
+import { scanFiscalDocument } from './server/fiscalDocumentAi.ts';
 import { requireFirebaseAuth } from './server/auth/firebaseAuth.ts';
 import { LocalPlatformStore, acceptCompanyInvitation, createCompanyForVerifiedUser, createCompanyInvitation, findCompanyEmailMatches, getCompanyOnboardingMembership, hasActiveSubscription, isInvitationPending, normalizeInventoryCategories, platformAdminUids, type MembershipRole, type Plan } from './server/multiempresa/platformStore.ts';
 import { createPostgresControlPlaneRepositoryFromEnvironment, type PostgresControlPlaneRepository } from './server/multiempresa/postgresControlPlaneRepository.ts';
@@ -1280,6 +1281,73 @@ async function startServer() {
     } catch (error) {
       logger.error('No se pudo eliminar categoría:', error);
       return res.status(503).json({ error: 'No se pudo eliminar la categoría.' });
+    }
+  });
+
+  app.post('/api/fiscal-board/scan-document', async (req, res) => {
+    const tenant = (req as TenantAuthenticatedRequest).tenant;
+    if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
+    const imageBase64 = typeof req.body?.imageBase64 === 'string' ? req.body.imageBase64 : '';
+    if (!imageBase64) return res.status(400).json({ error: 'Adjunta una fotografía del documento.' });
+    if (imageBase64.length > 12 * 1024 * 1024) return res.status(413).json({ error: 'La fotografía supera el tamaño permitido. Usa una imagen de hasta 8 MB.' });
+    try {
+      const result = await scanFiscalDocument(imageBase64);
+      return res.json({ success: true, document: result, requiresReview: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo analizar el documento.';
+      logger.warn('Escaneo de documento fiscal fallido:', { companyId: tenant.companyId, message });
+      return res.status(message.includes('no está configurado') ? 503 : 422).json({ error: message });
+    }
+  });
+
+  // Consulta de identidad configurable: la clave permanece en el servidor y nunca se expone al navegador.
+  app.post('/api/identity/lookup', async (req, res) => {
+    const tenant = (req as TenantAuthenticatedRequest).tenant;
+    if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
+    const rawDocument = typeof req.body?.document === 'string' ? req.body.document : '';
+    const document = rawDocument.toUpperCase().replace(/[.\\s-]/g, '');
+    if (!/^(?:[VEJPG]-?)?\\d{5,12}$/.test(document)) {
+      return res.status(400).json({ error: 'Introduce una cédula o RIF válido, sin puntos ni espacios.' });
+    }
+    const apiToken = process.env.IDENTITY_LOOKUP_API_TOKEN;
+    const configuredUrl = process.env.IDENTITY_LOOKUP_API_URL || 'https://api.enlosdatos.com/v1/persona/{document}';
+    if (!apiToken) return res.status(503).json({ error: 'La consulta por cédula/RIF aún no está configurada. Falta IDENTITY_LOOKUP_API_TOKEN en el servidor.' });
+    try {
+      const url = configuredUrl.includes('{document}')
+        ? configuredUrl.replace('{document}', encodeURIComponent(document))
+        : configuredUrl.replace(/\\/$/, '') + '/' + encodeURIComponent(document);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json', Authorization: 'Bearer ' + apiToken },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (response.status === 404) return res.status(404).json({ found: false, error: 'No se encontró una coincidencia para ese documento.' });
+      if (!response.ok) {
+        logger.warn('Proveedor de consulta de identidad respondió con error:', { status: response.status, companyId: tenant.companyId });
+        return res.status(502).json({ error: 'El servicio de consulta no respondió correctamente. Intenta nuevamente.' });
+      }
+      const payload: any = await response.json();
+      const data = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+      const pick = (...keys: string[]) => {
+        for (const key of keys) if (typeof data?.[key] === 'string' && data[key].trim()) return data[key].trim().slice(0, 250);
+        return '';
+      };
+      const fullName = pick('nombre_completo', 'full_name', 'fullName', 'razon_social', 'razonSocial', 'nombre', 'name', 'business_name', 'legal_name')
+        || [pick('primer_nombre', 'first_name'), pick('segundo_nombre'), pick('primer_apellido', 'last_name'), pick('segundo_apellido')].filter(Boolean).join(' ');
+      const result = {
+        document: pick('documentNumber', 'documento', 'cedula', 'rif', 'numero_documento') || document,
+        name: fullName,
+        rif: pick('rif', 'tax_id', 'taxId'),
+        documentType: pick('tipo', 'tipo_documento', 'documentType') || (/^[JPG]/.test(document) ? 'empresa' : 'persona'),
+        status: pick('estado', 'status'),
+        source: 'proveedor externo',
+      };
+      if (!result.name) return res.status(404).json({ found: false, error: 'El servicio no devolvió un nombre verificable para ese documento.' });
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ found: true, result, disclaimer: 'Dato referencial del proveedor externo; confirma la información con el documento original antes de guardar.' });
+    } catch (error) {
+      logger.warn('No se pudo consultar identidad externa:', { companyId: tenant.companyId, message: error instanceof Error ? error.message : 'error' });
+      return res.status(502).json({ error: 'No fue posible conectar con el servicio de consulta de identidad.' });
     }
   });
 
