@@ -731,7 +731,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
            economic_activity = $6, address = $7, phone = $8, email = $9,
            logo_url = $10,
            workspace = COALESCE(workspace, '{}'::jsonb) || jsonb_build_object(
-             'industryTemplate', $11, 'mainBranchName', $12, 'mainBranchAddress', $13
+             'industryTemplate', $11::text, 'mainBranchName', $12::text, 'mainBranchAddress', $13::text
            ),
            updated_at = NOW()
          WHERE c.id = $1
