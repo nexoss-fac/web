@@ -279,6 +279,7 @@ export const ExpensesManager: React.FC = () => {
       categoria,
       descripcion: descripcion.trim(),
       beneficiario: beneficiario.trim() || undefined,
+      beneficiario_rif: beneficiarioRif.trim() || undefined,
       cuenta_origen: cuentaOrigen,
       moneda,
       monto: numMonto,
@@ -1017,6 +1018,14 @@ export const ExpensesManager: React.FC = () => {
                       ))}
                     </optgroup>
                   </select>
+                  {categoria === 'Tributos pagados' && (
+                    <div className="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-950">
+                      <p className="font-extrabold">Asiento automático para tributos pagados</p>
+                      <p className="mt-1">Partida: Egresos · Cuenta: Gastos · Subcuenta: Tributos Pagados</p>
+                      <p>Clasificación: ISAE · Subclasificación: {fecha ? `${fecha.slice(5, 7)}-${fecha.slice(0, 4)}` : 'MM-AAAA'}</p>
+                      <p className="mt-1 text-indigo-700">Al guardar el gasto, NEXOSS generará el asiento en el Libro Diario y lo reflejará en el Libro Mayor, con equivalencias en Bs y USD según la tasa registrada.</p>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -95,6 +95,12 @@ export interface FiscalBoardDocument {
   area?: FiscalArea | '';
   fileName?: string;
   fileData?: string;
+  documentNumber?: string;
+  ownerName?: string;
+  taxId?: string;
+  issueDate?: string;
+  notes?: string;
+  suggestedRequirement?: string;
   published: boolean;
 }
 
