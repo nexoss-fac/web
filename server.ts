@@ -1797,7 +1797,7 @@ async function startServer() {
         const rows = await sql`SELECT id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at FROM nexoss_contacts WHERE documento = ${documento} AND (${tipo} = '' OR tipo = ${tipo}) LIMIT 1`;
         return res.json({ success: true, contact: rows[0] || null });
       }
-      const search = String(req.query.q || '').trim().slice(0, 80);
+      const search = (nombreQuery || String(req.query.q || '')).trim().slice(0, 80);
       const rows = search
         ? await sql`SELECT id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at FROM nexoss_contacts WHERE (${tipo} = '' OR tipo = ${tipo}) AND (documento ILIKE ${'%' + search + '%'} OR nombre ILIKE ${'%' + search + '%'} OR apellido ILIKE ${'%' + search + '%'}) ORDER BY nombre ASC LIMIT 50`
         : await sql`SELECT id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at FROM nexoss_contacts WHERE (${tipo} = '' OR tipo = ${tipo}) ORDER BY nombre ASC LIMIT 50`;
