@@ -1768,6 +1768,92 @@ async function startServer() {
     res.json({ success: true, data: current });
   });
 
+  // Directorio de clientes y proveedores aislado por empresa (la conexión SQL procede del tenant autenticado).
+  app.get('/api/contacts', async (req, res) => {
+    const sql = getNeonSql();
+    if (!sql) return res.status(503).json({ success: false, error: 'La base de datos de esta empresa no está disponible.' });
+    const tipo = String(req.query.tipo || '').trim();
+    const documento = String(req.query.documento || '').trim().toUpperCase();
+    if (tipo && !['cliente', 'proveedor'].includes(tipo)) return res.status(400).json({ success: false, error: 'Tipo de contacto inválido.' });
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS nexoss_contacts (
+          id TEXT PRIMARY KEY,
+          tipo TEXT NOT NULL CHECK (tipo IN ('cliente', 'proveedor')),
+          documento TEXT NOT NULL,
+          nombre TEXT NOT NULL,
+          apellido TEXT NOT NULL DEFAULT '',
+          telefono TEXT NOT NULL DEFAULT '',
+          correo TEXT NOT NULL DEFAULT '',
+          direccion TEXT NOT NULL DEFAULT '',
+          notas TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (tipo, documento)
+        )
+      `;
+      if (documento) {
+        const rows = await sql`SELECT id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at FROM nexoss_contacts WHERE documento = ${documento} AND (${tipo} = '' OR tipo = ${tipo}) LIMIT 1`;
+        return res.json({ success: true, contact: rows[0] || null });
+      }
+      const search = String(req.query.q || '').trim().slice(0, 80);
+      const rows = search
+        ? await sql`SELECT id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at FROM nexoss_contacts WHERE (${tipo} = '' OR tipo = ${tipo}) AND (documento ILIKE ${'%' + search + '%'} OR nombre ILIKE ${'%' + search + '%'} OR apellido ILIKE ${'%' + search + '%'}) ORDER BY nombre ASC LIMIT 50`
+        : await sql`SELECT id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at FROM nexoss_contacts WHERE (${tipo} = '' OR tipo = ${tipo}) ORDER BY nombre ASC LIMIT 50`;
+      return res.json({ success: true, contacts: rows });
+    } catch (error) {
+      logger.error('No se pudo consultar el directorio de contactos:', error);
+      return res.status(503).json({ success: false, error: 'No se pudo consultar la base de datos de clientes y proveedores.' });
+    }
+  });
+
+  app.post('/api/contacts', async (req, res) => {
+    const sql = getNeonSql();
+    if (!sql) return res.status(503).json({ success: false, error: 'La base de datos de esta empresa no está disponible.' });
+    const body = req.body || {};
+    const tipo = String(body.tipo || '').trim();
+    const documento = String(body.documento || '').trim().toUpperCase().slice(0, 40);
+    const nombre = String(body.nombre || '').trim().slice(0, 160);
+    const apellido = String(body.apellido || '').trim().slice(0, 160);
+    const telefono = String(body.telefono || '').trim().slice(0, 50);
+    const correo = String(body.correo || '').trim().slice(0, 180);
+    const direccion = String(body.direccion || '').trim().slice(0, 500);
+    const notas = String(body.notas || '').trim().slice(0, 1000);
+    if (!['cliente', 'proveedor'].includes(tipo)) return res.status(400).json({ success: false, error: 'Selecciona cliente o proveedor.' });
+    if (!documento || !nombre || nombre.toLowerCase() === 'consumidor final') return res.status(400).json({ success: false, error: 'El documento y el nombre son obligatorios.' });
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS nexoss_contacts (
+          id TEXT PRIMARY KEY,
+          tipo TEXT NOT NULL CHECK (tipo IN ('cliente', 'proveedor')),
+          documento TEXT NOT NULL,
+          nombre TEXT NOT NULL,
+          apellido TEXT NOT NULL DEFAULT '',
+          telefono TEXT NOT NULL DEFAULT '',
+          correo TEXT NOT NULL DEFAULT '',
+          direccion TEXT NOT NULL DEFAULT '',
+          notas TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (tipo, documento)
+        )
+      `;
+      const rows = await sql`
+        INSERT INTO nexoss_contacts (id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas)
+        VALUES (${randomUUID()}, ${tipo}, ${documento}, ${nombre}, ${apellido}, ${telefono}, ${correo}, ${direccion}, ${notas})
+        ON CONFLICT (tipo, documento) DO UPDATE SET
+          nombre = EXCLUDED.nombre, apellido = EXCLUDED.apellido, telefono = EXCLUDED.telefono,
+          correo = EXCLUDED.correo, direccion = EXCLUDED.direccion, notas = EXCLUDED.notas,
+          updated_at = NOW()
+        RETURNING id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at
+      `;
+      return res.json({ success: true, contact: rows[0] });
+    } catch (error) {
+      logger.error('No se pudo guardar el contacto:', error);
+      return res.status(503).json({ success: false, error: 'No se pudo guardar el cliente o proveedor en la base de datos.' });
+    }
+  });
+
   // Products API (Neon or Local JSON persistence)
   app.get('/api/products', async (req, res) => {
     const sql = getNeonSql();
