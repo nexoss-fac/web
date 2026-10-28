@@ -1305,8 +1305,8 @@ async function startServer() {
     const tenant = (req as TenantAuthenticatedRequest).tenant;
     if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
     const rawDocument = typeof req.body?.document === 'string' ? req.body.document : '';
-    const document = rawDocument.toUpperCase().replace(/[.\\s-]/g, '');
-    if (!/^(?:[VEJPG]-?)?\\d{5,12}$/.test(document)) {
+    const document = rawDocument.toUpperCase().replace(/[.\s-]/g, '');
+    if (!/^(?:[VEJPG]-?)?\d{5,12}$/.test(document)) {
       return res.status(400).json({ error: 'Introduce una cédula o RIF válido, sin puntos ni espacios.' });
     }
     const apiToken = process.env.IDENTITY_LOOKUP_API_TOKEN;
@@ -1315,7 +1315,7 @@ async function startServer() {
     try {
       const url = configuredUrl.includes('{document}')
         ? configuredUrl.replace('{document}', encodeURIComponent(document))
-        : configuredUrl.replace(/\\/$/, '') + '/' + encodeURIComponent(document);
+        : configuredUrl.replace(/\/$/, '') + '/' + encodeURIComponent(document);
       const response = await fetch(url, {
         method: 'GET',
         headers: { Accept: 'application/json', Authorization: 'Bearer ' + apiToken },
