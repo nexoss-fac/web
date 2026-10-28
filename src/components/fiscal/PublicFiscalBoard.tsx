@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, ArrowDownToLine, ArrowUpRight, CalendarDays, CheckCircle2, Clock3,
-  FileBadge, FileText, LayoutGrid, ListFilter, Search, ShieldCheck, Sparkles
+  FileBadge, FileText, LayoutGrid, ListFilter, Search, ShieldCheck, Sparkles, Eye, X
 } from 'lucide-react';
 import type { FiscalRequirement, FiscalBoardDocument } from '../../domain/fiscalBoard';
 
@@ -29,6 +29,7 @@ export const PublicFiscalBoard: React.FC<{ companyId: string; token: string }> =
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'Todos' | 'Vigentes' | 'Por vencer' | 'Vencidos'>('Todos');
   const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [selectedDocument, setSelectedDocument] = useState<FiscalBoardDocument | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -124,13 +125,29 @@ export const PublicFiscalBoard: React.FC<{ companyId: string; token: string }> =
           {documents.map((document) => <article key={document.id} className={`group flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lg ${view === 'list' ? 'sm:flex-row sm:items-center sm:gap-4' : ''}`}>
             <div className="flex items-start gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-50 to-emerald-50 text-indigo-700"><FileText className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h3 className="break-words text-sm font-extrabold text-slate-900">{document.title}</h3><p className="mt-1 text-[11px] leading-5 text-slate-500">{document.category}{document.area ? ` · ${document.area}` : ''}</p></div></div>
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><StatusBadge status={document.status} />{document.expiresAt && <span className="text-[11px] text-slate-500">Vence: {formatDate(document.expiresAt)}</span>}</div>
-            <div className="mt-3 border-t border-slate-100 pt-3"><p className="text-xs text-slate-600">Emisor: <span className="font-semibold text-slate-800">{document.issuer || 'No indicado'}</span></p>{document.fileData && <a href={document.fileData} download={document.fileName || document.title} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700"><ArrowDownToLine className="h-4 w-4" /> Ver / descargar documento</a>}</div>
+            <div className="mt-3 border-t border-slate-100 pt-3"><p className="text-xs text-slate-600">Emisor: <span className="font-semibold text-slate-800">{document.issuer || 'No indicado'}</span></p>{document.fileData && <button type="button" onClick={() => setSelectedDocument(document)} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700"><Eye className="h-4 w-4" /> Ver documento</button>}</div>
           </article>)}
         </div> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center"><FileText className="mx-auto h-8 w-8 text-slate-300" /><h3 className="mt-3 text-sm font-bold text-slate-800">{board.documents.length ? 'No hay coincidencias' : 'Aún no hay documentos publicados'}</h3><p className="mt-1 text-xs text-slate-500">{board.documents.length ? 'Prueba con otra búsqueda o filtro.' : 'Los documentos aparecerán aquí cuando la empresa los publique.'}</p></div>}
       </section>
     </section>
 
     <footer className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-950"><strong>Información importante:</strong> Esta cartelera es informativa. Los documentos y estados son publicados por la empresa; NEXOSS no certifica su autenticidad ni sustituye los comprobantes, documentos originales o verificaciones oficiales.</footer>
+    {selectedDocument?.fileData && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-2 sm:p-5" role="dialog" aria-modal="true" aria-label={`Vista previa: ${selectedDocument.title}`}>
+      <section className="flex h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
+          <div className="min-w-0"><h2 className="truncate text-sm font-extrabold text-slate-900">{selectedDocument.title}</h2><p className="truncate text-[11px] text-slate-500">{selectedDocument.fileName || 'Documento fiscal'}</p></div>
+          <div className="flex shrink-0 items-center gap-2">
+            <a href={selectedDocument.fileData} download={selectedDocument.fileName || selectedDocument.title} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><ArrowDownToLine className="h-4 w-4" /><span className="hidden sm:inline">Descargar</span></a>
+            <button type="button" onClick={() => setSelectedDocument(null)} aria-label="Cerrar vista previa" className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-100"><X className="h-4 w-4" /></button>
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 bg-slate-100">
+          {selectedDocument.fileData.startsWith('data:application/pdf;base64,')
+            ? <iframe title={selectedDocument.title} src={selectedDocument.fileData} className="h-full w-full border-0 bg-white" />
+            : <div className="flex h-full items-center justify-center overflow-auto p-3 sm:p-6"><img src={selectedDocument.fileData} alt={selectedDocument.title} className="max-h-full max-w-full object-contain shadow-sm" /></div>}
+        </div>
+      </section>
+    </div>}
   </PublicPage>;
 };
 
