@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CalendarDays,
+  Camera,
   Check,
   ClipboardCheck,
   Clock3,
@@ -10,8 +11,10 @@ import {
   FileText,
   FolderOpen,
   Link2,
+  LoaderCircle,
   Plus,
   Search,
+  ScanSearch,
   ShieldCheck,
   Trash2,
   X,
@@ -65,6 +68,17 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(categories[0]);
   const [issuer, setIssuer] = useState('');
+  const [documentNumber, setDocumentNumber] = useState('');
+  const [ownerName, setOwnerName] = useState('');
+  const [taxId, setTaxId] = useState('');
+  const [issueDate, setIssueDate] = useState('');
+  const [documentNotes, setDocumentNotes] = useState('');
+  const [suggestedRequirement, setSuggestedRequirement] = useState('');
+  const [identityInput, setIdentityInput] = useState('');
+  const [identityLoading, setIdentityLoading] = useState(false);
+  const [identityResult, setIdentityResult] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [scanSummary, setScanSummary] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [fileData, setFileData] = useState('');
   const [fileName, setFileName] = useState('');
@@ -184,6 +198,67 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
     }
   };
 
+  const scanSelectedDocument = async () => {
+    if (!fileData || !fileName || !fileName.match(/\\.(png|jpe?g|webp)$/i)) {
+      setError('Primero toma o selecciona una fotografía en JPEG, PNG o WebP.');
+      return;
+    }
+    setScanning(true);
+    setError('');
+    setScanSummary('');
+    try {
+      const response = await fetch('/api/fiscal-board/scan-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: fileData }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo analizar la fotografía.');
+      const doc = data.document;
+      setTitle(doc.title || '');
+      setCategory(categories.includes(doc.category) ? doc.category : 'Otro');
+      setIssuer(doc.issuer || '');
+      setDocumentNumber(doc.documentNumber || '');
+      setOwnerName(doc.ownerName || '');
+      setTaxId(doc.taxId || '');
+      setIssueDate(doc.issueDate || '');
+      setExpiresAt(doc.expiresAt || '');
+      setArea(FISCAL_AREAS.includes(doc.area) ? doc.area : '');
+      setSuggestedRequirement(doc.suggestedRequirement || '');
+      setDocumentNotes(doc.notes || '');
+      setScanSummary('Documento identificado como ' + (doc.documentType || 'documento') + '. Confianza: ' + (doc.confidence || 'baja') + '. Revisa los campos antes de guardar; el sistema no publica el documento automáticamente.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo analizar la fotografía.');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const lookupIdentity = async () => {
+    setIdentityLoading(true);
+    setIdentityResult('');
+    setError('');
+    try {
+      const response = await fetch('/api/identity/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document: identityInput }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.found) throw new Error(data.error || 'No se encontró el documento.');
+      const identity = data.result;
+      setOwnerName(identity.name || '');
+      setTaxId(identity.rif || identity.document || identityInput.trim());
+      if (!issuer.trim()) setIssuer(identity.name || '');
+      if (!title.trim()) setTitle((identity.documentType === 'empresa' ? 'Identificación de empresa' : 'Identificación de persona') + ' · ' + (identity.document || identityInput.trim()));
+      setIdentityResult('Coincidencia referencial encontrada. Confirma los datos con el documento original antes de guardar.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo consultar la identidad.');
+    } finally {
+      setIdentityLoading(false);
+    }
+  };
+
   const saveDocument = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!title.trim()) return;
@@ -196,12 +271,27 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
       status: inProcess ? 'En trámite' : deriveDocumentStatus({ status: 'Vigente', expiresAt }, today),
       area,
       ...(fileName ? { fileName, fileData } : {}),
+      ...(documentNumber ? { documentNumber } : {}),
+      ...(ownerName ? { ownerName } : {}),
+      ...(taxId ? { taxId } : {}),
+      ...(issueDate ? { issueDate } : {}),
+      ...(documentNotes ? { notes: documentNotes } : {}),
+      ...(suggestedRequirement ? { suggestedRequirement } : {}),
       published: publishDocument,
     };
     const saved = await saveBoard({ ...board, documents: [document, ...board.documents] });
     if (saved) {
       setTitle('');
       setIssuer('');
+      setDocumentNumber('');
+      setOwnerName('');
+      setTaxId('');
+      setIssueDate('');
+      setDocumentNotes('');
+      setSuggestedRequirement('');
+      setIdentityInput('');
+      setIdentityResult('');
+      setScanSummary('');
       setExpiresAt('');
       setFileName('');
       setFileData('');
@@ -343,10 +433,27 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
   </div>
   {showForm && <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-3 backdrop-blur-sm"><form onSubmit={(event) => void saveDocument(event)} className="my-auto w-full max-w-lg space-y-4 rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
     <div className="flex items-start justify-between"><div><p className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Carpeta de {companyName}</p><h2 className="mt-1 text-lg font-black text-slate-900">Agregar documento</h2></div><button type="button" onClick={() => setShowForm(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Cerrar"><X className="h-5 w-5" /></button></div>
+    <section className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3">
+      <div className="flex items-center gap-2"><Camera className="h-5 w-5 text-indigo-700" /><div><h3 className="text-xs font-extrabold text-indigo-950">Fotografiar e identificar documento</h3><p className="mt-0.5 text-[10px] text-indigo-800">Toma una foto nítida. NEXOSS intentará identificar el documento y completar los campos.</p></div></div>
+      <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Tomar foto con la cámara</span><input type="file" accept="image/*" capture="environment" onChange={(event) => { void chooseFile(event.target.files?.[0]); setScanSummary(''); }} className="block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold" /></label>
+      {fileName && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2"><span className="min-w-0 flex-1 truncate text-[10px] text-slate-600">{fileName}</span><button type="button" onClick={() => void scanSelectedDocument()} disabled={scanning} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50">{scanning ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ScanSearch className="h-3.5 w-3.5" />}{scanning ? 'Analizando…' : 'Leer foto y completar'}</button></div>}
+      {scanSummary && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[10px] leading-5 text-emerald-800">{scanSummary}</p>}
+    </section>
+    <section className="space-y-2 rounded-xl border border-slate-200 p-3">
+      <h3 className="text-xs font-extrabold text-slate-800">Identificar persona o empresa por cédula/RIF</h3>
+      <div className="flex gap-2"><input value={identityInput} onChange={(event) => setIdentityInput(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs" placeholder="Ej. V12345678 o J123456789" /><button type="button" onClick={() => void lookupIdentity()} disabled={identityLoading || !identityInput.trim()} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50">{identityLoading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}{identityLoading ? 'Buscando…' : 'Consultar'}</button></div>
+      {identityResult && <p role="status" className="text-[10px] leading-5 text-emerald-700">{identityResult}</p>}
+      <p className="text-[10px] leading-4 text-slate-500">La consulta requiere configurar un proveedor de identidad en el servidor. Los resultados son referenciales y debes verificarlos.</p>
+    </section>
     <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Nombre o número del documento *</span><input required value={title} onChange={(event) => setTitle(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-400" placeholder="Ej. Constancia del RIF" /></label>
     <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Tipo</span><select value={category} onChange={(event) => setCategory(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs">{categories.map((item) => <option key={item}>{item}</option>)}</select></label><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Fecha de vencimiento</span><input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" /></label></div>
     <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Área</span><select value={area} onChange={(event) => setArea(event.target.value as FiscalArea | '')} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs"><option value="">Sin área</option>{FISCAL_AREAS.map((item) => <option key={item}>{item}</option>)}</select></label><label className="flex items-end gap-2 pb-2.5 text-xs font-semibold text-slate-700"><input type="checkbox" checked={inProcess} onChange={(event) => setInProcess(event.target.checked)} />El trámite está en proceso (aún no lo emiten)</label></div>
-    <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Organismo emisor</span><input value={issuer} onChange={(event) => setIssuer(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" placeholder="Ej. SENIAT, IVSS…" /></label>
+    <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Número del documento</span><input value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" /></label><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Fecha de emisión</span><input type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" /></label></div>
+    <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Titular / razón social</span><input value={ownerName} onChange={(event) => setOwnerName(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" placeholder="Nombre o empresa titular" /></label>
+    <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Cédula o RIF detectado</span><input value={taxId} onChange={(event) => setTaxId(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" placeholder="V-, E-, J-, G-…" /></label>
+        <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Organismo emisor</span><input value={issuer} onChange={(event) => setIssuer(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" placeholder="Ej. SENIAT, IVSS…" /></label>
+    <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Observaciones extraídas</span><textarea value={documentNotes} onChange={(event) => setDocumentNotes(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" placeholder="Datos legibles adicionales…" /></label>
+    {suggestedRequirement && <p className="rounded-lg bg-slate-50 p-2 text-[10px] text-slate-600">Obligación sugerida: {suggestedRequirement}</p>}
     <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Archivo de soporte (PDF, PNG o JPEG; hasta 5 MB)</span><input type="file" accept=".pdf,image/png,image/jpeg" onChange={(event) => void chooseFile(event.target.files?.[0])} className="block w-full rounded-lg border border-slate-200 p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold" />{fileName && <span className="block text-[10px] text-slate-500">{fileName}</span>}</label>
     <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-950"><input type="checkbox" checked={publishDocument} onChange={(event) => setPublishDocument(event.target.checked)} className="mt-0.5" /><span><strong>Publicar en la cartelera QR.</strong> Si lo marcas, cualquier persona con el enlace público podrá ver y descargar este documento. Déjalo desmarcado para mantenerlo privado dentro del expediente.</span></label>
     <div className="flex justify-end gap-2 border-t border-slate-100 pt-3"><button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600">Cancelar</button><button type="submit" disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50">Agregar documento</button></div>
