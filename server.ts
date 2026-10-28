@@ -1774,6 +1774,7 @@ async function startServer() {
     if (!sql) return res.status(503).json({ success: false, error: 'La base de datos de esta empresa no está disponible.' });
     const tipo = String(req.query.tipo || '').trim();
     const documento = String(req.query.documento || '').trim().toUpperCase();
+    const nombreQuery = String(req.query.nombre || '').trim().slice(0, 160);
     if (tipo && !['cliente', 'proveedor'].includes(tipo)) return res.status(400).json({ success: false, error: 'Tipo de contacto inválido.' });
     try {
       await sql`
@@ -1812,15 +1813,16 @@ async function startServer() {
     if (!sql) return res.status(503).json({ success: false, error: 'La base de datos de esta empresa no está disponible.' });
     const body = req.body || {};
     const tipo = String(body.tipo || '').trim();
-    const documento = String(body.documento || '').trim().toUpperCase().slice(0, 40);
+    const documentoIngresado = String(body.documento || '').trim().toUpperCase().slice(0, 40);
     const nombre = String(body.nombre || '').trim().slice(0, 160);
+    const documento = documentoIngresado || (tipo === 'proveedor' && nombre ? 'NOMBRE:' + nombre.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').slice(0, 100) : '');
     const apellido = String(body.apellido || '').trim().slice(0, 160);
     const telefono = String(body.telefono || '').trim().slice(0, 50);
     const correo = String(body.correo || '').trim().slice(0, 180);
     const direccion = String(body.direccion || '').trim().slice(0, 500);
     const notas = String(body.notas || '').trim().slice(0, 1000);
     if (!['cliente', 'proveedor'].includes(tipo)) return res.status(400).json({ success: false, error: 'Selecciona cliente o proveedor.' });
-    if (!documento || !nombre || nombre.toLowerCase() === 'consumidor final') return res.status(400).json({ success: false, error: 'El documento y el nombre son obligatorios.' });
+    if ((!documentoIngresado && tipo !== 'proveedor') || !nombre || nombre.toLowerCase() === 'consumidor final') return res.status(400).json({ success: false, error: tipo === 'cliente' ? 'El documento y el nombre son obligatorios para guardar un cliente.' : 'El nombre del proveedor es obligatorio.' });
     try {
       await sql`
         CREATE TABLE IF NOT EXISTS nexoss_contacts (
