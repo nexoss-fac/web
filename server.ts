@@ -414,14 +414,17 @@ async function startServer() {
         const tenant = await getPostgresControlPlane().findPublicBoardTenant(req.params.companyId);
         if (!tenant) return res.status(404).json({ error: 'La cartelera no está disponible.' });
         const connectionString = await new LocalEnvironmentTenantSecretProvider().getConnectionString(tenant.secretReference, tenant.encryptedConnectionSecret);
-        const saved = await tenantStorageContext.run({
+        // La cartelera fiscal se guarda en fiscal_board_state, no dentro de nexoss_workspace_state.
+        // Leer el almacén dedicado garantiza que el token y los documentos publicados
+        // procedan de la misma persistencia que usan los endpoints autenticados.
+        const savedBoard = await tenantStorageContext.run({
           companyId: tenant.companyId,
           uid: 'public-board',
           role: 'auditor',
           industryTemplate: 'other',
           connectionString,
-        }, () => readTenantWorkspaceState());
-        const board = normalizeFiscalBoard(saved?.fiscalBoard, NATIONAL_FISCAL_REQUIREMENTS);
+        }, () => readTenantFiscalBoardState());
+        const board = normalizeFiscalBoard(savedBoard, NATIONAL_FISCAL_REQUIREMENTS);
         if (!matchesPublicBoardToken(board.publicTokenHash, token)) {
           return res.status(404).json({ error: 'La cartelera no está disponible.' });
         }
