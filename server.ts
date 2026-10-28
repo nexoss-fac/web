@@ -926,7 +926,7 @@ async function startServer() {
   const contactSchemaReady = new WeakMap<object, Promise<void>>();
   const contactLookupWindows = new Map<string, number[]>();
   const normalizeCustomerDocument = (value: unknown): string => String(value ?? '')
-    .normalize('NFKC').trim().toUpperCase().replace(/[.\\s-]/g, '');
+    .normalize('NFKC').trim().toUpperCase().replace(/[.\s-]/g, '');
   const isValidCustomerDocument = (value: string): boolean =>
     /^(?:V|E|J|G|P|C|RIF)?[0-9]{5,12}$/.test(value);
   const ensureContactSchema = async (sql: ReturnType<typeof getNeonSql>) => {
