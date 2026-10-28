@@ -223,7 +223,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
       setTaxId(doc.taxId || '');
       setIssueDate(doc.issueDate || '');
       setExpiresAt(doc.expiresAt || '');
-      setArea(FISCAL_AREAS.includes(doc.area) ? doc.area : '');
+      setArea(FISCAL_AREAS.some((knownArea) => knownArea === doc.area) ? doc.area as FiscalArea : '');
       setSuggestedRequirement(doc.suggestedRequirement || '');
       setDocumentNotes(doc.notes || '');
       setScanSummary('Documento identificado como ' + (doc.documentType || 'documento') + '. Confianza: ' + (doc.confidence || 'baja') + '. Revisa los campos antes de guardar; el sistema no publica el documento automáticamente.');
