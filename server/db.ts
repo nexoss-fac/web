@@ -437,6 +437,7 @@ export async function initDatabaseSchema() {
         categoria VARCHAR(100) NOT NULL,
         descripcion TEXT NOT NULL,
         beneficiario VARCHAR(150),
+        beneficiario_rif VARCHAR(50),
         cuenta_origen VARCHAR(100) NOT NULL,
         moneda VARCHAR(10) NOT NULL,
         monto NUMERIC(14, 2) NOT NULL,
@@ -451,6 +452,7 @@ export async function initDatabaseSchema() {
     `;
     await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`;
     await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS foto_factura TEXT`;
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS beneficiario_rif VARCHAR(50)`;
 
     // 5A. Directorio persistente de clientes y proveedores para autocompletar por cédula/RIF.
     await sql`
