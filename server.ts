@@ -2056,11 +2056,11 @@ async function startServer() {
       await initDatabaseSchema();
       const written = await sql`
         INSERT INTO expenses (
-          id, fecha, categoria, descripcion, beneficiario,
+          id, fecha, categoria, descripcion, beneficiario, beneficiario_rif,
           cuenta_origen, moneda, monto, tasa_cambio, monto_usd, monto_bs,
           comprobante_ref, registrado_por, notas, foto_factura
         ) VALUES (
-          ${exp.id}, ${exp.fecha}, ${exp.categoria}, ${exp.descripcion}, ${exp.beneficiario || ''},
+          ${exp.id}, ${exp.fecha}, ${exp.categoria}, ${exp.descripcion}, ${exp.beneficiario || ''}, ${exp.beneficiario_rif || null},
           ${exp.cuenta_origen}, ${exp.moneda}, ${exp.monto}, ${exp.tasa_cambio}, ${exp.monto_usd}, ${exp.monto_bs},
           ${exp.comprobante_ref || null}, ${exp.registrado_por || 'Admin'}, ${exp.notas || ''}, ${exp.foto_factura || null}
         )
@@ -2075,8 +2075,57 @@ async function startServer() {
         RETURNING (xmax = 0) AS inserted;
       `;
       // xmax = 0 solo ocurre cuando la fila es nueva: reenviar o editar un gasto no vuelve a avisar.
-      if ((written as any[])[0]?.inserted) notifyInBackground((company) => buildExpenseNotice(exp, company));
-      res.json({ saved: true, id: exp.id });
+      const inserted = Boolean((written as any[])[0]?.inserted);
+      if (inserted) notifyInBackground((company) => buildExpenseNotice(exp, company));
+
+      // Los tributos pagados se contabilizan automáticamente con clasificación ISAE
+      // y subclasificación MM-YYYY, conservando datos de la operación y evitando duplicados.
+      let accounting: { saved: boolean; error?: string } | undefined;
+      if (inserted && String(exp.categoria || '').trim().toLocaleLowerCase('es') === 'tributos pagados') {
+        const fecha = String(exp.fecha || new Date().toISOString()).slice(0, 10);
+        const parts = fecha.split('-');
+        const subclasificacion = parts.length >= 2 ? `${parts[1]}-${parts[0]}` : new Date().toLocaleDateString('es-VE', { month: '2-digit', year: 'numeric' });
+        const tasa = Number(exp.tasa_cambio || 0);
+        const montoBs = Number(exp.monto_bs || 0);
+        const cuentaOrigen = String(exp.cuenta_origen || '').toLocaleLowerCase('es');
+        const cuentaPago = cuentaOrigen.includes('pago móvil') || cuentaOrigen.includes('pago movil')
+          ? 'Banco / Pago Móvil BDV'
+          : cuentaOrigen.includes('punto de venta') ? 'Banco / Punto de Venta'
+          : cuentaOrigen.includes('zelle') ? 'Banco / Zelle'
+          : cuentaOrigen.includes('efectivo') && String(exp.moneda).toUpperCase() === 'USD' ? 'Caja / Efectivo USD'
+          : cuentaOrigen.includes('efectivo') ? 'Caja / Efectivo Bs'
+          : String(exp.cuenta_origen || 'Cuenta de pago');
+        try {
+          await saveAccountingEntry({
+            id: `asi-gasto-${String(exp.id)}`,
+            fecha,
+            tipo: 'egreso',
+            origen: 'gasto',
+            origen_id: String(exp.id),
+            documento: String(exp.comprobante_ref || exp.id),
+            tipo_documento: 'COMPROBANTE DE PAGO',
+            sujeto: String(exp.beneficiario || ''),
+            rif: String(exp.beneficiario_rif || ''),
+            metodo_pago: String(exp.cuenta_origen || ''),
+            tasa_dolar: tasa,
+            observaciones: [
+              String(exp.descripcion || 'Tributos pagados'),
+              exp.notas ? `Notas: ${exp.notas}` : '',
+              exp.registrado_por ? `Registrado por: ${exp.registrado_por}` : '',
+            ].filter(Boolean).join(' · '),
+            lineas: [
+              { partida: 'Egresos', cuenta: 'Gastos', subcuenta: 'Tributos Pagados', clasificacion: 'ISAE', subclasificacion, moneda: 'Bs', debe: montoBs, haber: 0, debe_usd: tasa > 0 ? Number((montoBs / tasa).toFixed(2)) : Number(exp.monto_usd || 0), haber_usd: 0, venta_compra: 'Gasto' },
+              { partida: 'Activos', cuenta: cuentaPago, subcuenta: 'Medio de pago', clasificacion: 'ISAE', subclasificacion, moneda: 'Bs', debe: 0, haber: montoBs, debe_usd: 0, haber_usd: tasa > 0 ? Number((montoBs / tasa).toFixed(2)) : Number(exp.monto_usd || 0), venta_compra: 'Gasto' },
+            ],
+          });
+          accounting = { saved: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'No se pudo crear el asiento automático.';
+          logger.error('No se pudo contabilizar automáticamente el tributo pagado:', { expenseId: exp.id, message });
+          accounting = { saved: false, error: message };
+        }
+      }
+      res.json({ saved: true, id: exp.id, ...(accounting ? { accounting } : {}) });
     } catch (err: unknown) {
       logger.error('Error guardando gasto en Neon:', err);
       res.status(500).json({ saved: false, error: String(err) });
