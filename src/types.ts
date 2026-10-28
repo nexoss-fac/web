@@ -258,6 +258,7 @@ export interface Expense {
   categoria: ExpenseCategory;
   descripcion: string;
   beneficiario?: string;
+  beneficiario_rif?: string;
   cuenta_origen: string; // 'Efectivo USD', 'Efectivo Bs', 'Pago Móvil BDV', etc.
   moneda: Currency;
   monto: number;
