@@ -2068,6 +2068,11 @@ async function startServer() {
           fecha = EXCLUDED.fecha,
           categoria = EXCLUDED.categoria,
           descripcion = EXCLUDED.descripcion,
+          beneficiario = EXCLUDED.beneficiario,
+          beneficiario_rif = EXCLUDED.beneficiario_rif,
+          cuenta_origen = EXCLUDED.cuenta_origen,
+          moneda = EXCLUDED.moneda,
+          tasa_cambio = EXCLUDED.tasa_cambio,
           monto = EXCLUDED.monto,
           monto_usd = EXCLUDED.monto_usd,
           monto_bs = EXCLUDED.monto_bs,
@@ -2081,7 +2086,7 @@ async function startServer() {
       // Los tributos pagados se contabilizan automáticamente con clasificación ISAE
       // y subclasificación MM-YYYY, conservando datos de la operación y evitando duplicados.
       let accounting: { saved: boolean; error?: string } | undefined;
-      if (inserted && String(exp.categoria || '').trim().toLocaleLowerCase('es') === 'tributos pagados') {
+      if (String(exp.categoria || '').trim().toLocaleLowerCase('es') === 'tributos pagados') {
         const fecha = String(exp.fecha || new Date().toISOString()).slice(0, 10);
         const parts = fecha.split('-');
         const subclasificacion = parts.length >= 2 ? `${parts[1]}-${parts[0]}` : new Date().toLocaleDateString('es-VE', { month: '2-digit', year: 'numeric' });
