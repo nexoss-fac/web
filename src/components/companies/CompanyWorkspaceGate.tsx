@@ -380,7 +380,16 @@ onTenantSelected(company.id, company.role);
 
   };
 
-  const connectTenantDatabase = async (company: any) => {
+  const transferCompanyOwner = async (company: any) => {
+    const email = window.prompt('Correo verificado de la nueva persona propietaria para ' + (company.tradeName || company.legalName) + ':', '');
+    if (!email?.trim()) return;
+    if (!window.confirm('¿Transferir la propiedad de ' + (company.tradeName || company.legalName) + ' a ' + email.trim() + '? El propietario actual pasará a ser administrador. Los datos y la base de datos de la empresa no se borrarán.')) return;
+    const response = await fetch('/api/platform/admin/companies/' + company.id + '/transfer-owner', { method: 'POST', headers, body: JSON.stringify({ email: email.trim() }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'No se pudo transferir la propiedad.');
+    await loadAdmin();
+  };
+  const connectTenantDatabase = async (company: any) => {
     const name = (tenantDatabaseEnvNames[company.id] || '').trim();
     if (!/^[A-Z][A-Z0-9_]*_DATABASE_URL$/.test(name) || ['DATABASE_URL', 'CONTROL_PLANE_DATABASE_URL'].includes(name)) {
       throw new Error('Escribe una variable exclusiva de la empresa, por ejemplo MAKD_SHOP_DATABASE_URL.');
