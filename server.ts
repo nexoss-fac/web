@@ -856,7 +856,8 @@ async function startServer() {
         const invitation = await getPostgresControlPlane().createInvitation(
           req.params.companyId, email, role as Exclude<MembershipRole, 'owner'>, identity,
         );
-        if (!invitation) return res.status(403).json({ error: 'No se pudo crear la invitación: verifica permisos, empresa, capacidad del plan y membresías existentes.' });
+        if (!invitation) return res.status(403).json({ error: 'No se pudo autorizar la invitación. Verifica que seas administrador activo y que la empresa y su suscripción estén habilitadas.' });
+        if ('error' in invitation) return res.status(403).json({ error: invitation.error });
         let companyName = '';
         try {
           const profile = await getPostgresControlPlane().getManagedCompanyProfile(req.params.companyId, identity?.uid || '');
