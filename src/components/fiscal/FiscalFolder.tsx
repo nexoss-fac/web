@@ -36,6 +36,18 @@ type BoardView = FiscalBoardState & { publicLinkEnabled: boolean };
 
 const sections: Section[] = ['Resumen', 'Documentos', 'Documentos por subir', 'Inspección', 'Calendario', 'Portales', 'Requisitos', 'Auditoría'];
 const statusFilters: StatusFilter[] = ['Todos', 'Vigente', 'Por vencer', 'Vencido', 'En trámite'];
+
+async function readApiJson(response: Response): Promise<any> {
+  const raw = await response.text();
+  if (!raw.trim()) {
+    throw new Error(`El servidor respondió vacío (HTTP ${response.status}). Revisa el despliegue o inténtalo de nuevo.`);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error(`El servidor devolvió una respuesta no válida (HTTP ${response.status}). Revisa los registros del servidor.`);
+  }
+}
 const categories = ['RIF', 'Registro mercantil', 'Solvencia', 'Permiso nacional', 'Declaración', 'Comprobante de pago', 'Otro'];
 
 const emptyBoard: BoardView = {
@@ -103,7 +115,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
     setPublicUrl('');
     fetch('/api/fiscal-board', { signal: controller.signal })
       .then(async (response) => {
-        const data = await response.json();
+        const data = await readApiJson(response);
         if (!response.ok) throw new Error(data.error || 'No se pudo cargar la carpeta fiscal.');
         if (!controller.signal.aborted) setBoard({ ...emptyBoard, ...data });
       })
@@ -156,7 +168,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documents: next.documents, requirements: next.requirements, ...(next.calendar ? { calendar: next.calendar } : {}), ...(next.settings ? { settings: next.settings } : {}), ...(next.inspection ? { inspection: next.inspection } : {}) }),
       });
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo guardar la carpeta fiscal.');
       setBoard({ ...emptyBoard, ...data });
       setNotice(typeof data.compressionMessage === 'string' ? data.compressionMessage : 'Cambios guardados en el expediente de esta empresa.');
@@ -243,7 +255,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64: fileData }),
       });
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo analizar el documento.');
       const doc = data.document;
       setTitle(doc.title || '');
@@ -276,7 +288,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ document: identityInput }),
       });
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok || !data.found) throw new Error(data.error || 'No se encontró el documento.');
       const identity = data.result;
       setOwnerName(identity.name || '');
@@ -391,7 +403,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
     setError('');
     try {
       const response = await fetch('/api/fiscal-board/public-link', { method: 'POST' });
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo generar el código QR.');
       const url = new URL(`/cartelera/${companyId}/${data.token}`, window.location.origin).toString();
       setPublicUrl(url);
@@ -407,7 +419,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
     setError('');
     try {
       const response = await fetch('/api/fiscal-board/public-link', { method: 'DELETE' });
-      const data = await response.json();
+      const data = await readApiJson(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo revocar el enlace público.');
       setBoard((current) => ({ ...current, publicLinkEnabled: false }));
       setPublicUrl('');
