@@ -1045,7 +1045,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
               <label className="block text-slate-700 font-bold mb-1">
-                Nombre del Modelo / Artículo *
+                {isFootwear ? 'Nombre del modelo / artículo *' : clasificacionInventario === 'Materia prima' ? 'Nombre de la materia prima / insumo *' : clasificacionInventario === 'Productos en proceso' ? 'Nombre del producto en proceso *' : clasificacionInventario === 'Productos terminados' ? 'Nombre del producto terminado *' : 'Nombre del ' + industry.productLabel.toLocaleLowerCase('es') + ' / artículo *'}
               </label>
               <input
                 type="text"
@@ -1053,11 +1053,19 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
                 placeholder={
-                  categoria === 'Gorras'
-                    ? 'Ej. Gorra New Era NY Yankees 59FIFTY'
-                    : categoria === 'Medias'
-                    ? 'Ej. Medias Deportivas Nike Cushion Pack x3'
-                    : 'Ej. Nike Air Force 1 07 Low'
+                  isFootwear
+                    ? categoria === 'Gorras'
+                      ? 'Ej. Gorra New Era NY Yankees 59FIFTY'
+                      : categoria === 'Medias'
+                        ? 'Ej. Medias deportivas pack x3'
+                        : 'Ej. Modelo, marca y referencia'
+                    : clasificacionInventario === 'Materia prima'
+                      ? 'Ej. Harina, tela, resina, acero, envases...'
+                      : clasificacionInventario === 'Productos en proceso'
+                        ? 'Ej. Producto en elaboración / lote'
+                        : clasificacionInventario === 'Productos terminados'
+                          ? 'Ej. Nombre comercial del producto'
+                          : 'Ej. Nombre del producto o artículo'
                 }
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
               />
@@ -1072,11 +1080,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 required={!(entryMode === 'multi' && colorImages.length > 0 && !editingProduct)}
                 value={sku}
                 onChange={(e) => setSku(e.target.value)}
-                placeholder="Ej. NK-AF1-003"
+                placeholder={isFootwear ? 'Ej. NK-AF1-003' : clasificacionInventario === 'Materia prima' ? 'Ej. MP-001' : 'Ej. SKU-001'}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
               />
               <span className="text-[10px] text-slate-400 mt-0.5 block">
-                {entryMode === 'multi' ? 'Se anexará -TALLA a cada variante (ej. NK-AF1-38)' : 'Código único'}
+                {entryMode === 'multi' && isFootwear ? 'Se anexará -TALLA a cada variante (ej. NK-AF1-38)' : 'Código único del artículo'}
               </span>
             </div>
 
@@ -1088,14 +1096,14 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 type="text"
                 value={marca}
                 onChange={(e) => setMarca(e.target.value)}
-                placeholder="Nike, Adidas, New Era, Puma..."
+                placeholder={isFootwear ? 'Nike, Adidas, New Era, Puma...' : 'Marca, fabricante o proveedor (opcional)'}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
               />
             </div>
 
             <div>
               <label className="block text-slate-700 font-bold mb-1">
-                {categoria === 'Calzado' ? 'Tipo de Calzado' : 'Tipo / Subgénero'}
+                {isFootwear && categoria === 'Calzado' ? 'Tipo de calzado' : isFootwear ? 'Tipo / subcategoría' : 'Tipo / especificación'}
               </label>
               <select
                 value={tipo}
