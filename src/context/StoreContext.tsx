@@ -838,14 +838,58 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [addNotification]);
 
-  // Sincronizar al entrar y luego periódicamente. El valor histórico solo
-  // se registra bajo la fecha oficial devuelta por la fuente.
+  // Consultar al iniciar la sesión de la empresa activa y luego a las
+  // 10:00 y 14:00 hora de Venezuela. La tasa oficial normalmente cambia una
+  // vez al día; no hace falta consultar el BCV cada pocos minutos.
   useEffect(() => {
-    if (!isAutoSyncEnabled) return;
+    if (!isAutoSyncEnabled || isAuthLoading || !activeCompanyId) return;
+
     void syncBcvRate(true);
-    const interval = setInterval(() => void syncBcvRate(true), 180000);
-    return () => clearInterval(interval);
-  }, [isAutoSyncEnabled, syncBcvRate]);
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+    const scheduledHours = [10, 14];
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const now = new Date();
+      const todayKey = getTodayVenezuela();
+      const slots = scheduledHours.map((hour) => {
+        const time = `${String(hour).padStart(2, '0')}:00`;
+        const slotDate = new Date(`${todayKey}T${time}:00-04:00`);
+        return { hour, dateKey: todayKey, at: slotDate };
+      });
+      let next = slots.find((slot) => slot.at.getTime() > now.getTime());
+
+      if (!next) {
+        const [year, month, day] = todayKey.split('-').map(Number);
+        const tomorrow = new Date(Date.UTC(year, month - 1, day + 1));
+        const tomorrowKey = `${tomorrow.getUTCFullYear()}-${String(tomorrow.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrow.getUTCDate()).padStart(2, '0')}`;
+        next = {
+          hour: scheduledHours[0],
+          dateKey: tomorrowKey,
+          at: new Date(`${tomorrowKey}T10:00:00-04:00`),
+        };
+      }
+
+      timeout = setTimeout(() => {
+        if (cancelled) return;
+        const slotKey = `nexoss_bcv_sync_slot_${activeCompanyId}_${next!.dateKey}_${next!.hour}`;
+        // Evita duplicar la misma franja en una pestaña que se ha recargado.
+        if (!localStorage.getItem(slotKey)) {
+          safeLocalStorageSet(slotKey, new Date().toISOString());
+          void syncBcvRate(true);
+        }
+        scheduleNext();
+      }, Math.max(1000, next.at.getTime() - now.getTime()));
+    };
+
+    scheduleNext();
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [isAutoSyncEnabled, isAuthLoading, activeCompanyId, currentUser?.uid, syncBcvRate]);
 
   const setExchangeRate = (rate: number, isManual = true) => {
     setExchangeRateState(rate);
