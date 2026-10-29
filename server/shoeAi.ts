@@ -91,7 +91,7 @@ export async function analyzeShoeImage(
     throw new Error('Servicio de IA no disponible: GEMINI_API_KEY no está configurada.');
   }
 
-  const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+  const modelsToTry = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
   let lastError: any = null;
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
