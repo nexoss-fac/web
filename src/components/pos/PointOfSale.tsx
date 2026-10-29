@@ -662,7 +662,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
               ? 'hidden'
               : billingViewMode === 'split'
               ? 'lg:col-span-7 order-2 lg:order-1'
-              : 'lg:col-span-7 xl:col-span-7 order-2 lg:order-1'
+              : 'lg:col-span-7 order-2 lg:order-1'
           }`}
         >
           
@@ -882,7 +882,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
               ? 'col-span-12'
               : billingViewMode === 'split'
               ? 'lg:col-span-5 order-1 lg:order-2'
-              : 'lg:col-span-5 xl:col-span-5 order-1 lg:order-2'
+              : 'lg:col-span-5 order-1 lg:order-2'
           }`}
         >
           {cart.length === 0 ? (
@@ -1038,11 +1038,11 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
               <div className={`grid gap-6 ${
                 billingViewMode === 'split'
                   ? 'grid-cols-1'
-                  : 'grid-cols-1 xl:grid-cols-12 items-start'
+                  : 'grid-cols-1 2xl:grid-cols-12 items-start'
               }`}>
                 
                 {/* Left Section: Calzados a Facturar & Descuentos */}
-                <div className={`${billingViewMode === 'split' ? 'space-y-4' : 'xl:col-span-7 space-y-4'}`}>
+                <div className={`${billingViewMode === 'split' ? 'space-y-4' : '2xl:col-span-7 space-y-4'}`}>
                   
                   <div className="flex items-center justify-between text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wider pb-1.5 border-b border-slate-200">
                     <span className="flex items-center gap-2">
@@ -1343,7 +1343,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                 </div>
 
                 {/* Right Section: Customer Info (Razón Social en una sola línea), Payment & Big Totals */}
-                <div className={`${billingViewMode === 'split' ? 'space-y-5 pt-4 border-t border-slate-200' : 'xl:col-span-5 space-y-5 bg-slate-50/70 p-4 sm:p-6 rounded-3xl border border-slate-200'}`}>
+                <div className={`${billingViewMode === 'split' ? 'space-y-5 pt-4 border-t border-slate-200' : '2xl:col-span-5 space-y-5 bg-slate-50/70 p-4 sm:p-6 rounded-3xl border border-slate-200 min-w-0'}`}>
                   
                   {/* Customer Information (Razón Social en una sola línea) */}
                   <div className="space-y-3.5">
