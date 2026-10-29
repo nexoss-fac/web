@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 
 export interface ScannedFiscalDocument {
   documentType: string; title: string; category: string; issuer: string;
-  documentNumber: string; ownerName: string; taxId: string; issueDate: string;
+  documentNumber: string; ownerName: string; taxId: string; fiscalAddress: string; issueDate: string;
   expiresAt: string; area: string; suggestedRequirement: string;
   confidence: 'alta' | 'media' | 'baja'; notes: string;
 }
@@ -28,7 +28,7 @@ export async function scanFiscalDocument(imageBase64: string): Promise<ScannedFi
     'Extrae solo información claramente visible. No inventes datos: usa cadenas vacías si no se pueden leer.',
     'Clasifica el documento y sugiere el lugar lógico para archivarlo. Devuelve ÚNICAMENTE JSON válido con esta forma:',
     '{"documentType":"RIF|Registro mercantil|Solvencia|Permiso nacional|Declaración|Comprobante de pago|Otro","title":"nombre descriptivo, incluyendo número si es legible","category":"una de esas categorías","issuer":"organismo o emisor","documentNumber":"número de documento/control/registro","ownerName":"nombre o razón social titular","taxId":"RIF o cédula visible","issueDate":"YYYY-MM-DD o cadena vacía","expiresAt":"YYYY-MM-DD o cadena vacía","area":"Tributos nacionales|Municipal (SIGAT / Alcaldía)|Bomberos y seguridad|Laboral y parafiscal|Legal y mercantil|Sanidad y manipulación de alimentos|cadena vacía","suggestedRequirement":"obligación relacionada si se identifica","confidence":"alta|media|baja","notes":"otros datos legibles importantes"}',
-    'Distingue fecha de emisión de vencimiento; si no indica vencimiento, expiresAt vacío. No afirmar validez o autenticidad. No adivinar titular ni número.',
+    'Si el documento es un RIF, prioriza extraer razón social, RIF y dirección fiscal completa. La dirección fiscal debe copiarse fielmente, incluyendo calle, local, edificio, urbanización, ciudad y estado cuando sean visibles. Distingue fecha de emisión de vencimiento; si no indica vencimiento, expiresAt vacío. No afirmar validez o autenticidad. No adivinar titular, dirección ni número.',
   ].join('\n');
   const response = await ai.models.generateContent({
     model: 'gemini-3.8-flash',
@@ -47,7 +47,7 @@ export async function scanFiscalDocument(imageBase64: string): Promise<ScannedFi
   return {
     documentType: value('documentType') || 'Otro', title: value('title') || value('documentType') || 'Documento identificado',
     category: allowedCategories.includes(category) ? category : 'Otro', issuer: value('issuer'),
-    documentNumber: value('documentNumber'), ownerName: value('ownerName'), taxId: value('taxId'),
+    documentNumber: value('documentNumber'), ownerName: value('ownerName'), taxId: value('taxId'), fiscalAddress: value('fiscalAddress'),
     issueDate: date('issueDate'), expiresAt: date('expiresAt'),
     area: allowedAreas.includes(value('area')) ? value('area') : '',
     suggestedRequirement: value('suggestedRequirement'),
