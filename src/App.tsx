@@ -17,6 +17,7 @@ import { HealthWorkspace } from './components/health/HealthWorkspace';
 // Lazy load view components for maximum initial load performance and lightweight bundle
 const PointOfSale = lazy(() => import('./components/pos/PointOfSale').then((m) => ({ default: m.PointOfSale })));
 const InventoryManager = lazy(() => import('./components/inventory/InventoryManager').then((m) => ({ default: m.InventoryManager })));
+const ProductionManager = lazy(() => import('./components/production/ProductionManager').then((m) => ({ default: m.ProductionManager })));
 const InventoryMovementReport = lazy(() => import('./components/reports/InventoryMovementReport').then((m) => ({ default: m.InventoryMovementReport })));
 import { SalesReports } from './components/reports/SalesReports';
 const CashClosure = lazy(() => import('./components/cash/CashClosure').then((m) => ({ default: m.CashClosure })));
@@ -119,6 +120,7 @@ function AppContent() {
           <Suspense fallback={<ViewFallback />}>
             {activeTab === 'pos' && <PointOfSale key={activeCompanyId} industryTemplate={companyIndustry} onNavigateToLayaways={userRole === 'admin' ? () => setActiveTab('layaways') : undefined} />}
             {activeTab === 'inventory' && <InventoryManager />}
+            {activeTab === 'production' && isCompanyAdmin && <ProductionManager key={activeCompanyId} />}
             {activeTab === 'inventoryReport' && <InventoryMovementReport />}
             {activeTab === 'layaways' && <LayawaysManager />}
                     {activeTab === 'reports' && <SalesReports />}
