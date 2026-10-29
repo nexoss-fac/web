@@ -158,7 +158,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo guardar la carpeta fiscal.');
       setBoard({ ...emptyBoard, ...data });
-      setNotice('Cambios guardados en el expediente de esta empresa.');
+      setNotice(typeof data.compressionMessage === 'string' ? data.compressionMessage : 'Cambios guardados en el expediente de esta empresa.');
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo guardar la carpeta fiscal.');
