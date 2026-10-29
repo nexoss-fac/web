@@ -282,6 +282,42 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     };
   }
 
+  async recoverCompanyOwner(companyId: string, identity: { uid: string; email?: string; emailVerified?: boolean; displayName?: string }): Promise<'ok' | 'company_missing' | 'email_mismatch' | 'identity_missing'> {
+    if (!identity.uid || !identity.email || identity.emailVerified !== true) return 'identity_missing';
+    const email = identity.email.trim().toLowerCase();
+    return this.transaction(async (client) => {
+      const company = await client.query<{ id: string; email: string | null }>(
+        `SELECT id, email FROM platform_companies WHERE id = $1 FOR UPDATE`,
+        [companyId],
+      );
+      if (!company.rows[0]) return 'company_missing';
+      if ((company.rows[0].email || '').trim().toLowerCase() !== email) return 'email_mismatch';
+
+      const ownerId = await this.ensureUser(client, { uid: identity.uid, email, displayName: identity.displayName });
+      const existing = await client.query<{ role: string; status: string }>(
+        `SELECT role, status FROM company_memberships WHERE company_id = $1 AND user_id = $2 FOR UPDATE`,
+        [companyId, ownerId],
+      );
+      if (existing.rows[0]?.role === 'owner' && existing.rows[0]?.status === 'active') return 'ok';
+
+      await client.query(
+        `UPDATE company_memberships
+         SET role = 'admin', updated_at = NOW()
+         WHERE company_id = $1 AND role = 'owner' AND status = 'active' AND user_id <> $2`,
+        [companyId, ownerId],
+      );
+      await client.query(
+        `INSERT INTO company_memberships (company_id, user_id, role, status)
+         VALUES ($1, $2, 'owner', 'active')
+         ON CONFLICT (company_id, user_id)
+         DO UPDATE SET role = 'owner', status = 'active', updated_at = NOW()`,
+        [companyId, ownerId],
+      );
+      await this.audit(client, identity.uid, 'platform.company.owner_recovered', companyId, { verifiedEmail: email });
+      return 'ok';
+    });
+  }
+
   async listForIdentity(identity: { uid: string; email?: string; emailVerified?: boolean }): Promise<CompanyListResult> {
     const client = await this.pool.connect();
     try {
