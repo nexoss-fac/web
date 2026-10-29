@@ -87,6 +87,30 @@ export function getWeekendMondayEffectiveDate(): {
   };
 }
 
+function normalizeOfficialDate(value: unknown): string {
+  const raw = String(value ?? '').trim();
+  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (iso) return iso[1];
+  const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  const parsed = new Date(raw);
+  if (Number.isFinite(parsed.getTime())) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(parsed);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  }
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
+function normalizeRate(value: unknown): number {
+  const rate = typeof value === 'number' ? value : Number(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(rate) && rate > 0 ? Number(rate.toFixed(4)) : 0;
+}
+
 export async function fetchLiveBcvRate(): Promise<{
   rate: number;
   officialDate: string;
@@ -96,87 +120,63 @@ export async function fetchLiveBcvRate(): Promise<{
   currentDayName?: string;
   cycleRuleDescription?: string;
 }> {
-  // La tasa del BCV es una consulta pública de solo lectura (no envía datos de la empresa), por eso tiene
-  // su propio interruptor: VITE_NEXOSS_ALLOW_BCV=true la permite aunque el modo local aislado siga activo.
-  if (import.meta.env.VITE_NEXOSS_LOCAL_ONLY === 'true' && import.meta.env.VITE_NEXOSS_ALLOW_BCV !== 'true') {
-    throw new Error('Las consultas externas están desactivadas en el modo local aislado. Para permitir solo la tasa del BCV, agrega VITE_NEXOSS_ALLOW_BCV=true al archivo .env y reinicia.');
-  }
-  const { isWeekend, dayName, mondayFormatted, cycleRuleDescription } = getWeekendMondayEffectiveDate();
+  // Esta consulta es pública y de solo lectura. Se habilita en el modo local:
+  // no transmite información de clientes, ventas ni datos de la empresa.
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 8000);
+  let primaryError: unknown;
 
   try {
     const response = await fetch(BCV_API_PRIMARY, {
       signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-      },
+      headers: { Accept: 'application/json' },
       cache: 'no-store',
     });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status} from BCV API`);
-    }
-
-    const data: BcvApiResponse = await response.json();
-
-    if (!data || typeof data.promedio !== 'number' || data.promedio <= 0) {
-      throw new Error('Formato de tasa inválido devuelto por la API del BCV');
-    }
-
-    const rate = Number(data.promedio.toFixed(2));
-    const source = isWeekend
-      ? `BCV Oficial: Tasa del Lunes (${mondayFormatted}) válida para Viernes, Sábado y Domingo`
-      : 'Banco Central de Venezuela (vía DolarApi)';
-
+    if (!response.ok) throw new Error(`HTTP ${response.status} al consultar la tasa oficial`);
+    const data = await response.json() as BcvApiResponse;
+    const rate = normalizeRate(data?.promedio ?? data?.venta);
+    if (!rate) throw new Error('La fuente oficial devolvió una tasa vacía o inválida.');
     return {
       rate,
-      officialDate: data.fechaActualizacion || new Date().toISOString(),
-      source,
-      isWeekendRate: isWeekend,
-      effectiveMondayDate: isWeekend ? mondayFormatted : undefined,
-      currentDayName: dayName,
-      cycleRuleDescription,
+      officialDate: normalizeOfficialDate(data.fechaActualizacion),
+      source: 'BCV oficial (consulta de solo lectura vía DolarApi)',
+      isWeekendRate: false,
+      cycleRuleDescription: 'Se conserva la fecha de vigencia publicada por la fuente; no se inventa una fecha de lunes.',
     };
-  } catch (err: unknown) {
+  } catch (error) {
+    primaryError = error;
+  } finally {
     clearTimeout(timeoutId);
+  }
 
-    // Try fallback endpoint
-    try {
-      const fallbackResponse = await fetch(BCV_API_FALLBACK, {
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
-      });
-      if (fallbackResponse.ok) {
-        const list = await fallbackResponse.json();
-        const oficialItem = Array.isArray(list)
-          ? list.find((item: { fuente?: string }) => item.fuente === 'oficial') || list[0]
-          : null;
-
-        if (oficialItem && typeof oficialItem.promedio === 'number' && oficialItem.promedio > 0) {
-          const rate = Number(oficialItem.promedio.toFixed(2));
-          const source = isWeekend
-            ? `BCV Oficial: Tasa del Lunes (${mondayFormatted}) válida para Viernes, Sábado y Domingo (Respaldo)`
-            : 'Banco Central de Venezuela (vía DolarApi Respaldo)';
-
-          return {
-            rate,
-            officialDate: oficialItem.fechaActualizacion || new Date().toISOString(),
-            source,
-            isWeekendRate: isWeekend,
-            effectiveMondayDate: isWeekend ? mondayFormatted : undefined,
-            currentDayName: dayName,
-            cycleRuleDescription,
-          };
-        }
-      }
-    } catch {
-      // ignore fallback error and throw original
-    }
-
-    const errorMsg = err instanceof Error ? err.message : 'Error desconocido al conectar con API BCV';
-    throw new Error(errorMsg);
+  // Respaldo: solo se acepta el elemento identificado explícitamente como oficial.
+  const fallbackController = new AbortController();
+  const fallbackTimeout = setTimeout(() => fallbackController.abort(), 8000);
+  try {
+    const response = await fetch(BCV_API_FALLBACK, {
+      signal: fallbackController.signal,
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status} en la fuente de respaldo`);
+    const list = await response.json() as Array<BcvApiResponse & { fuente?: string; nombre?: string }>;
+    const oficialItem = Array.isArray(list)
+      ? list.find((item) => String(item.fuente || item.nombre || '').toLowerCase().includes('oficial'))
+      : null;
+    const rate = normalizeRate(oficialItem?.promedio ?? oficialItem?.venta);
+    if (!oficialItem || !rate) throw new Error('La fuente de respaldo no publicó una tasa oficial válida.');
+    return {
+      rate,
+      officialDate: normalizeOfficialDate(oficialItem.fechaActualizacion),
+      source: 'BCV oficial (fuente de respaldo vía DolarApi)',
+      isWeekendRate: false,
+      cycleRuleDescription: 'Se conserva la fecha de vigencia publicada por la fuente; no se inventa una fecha de lunes.',
+    };
+  } catch (fallbackError) {
+    const primaryMessage = primaryError instanceof Error ? primaryError.message : 'Fuente principal no disponible';
+    const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'Fuente de respaldo no disponible';
+    throw new Error(`No se pudo consultar la tasa oficial. Principal: ${primaryMessage}. Respaldo: ${fallbackMessage}`);
+  } finally {
+    clearTimeout(fallbackTimeout);
   }
 }
