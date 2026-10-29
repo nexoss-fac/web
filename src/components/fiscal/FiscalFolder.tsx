@@ -74,6 +74,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
   const [documentNumber, setDocumentNumber] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [taxId, setTaxId] = useState('');
+  const [fiscalAddress, setFiscalAddress] = useState('');
   const [issueDate, setIssueDate] = useState('');
   const [documentNotes, setDocumentNotes] = useState('');
   const [suggestedRequirement, setSuggestedRequirement] = useState('');
@@ -251,6 +252,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
       setDocumentNumber(doc.documentNumber || '');
       setOwnerName(doc.ownerName || '');
       setTaxId(doc.taxId || '');
+      setFiscalAddress(doc.fiscalAddress || '');
       setIssueDate(doc.issueDate || '');
       setExpiresAt(doc.expiresAt || '');
       setArea(FISCAL_AREAS.some((knownArea) => knownArea === doc.area) ? doc.area as FiscalArea : '');
@@ -297,6 +299,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
     setDocumentNumber('');
     setOwnerName('');
     setTaxId('');
+    setFiscalAddress('');
     setIssueDate('');
     setDocumentNotes('');
     setSuggestedRequirement(itemTitle);
@@ -325,6 +328,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
       ...(documentNumber ? { documentNumber } : {}),
       ...(ownerName ? { ownerName } : {}),
       ...(taxId ? { taxId } : {}),
+      ...(fiscalAddress ? { fiscalAddress } : {}),
       ...(issueDate ? { issueDate } : {}),
       ...(documentNotes ? { notes: documentNotes } : {}),
       ...(suggestedRequirement ? { suggestedRequirement } : {}),
@@ -346,6 +350,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
       setDocumentNumber('');
       setOwnerName('');
       setTaxId('');
+      setFiscalAddress('');
       setIssueDate('');
       setDocumentNotes('');
       setSuggestedRequirement('');
@@ -370,7 +375,16 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
   const removeDocument = async (documentId: string) => {
     const requirements = board.requirements.map((item) => item.evidenceDocumentId === documentId ? { ...item, evidenceDocumentId: '' } : item);
     const documents = board.documents.filter((item) => item.id !== documentId);
-    await saveBoard({ ...board, documents, requirements });
+    // El servidor valida que ningún punto de inspección apunte a un documento eliminado.
+    // Limpia también esas referencias para que eliminar el RIF no falle al guardar.
+    const inspection = board.inspection ? {
+      ...board.inspection,
+      entries: Object.fromEntries(Object.entries(board.inspection.entries).map(([id, entry]) => [
+        id,
+        { ...entry, documentIds: entry.documentIds.filter((linkedId) => linkedId !== documentId) },
+      ])),
+    } : undefined;
+    await saveBoard({ ...board, documents, requirements, ...(inspection ? { inspection } : {}) });
   };
 
   const createPublicLink = async () => {
@@ -517,6 +531,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
     <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Número del documento</span><input value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" /></label><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Fecha de emisión</span><input type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" /></label></div>
     <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Titular / razón social</span><input value={ownerName} onChange={(event) => setOwnerName(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" placeholder="Nombre o empresa titular" /></label>
     <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Cédula o RIF detectado</span><input value={taxId} onChange={(event) => setTaxId(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" placeholder="V-, E-, J-, G-…" /></label>
+     <label className="block space-y-1.5 sm:col-span-2"><span className="text-xs font-semibold text-slate-700">Dirección fiscal (extraída del RIF)</span><textarea value={fiscalAddress} onChange={(event) => setFiscalAddress(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" placeholder="Dirección fiscal completa como aparece en el documento" /></label>
         <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Organismo emisor</span><input value={issuer} onChange={(event) => setIssuer(event.target.value)} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" placeholder="Ej. SENIAT, IVSS…" /></label>
     <label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Observaciones extraídas</span><textarea value={documentNotes} onChange={(event) => setDocumentNotes(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs" placeholder="Datos legibles adicionales…" /></label>
     {suggestedRequirement && <p className="rounded-lg bg-slate-50 p-2 text-[10px] text-slate-600">Obligación sugerida: {suggestedRequirement}</p>}
