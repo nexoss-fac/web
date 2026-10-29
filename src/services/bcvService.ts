@@ -101,9 +101,7 @@ function normalizeOfficialDate(value: unknown): string {
     const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
     return `${values.year}-${values.month}-${values.day}`;
   }
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date());
+  throw new Error('La fuente no devolvió una fecha oficial reconocible; no se puede asignar una fecha por inferencia.');
 }
 
 function normalizeRate(value: unknown): number {
