@@ -30,6 +30,31 @@ export const PublicFiscalBoard: React.FC<{ companyId: string; token: string }> =
   const [filter, setFilter] = useState<'Todos' | 'Vigentes' | 'Por vencer' | 'Vencidos'>('Todos');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [selectedDocument, setSelectedDocument] = useState<FiscalBoardDocument | null>(null);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setPdfPreviewUrl('');
+    const dataUrl = selectedDocument?.fileData;
+    if (!dataUrl?.startsWith('data:application/pdf;base64,')) return;
+    // Use a Blob URL instead of a huge data URL in the iframe; this is more reliable for large PDFs.
+    fetch(dataUrl)
+      .then((response) => {
+        if (!response.ok) throw new Error('No se pudo preparar la vista previa del PDF.');
+        return response.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+        setPdfPreviewUrl(url);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) console.error('No se pudo preparar la vista previa del PDF:', cause);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDocument?.fileData]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -137,13 +162,15 @@ export const PublicFiscalBoard: React.FC<{ companyId: string; token: string }> =
         <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
           <div className="min-w-0"><h2 className="truncate text-sm font-extrabold text-slate-900">{selectedDocument.title}</h2><p className="truncate text-[11px] text-slate-500">{selectedDocument.fileName || 'Documento fiscal'}</p></div>
           <div className="flex shrink-0 items-center gap-2">
-            <a href={selectedDocument.fileData} download={selectedDocument.fileName || selectedDocument.title} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><ArrowDownToLine className="h-4 w-4" /><span className="hidden sm:inline">Descargar</span></a>
+            <a href={selectedDocument.fileData.startsWith('data:application/pdf;base64,') ? (pdfPreviewUrl || selectedDocument.fileData) : selectedDocument.fileData} download={selectedDocument.fileName || selectedDocument.title} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><ArrowDownToLine className="h-4 w-4" /><span className="hidden sm:inline">Descargar</span></a>
             <button type="button" onClick={() => setSelectedDocument(null)} aria-label="Cerrar vista previa" className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-100"><X className="h-4 w-4" /></button>
           </div>
         </header>
         <div className="min-h-0 flex-1 bg-slate-100">
           {selectedDocument.fileData.startsWith('data:application/pdf;base64,')
-            ? <iframe title={selectedDocument.title} src={selectedDocument.fileData} className="h-full w-full border-0 bg-white" />
+            ? (pdfPreviewUrl
+              ? <iframe title={selectedDocument.title} src={pdfPreviewUrl} className="h-full w-full border-0 bg-white" />
+              : <div className="flex h-full flex-col items-center justify-center gap-3 bg-white text-sm text-slate-600"><span className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" /><span>Preparando vista previa del PDF…</span><span className="text-xs text-slate-400">Si tarda demasiado, utiliza Descargar.</span></div>)
             : <div className="flex h-full items-center justify-center overflow-auto p-3 sm:p-6"><img src={selectedDocument.fileData} alt={selectedDocument.title} className="max-h-full max-w-full object-contain shadow-sm" /></div>}
         </div>
       </section>
