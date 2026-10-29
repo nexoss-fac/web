@@ -31,9 +31,9 @@ export async function scanFiscalDocument(imageBase64: string): Promise<ScannedFi
     'Distingue fecha de emisión de vencimiento; si no indica vencimiento, expiresAt vacío. No afirmar validez o autenticidad. No adivinar titular ni número.',
   ].join('\n');
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.8-flash',
     contents: { parts: [{ inlineData: { mimeType: parsedDocument.mimeType, data: parsedDocument.data } }, { text: prompt }] },
-    config: { responseMimeType: 'application/json', temperature: 0.1 },
+    config: { responseMimeType: 'application/json' },
   });
   const raw = (response.text || '').replace(/^\`\`\`json\s*/i, '').replace(/^\`\`\`\s*/i, '').replace(/\s*\`\`\`$/i, '').trim();
   let parsed: Record<string, unknown>;
