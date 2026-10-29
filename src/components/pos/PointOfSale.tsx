@@ -1344,21 +1344,37 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                       <span>Datos del Comprador / Facturación</span>
                     </div>
 
-                    {/* Razón Social / Nombre en UNA SOLA LÍNEA COMPLETA */}
-                    <div className="w-full">
-                      <label className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide block mb-1.5">
-                        Razón Social / Nombre del Cliente
-                      </label>
-                      <div className="relative">
-                        <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    {/* Nombre y apellido para mantener el directorio de clientes completo */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="min-w-0">
+                        <label className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide block mb-1.5">
+                          Nombre(s) / Razón social
+                        </label>
+                        <div className="relative">
+                          <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                          <input
+                            type="text"
+                            id="pos-customer-razon-social"
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                            onBlur={() => void saveCustomerContact()}
+                            placeholder="Nombre o razón social"
+                            className="w-full min-w-0 pl-10 pr-3.5 py-2.5 sm:py-3 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs"
+                          />
+                        </div>
+                      </div>
+                      <div className="min-w-0">
+                        <label className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide block mb-1.5">
+                          Apellido(s)
+                        </label>
                         <input
                           type="text"
-                          id="pos-customer-razon-social"
-                          value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
+                          id="pos-customer-apellido"
+                          value={customerLastName}
+                          onChange={(e) => setCustomerLastName(e.target.value)}
                           onBlur={() => void saveCustomerContact()}
-                          placeholder="Razón Social o Nombre Completo (ej. Inversiones Calzados C.A.)"
-                          className="w-full pl-10 pr-3.5 py-2.5 sm:py-3 bg-white border border-slate-300 rounded-xl text-sm sm:text-base font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs"
+                          placeholder="Apellido(s)"
+                          className="w-full min-w-0 px-3 py-2.5 sm:py-3 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs"
                         />
                       </div>
                     </div>
