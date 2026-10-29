@@ -24,9 +24,8 @@ export interface ScannedReceiptData {
 let aiClient: GoogleGenAI | null = null;
 
 function getGenAI(): GoogleGenAI | null {
-  // External AI requests are disabled in this local-only copy.
-  return null;
-  const key = process.env.GEMINI_API_KEY;
+  const key = process.env.GEMINI_API_KEY?.trim();
+  if (!key) return null;
   if (!aiClient) {
     aiClient = new GoogleGenAI({
       apiKey: key,
