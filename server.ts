@@ -222,6 +222,9 @@ export interface ServerStoreState {
   fiscalBoard?: FiscalBoardState;
   exchangeRate: number;
   historicalRates?: Record<string, number>;
+  productionRecipes?: any[];
+  productionOrders?: any[];
+  productionLots?: any[];
   adminPin: string;
   updatedAt: string;
 }
@@ -263,6 +266,9 @@ async function readServerStore(): Promise<ServerStoreState> {
         ...(data.fiscalBoard && typeof data.fiscalBoard === 'object' ? { fiscalBoard: data.fiscalBoard as FiscalBoardState } : {}),
         exchangeRate: typeof data.exchangeRate === 'number' ? data.exchangeRate : 0,
         historicalRates: (data.historicalRates && typeof data.historicalRates === 'object') ? data.historicalRates : {},
+        productionRecipes: Array.isArray(data.productionRecipes) ? data.productionRecipes : [],
+        productionOrders: Array.isArray(data.productionOrders) ? data.productionOrders : [],
+        productionLots: Array.isArray(data.productionLots) ? data.productionLots : [],
         adminPin: data.adminPin || '1234',
         updatedAt: data.updatedAt || new Date().toISOString(),
       };
@@ -282,6 +288,9 @@ async function readServerStore(): Promise<ServerStoreState> {
     accountingEntries: [],
     exchangeRate: 0,
     historicalRates: {},
+    productionRecipes: [],
+    productionOrders: [],
+    productionLots: [],
     adminPin: '1234',
     updatedAt: new Date().toISOString(),
   };
@@ -1842,6 +1851,9 @@ async function startServer() {
         current.movements = updates.movements;
       }
     }
+    if (Array.isArray(updates.productionRecipes)) current.productionRecipes = updates.productionRecipes;
+    if (Array.isArray(updates.productionOrders)) current.productionOrders = updates.productionOrders;
+    if (Array.isArray(updates.productionLots)) current.productionLots = updates.productionLots;
     if (Array.isArray(updates.accounts)) current.accounts = updates.accounts;
     if (Array.isArray(updates.cashClosures)) current.cashClosures = updates.cashClosures;
     if (Array.isArray(updates.expenses)) current.expenses = updates.expenses;
