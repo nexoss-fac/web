@@ -699,7 +699,7 @@ async function startServer() {
     }
     try {
       const state = PLATFORM_STORE.readState();
-      return res.json({ companies: state.companies.map((company) => ({ ...company, subscription: state.subscriptions.find((item) => item.companyId === company.id), memberships: state.memberships.filter((item) => item.companyId === company.id).length })), plans: state.plans, audit: state.audit.slice(-100).reverse() });
+      return res.json({ companies: state.companies.map((company) => { const memberships = state.memberships.filter((item) => item.companyId === company.id); const owner = memberships.find((item) => item.role === 'owner' && item.status === 'active'); const ownerUser = owner ? state.users.find((item) => item.id === owner.userId) : undefined; return { ...company, ownerEmail: ownerUser?.email || '', subscription: state.subscriptions.find((item) => item.companyId === company.id), memberships: memberships.length }; }), plans: state.plans, audit: state.audit.slice(-100).reverse() });
     } catch { return res.status(503).json({ error: 'Control de empresas no disponible.' }); }
   });
   app.post('/api/platform/admin/plans', requirePlatformAdmin, async (req, res) => {
