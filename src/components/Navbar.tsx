@@ -100,14 +100,14 @@ export const Sidebar: React.FC<{
       {/* Mobile Backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-slate-950/60 z-40 lg:hidden backdrop-blur-xs"
+          className="fixed inset-0 bg-slate-950/50 z-40 backdrop-blur-[2px]"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 max-w-[85vw] bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800 shadow-2xl transition-transform duration-200 ease-in-out ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -135,7 +135,7 @@ export const Sidebar: React.FC<{
 
           <button
             onClick={() => setMobileOpen(false)}
-            className="lg:hidden text-slate-400 hover:text-white p-1"
+            className="text-slate-400 hover:text-white p-1"
           >
             <X className="w-5 h-5" />
           </button>
@@ -363,7 +363,7 @@ export const Header: React.FC<{
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-2">
         <button
           onClick={onToggleMobile}
-          className="lg:hidden p-1.5 sm:p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 shrink-0"
+          className="p-1.5 sm:p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 shrink-0"
           title="Menú"
         >
           <Menu className="w-5 h-5" />
