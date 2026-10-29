@@ -98,6 +98,7 @@ export interface FiscalBoardDocument {
   documentNumber?: string;
   ownerName?: string;
   taxId?: string;
+  fiscalAddress?: string;
   issueDate?: string;
   notes?: string;
   suggestedRequirement?: string;
