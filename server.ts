@@ -43,7 +43,7 @@ import { analyzeReceiptImage } from './server/receiptAi.ts';
 import { scanFiscalDocument } from './server/fiscalDocumentAi.ts';
 import { compressFiscalPdfDataUrl } from './server/fiscalPdfCompression.ts';
 import { requireFirebaseAuth } from './server/auth/firebaseAuth.ts';
-import { LocalPlatformStore, acceptCompanyInvitation, createCompanyForVerifiedUser, createCompanyInvitation, findCompanyEmailMatches, getCompanyOnboardingMembership, hasActiveSubscription, isInvitationPending, normalizeInventoryCategories, platformAdminUids, type MembershipRole, type Plan } from './server/multiempresa/platformStore.ts';
+import { LocalPlatformStore, acceptCompanyInvitation, createCompanyForVerifiedUser, createCompanyInvitation, findCompanyEmailMatches, getCompanyOnboardingMembership, hasActiveSubscription, isInvitationPending, normalizeInventoryCategories, platformAdminUids, isPlatformAdmin, type MembershipRole, type Plan } from './server/multiempresa/platformStore.ts';
 import { createPostgresControlPlaneRepositoryFromEnvironment, type PostgresControlPlaneRepository } from './server/multiempresa/postgresControlPlaneRepository.ts';
 import { createCompanyAccessMiddleware, createPostgresCompanyAccessMiddleware, requireTenantRole, tenantStorageContext, type TenantAuthenticatedRequest } from './server/multiempresa/companyAccess.ts';
 import { LocalEnvironmentTenantSecretProvider } from './server/multiempresa/tenantSecretProvider.ts';
@@ -495,7 +495,7 @@ async function startServer() {
     if (usePostgresControlPlane()) {
       try {
         const result = await getPostgresControlPlane().listForIdentity(identity);
-        return res.json({ ...result, platformAdmin: platformAdminUids().has(identity.uid) });
+        return res.json({ ...result, platformAdmin: isPlatformAdmin(identity) });
       } catch {
         return res.status(503).json({ error: 'Control de empresas no disponible.' });
       }
@@ -527,7 +527,7 @@ async function startServer() {
         return company ? [{ id: invitation.id, companyId: company.id, companyName: company.tradeName || company.legalName, email: invitation.email, role: invitation.role, expiresAt: invitation.expiresAt }] : [];
       });
       const emailMatches = findCompanyEmailMatches(state, identity);
-      return res.json({ companies: rows, emailMatches, invitations, managedInvitations, platformAdmin: platformAdminUids().has(identity.uid) });
+      return res.json({ companies: rows, emailMatches, invitations, managedInvitations, platformAdmin: isPlatformAdmin(identity) });
     } catch {
       return res.status(503).json({ error: 'Control de empresas local no habilitado. Usa NEXOSS_MULTIEMPRESA_MODE=local-demo solo en desarrollo.' });
     }
@@ -686,7 +686,7 @@ async function startServer() {
 
   const requirePlatformAdmin = (req: any, res: any, next: any) => {
     const uid = req.firebaseIdentity?.uid;
-    if (!uid || !platformAdminUids().has(uid)) return res.status(403).json({ error: 'Se requiere una cuenta administradora de plataforma configurada fuera del navegador.' });
+    if (!uid || !isPlatformAdmin(req.firebaseIdentity)) return res.status(403).json({ error: 'Se requiere una cuenta administradora de plataforma configurada fuera del navegador.' });
     next();
   };
   app.get('/api/platform/admin/overview', requirePlatformAdmin, async (_req, res) => {
