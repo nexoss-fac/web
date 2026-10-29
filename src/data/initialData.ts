@@ -1,6 +1,6 @@
 import { ShoeProduct, StockMovement, Sale, AccountBalance, Expense, BankMovement, CurrencyPurchase } from '../types';
 
-export const INITIAL_EXCHANGE_RATE = 68.50; // Tasa oficial BCV Bs/USD referencial
+export const INITIAL_EXCHANGE_RATE = 0; // Sin tasa vigente confirmada: esperar consulta oficial
 
 // Catálogo inicial con el calzado de referencia de estudio Adidas Adizero PureHustle
 export const INITIAL_PRODUCTS: ShoeProduct[] = [
