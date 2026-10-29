@@ -115,7 +115,7 @@ export const ProductionManager: React.FC = () => {
       ? ((Math.max(0, outputProduct.stock) * (Number(outputProduct.costo) || 0)) + (actualOutput * productionUnitCost)) / combinedStock
       : productionUnitCost;
     adjustStock(outputProduct.id, actualOutput, `Producción terminada lote ${order.batchCode}`, 'entrada');
-    updateProduct(outputProduct.id, { costo: Number(weightedUnitCost.toFixed(6)) });
+    updateProduct(outputProduct.id, { stock: combinedStock, costo: Number(weightedUnitCost.toFixed(6)) });
     const lot: ProductionLot = { id: crypto.randomUUID(), batchCode: order.batchCode, recipeId: recipe.id, finishedProductId: outputProduct.id, producedQuantity: actualOutput, producedAt: new Date().toISOString(), expiryDate: order.expiryDate, consumed: requirements.map(r => ({ productId: r.materialId, productName: r.product!.nombre, quantity: r.required })), orderId: order.id, totalCostUsd: totalProductionCost, unitCostUsd: productionUnitCost } as ProductionLot;
     const completed = { ...order, status: 'completed' as const, completedAt: new Date().toISOString(), actualOutput };
     try {
