@@ -2607,13 +2607,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (Array.isArray(data.movements)) setMovements(data.movements);
       if (Array.isArray(data.layaways)) setLayaways(data.layaways);
       if (Array.isArray(data.accounts)) setAccounts(data.accounts);
-      if (Array.isArray(data.cashClosures)) setCashClosures(data.cashClosures);
+      if (Array.isArray(data.cashClosures)) setCashClosures(normalizeCashClosures(data.cashClosures));
       if (Array.isArray(data.expenses)) setExpenses(data.expenses);
       addNotification('Respaldo Restaurado', 'Se han importado los datos del archivo correctamente.', 'success');
     } catch {
       addNotification('Error al importar', 'El archivo no tiene el formato JSON válido.', 'critical');
     }
-  }, [addNotification]);
+  }, [addNotification, normalizeCashClosures]);
 
   const restoreFromBackup = useCallback(() => {
     syncFromServer(false);
