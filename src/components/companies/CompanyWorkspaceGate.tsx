@@ -147,6 +147,27 @@ export const CompanyWorkspaceGate: React.FC<Props> = ({ user, loading, onTenantS
 
 
 
+  const recoverCompanyAccess = async (company: EmailCompanyMatch) => {
+    if (!window.confirm('¿Recuperar el acceso a ' + (company.tradeName || company.legalName) + ' para ' + (user?.email || 'esta cuenta') + '? Solo se hará si el correo verificado coincide con el correo empresarial registrado. El propietario anterior quedará como administrador y no se eliminarán datos.')) return;
+    setBusy(true); setError('');
+    try {
+      const response = await fetch('/api/platform/companies/' + company.id + '/recover-owner', {
+        method: 'POST',
+        headers,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo recuperar el acceso.');
+      const rows = await loadCompanies();
+      const recovered = rows.find((item) => item.id === company.id);
+      if (recovered) await selectCompany(recovered);
+      else setError('Acceso recuperado, pero la empresa no apareció en la lista. Recarga la página para verificar.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo recuperar el acceso.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const acceptInvitation = async (invitation: Invitation) => {
 
     setBusy(true); setError('');
@@ -468,7 +489,7 @@ onTenantSelected(company.id, company.role);
           <h1 className="text-2xl font-bold">Tus empresas</h1><p className="mt-2 text-sm text-slate-400">Cada espacio tiene miembros, plan y datos independientes.</p>
 
           <div className="mt-5 grid gap-3">{companies.map((company) => <button key={company.id} onClick={() => void selectCompany(company)} className="flex items-center justify-between gap-4 rounded-xl border border-slate-700 p-4 text-left hover:border-emerald-500"><span><strong className="block">{company.tradeName || company.legalName}</strong><small className="text-slate-400">{company.role} · {company.status === 'onboarding' ? 'Configuración pendiente' : `${company.subscription?.plan || 'Plan'} · vence ${company.subscription?.currentPeriodEnd ? new Date(company.subscription.currentPeriodEnd).toLocaleDateString() : '—'}`}</small></span><span className="text-emerald-400">{company.status === 'onboarding' ? 'Continuar →' : 'Entrar →'}</span></button>)}</div>
-          {emailMatches.length > 0 && <section className="mt-5 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4"><h2 className="font-semibold text-amber-100">Empresas registradas con tu correo verificado</h2><p className="mt-1 text-xs text-slate-300">Estas empresas están asociadas a otra identidad de Firebase. No se otorgó acceso; inicia sesión con la cuenta original o pide a un administrador que invite este correo.</p><div className="mt-3 grid gap-2">{emailMatches.map((company) => <div key={company.id} className="rounded-lg border border-slate-700 bg-slate-950 p-3"><strong className="block text-sm text-white">{company.tradeName || company.legalName}</strong><span className="text-xs text-slate-400">{company.status === 'onboarding' ? 'Configuración pendiente' : 'Empresa registrada'}</span></div>)}</div></section>}
+          {emailMatches.length > 0 && <section className="mt-5 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4"><h2 className="font-semibold text-amber-100">Empresas registradas con tu correo verificado</h2><p className="mt-1 text-xs text-slate-300">Estas empresas tienen registrado tu correo verificado, pero están vinculadas a otra identidad de Firebase. Puedes recuperar la propiedad sin crear otra empresa ni borrar sus datos.</p><div className="mt-3 grid gap-2">{emailMatches.map((company) => <div key={company.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-950 p-3"><span><strong className="block text-sm text-white">{company.tradeName || company.legalName}</strong><span className="text-xs text-slate-400">{company.status === 'onboarding' ? 'Configuración pendiente' : 'Empresa registrada'}</span></span><button type="button" disabled={busy} onClick={() => void recoverCompanyAccess(company)} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Recuperar acceso</button></div>)}</div></section>}
 
           {linkedInvitation && <section className="mt-5 rounded-xl border border-emerald-400/50 bg-emerald-500/10 p-4"><h2 className="font-semibold">Invitación a {linkedInvitation.companyName}</h2><p className="mt-1 text-sm text-slate-300">Rol asignado: <strong>{linkedInvitation.role}</strong>. Al aceptar entrarás directamente a esta empresa.</p><button disabled={busy} onClick={() => void acceptInvitation(linkedInvitation)} className="mt-3 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">Aceptar y entrar</button></section>}
           {invitations.length > 0 && <section className="mt-5 rounded-xl border border-emerald-500/30 p-4"><h2 className="font-semibold">Invitaciones recibidas</h2><div className="mt-3 grid gap-2">{invitations.map((invitation) => <div key={invitation.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-950 p-3"><span className="text-sm">{invitation.companyName} · {invitation.role}<small className="block text-slate-400">Vence {new Date(invitation.expiresAt).toLocaleDateString()}</small></span><button disabled={busy} onClick={() => void acceptInvitation(invitation)} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold disabled:opacity-50">Aceptar</button></div>)}</div></section>}
