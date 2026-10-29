@@ -210,8 +210,16 @@ export function platformAdminUids(): Set<string> {
 
 export function isPlatformAdmin(identity: { uid?: string; email?: string; emailVerified?: boolean } | null | undefined): boolean {
   if (!identity?.uid) return false;
-  if (platformAdminUids().has(identity.uid)) return true;
-  if (identity.emailVerified !== true || !identity.email) return false;
+
+  // When an email allowlist is configured, it takes precedence over legacy UID
+  // entries so a former platform administrator cannot retain access by UID alone.
   const allowedEmails = new Set((process.env.NEXOSS_PLATFORM_ADMIN_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean));
-  return allowedEmails.has(identity.email.trim().toLowerCase());
+  if (allowedEmails.size > 0) {
+    return identity.emailVerified === true
+      && Boolean(identity.email)
+      && allowedEmails.has(identity.email!.trim().toLowerCase());
+  }
+
+  // Backward compatibility for deployments that have not configured an email allowlist.
+  return platformAdminUids().has(identity.uid);
 }
