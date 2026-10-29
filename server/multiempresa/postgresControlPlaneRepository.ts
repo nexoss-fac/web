@@ -605,7 +605,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     });
   }
 
-  async createInvitation(companyId: string, email: string, role: Exclude<MembershipRole, 'owner'>, identity: { uid: string }): Promise<{ id: string; expiresAt: string } | null> {
+  async createInvitation(companyId: string, email: string, role: Exclude<MembershipRole, 'owner'>, identity: { uid: string }): Promise<{ id: string; expiresAt: string } | { error: string } | null> {
     return this.transaction(async (client) => {
       const authorized = await client.query(
         `SELECT u.id AS user_id, p.max_users
@@ -634,14 +634,14 @@ export class PostgresControlPlaneRepository implements TenantRepository {
          )::text AS count`,
         [companyId],
       );
-      if (Number(count.rows[0].count) >= Number(owner.max_users)) return null;
+      if (Number(count.rows[0].count) >= Number(owner.max_users)) return { error: `El plan permite hasta ${owner.max_users} usuarios. Hay ${count.rows[0].count} usuarios activos o invitaciones pendientes; retira una invitación o amplía el plan.` };
       const existingMember = await client.query(
         `SELECT 1 FROM platform_users u
          JOIN company_memberships m ON m.user_id = u.id AND m.company_id = $2 AND m.status = 'active'
          WHERE lower(u.email) = lower($1) LIMIT 1`,
         [email, companyId],
       );
-      if (existingMember.rows[0]) return null;
+      if (existingMember.rows[0]) return { error: 'Ese correo ya pertenece a un miembro activo de esta empresa.' };
       const id = randomUUID();
       const result = await client.query<{ expires_at: Date }>(
         `INSERT INTO company_invitations (id, company_id, email, role, invited_by_user_id, status, expires_at)
@@ -650,7 +650,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
          RETURNING expires_at`,
         [id, companyId, email, role, owner.user_id],
       );
-      if (!result.rows[0]) return null;
+      if (!result.rows[0]) return { error: 'Ya existe una invitación pendiente para ese correo en esta empresa.' };
       await this.audit(client, identity.uid, 'membership.invited', companyId, { role });
       return { id, expiresAt: new Date(result.rows[0].expires_at).toISOString() };
     });
