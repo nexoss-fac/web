@@ -812,6 +812,42 @@ async function startServer() {
     } catch { return res.status(503).json({ error: 'No se pudo actualizar la cuenta.' }); }
   });
 
+  app.post('/api/platform/admin/companies/:companyId/transfer-owner', requirePlatformAdmin, async (req, res) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({ error: 'Introduce un correo válido.' });
+    const actorUid = (req as any).firebaseIdentity.uid;
+    if (usePostgresControlPlane()) {
+      try {
+        const result = await getPostgresControlPlane().transferCompanyOwnership(req.params.companyId, email, actorUid);
+        if (result === 'ok') return res.json({ success: true });
+        if (result === 'target_missing') return res.status(404).json({ error: 'Ese correo todavía no tiene una cuenta NEXOSS verificada. Pídele que inicie sesión y vuelva a intentarlo.' });
+        if (result === 'already_owner') return res.status(409).json({ error: 'Ese correo ya es el propietario de esta empresa.' });
+        return res.status(404).json({ error: 'Empresa no encontrada.' });
+      } catch (error) {
+        logger.error('No se pudo transferir la propiedad de la empresa:', error);
+        return res.status(503).json({ error: 'No se pudo transferir la propiedad.' });
+      }
+    }
+    try {
+      const result = PLATFORM_STORE.update((state) => {
+        const company = state.companies.find((item) => item.id === req.params.companyId);
+        const target = state.users.find((item) => item.email.trim().toLowerCase() === email);
+        if (!company || !target) return 'missing';
+        const current = state.memberships.find((item) => item.companyId === company.id && item.role === 'owner' && item.status === 'active');
+        if (current?.userId === target.id) return 'already_owner';
+        if (current) current.role = 'admin';
+        const existing = state.memberships.find((item) => item.companyId === company.id && item.userId === target.id);
+        if (existing) { existing.role = 'owner'; existing.status = 'active'; }
+        else state.memberships.push({ companyId: company.id, userId: target.id, role: 'owner', status: 'active', createdAt: new Date().toISOString() });
+        state.audit.push({ id: randomUUID(), actorUid, companyId: company.id, action: 'platform.company.owner_transferred', createdAt: new Date().toISOString(), metadata: { targetEmail: email } });
+        return 'ok';
+      });
+      if (result === 'ok') return res.json({ success: true });
+      if (result === 'already_owner') return res.status(409).json({ error: 'Ese correo ya es el propietario de esta empresa.' });
+      return res.status(404).json({ error: 'Empresa o usuario no encontrado. El nuevo propietario debe iniciar sesión en NEXOSS primero.' });
+    } catch { return res.status(503).json({ error: 'No se pudo transferir la propiedad.' }); }
+  });
+
   app.put('/api/platform/admin/companies/:companyId/database', requirePlatformAdmin, async (req, res) => {
     if (!usePostgresControlPlane()) return res.status(409).json({ error: 'Activa el almacenamiento PostgreSQL del control de empresas antes de enlazar bases Neon.' });
     const secretReference = typeof req.body?.secretReference === 'string' ? req.body.secretReference.trim() : '';
