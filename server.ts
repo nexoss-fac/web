@@ -1360,12 +1360,7 @@ async function startServer() {
       if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
       const board = await readTenantFiscalBoard();
       const { publicTokenHash, ...visibleBoard } = board;
-      const compressionMessage = compressedCount
-        ? `PDF comprimido antes de guardar: ${compressedCount} archivo(s), ${(originalPdfBytes / (1024 * 1024)).toFixed(1)} MB → ${(storedPdfBytes / (1024 * 1024)).toFixed(1)} MB.`
-        : skippedCompressionCount
-          ? 'Los PDF se guardaron sin compresión: el compresor Ghostscript no está instalado o el archivo está firmado, no se pudo comprimir de forma segura o el resultado no era más pequeño.'
-          : '';
-      return res.json({ ...visibleBoard, publicLinkEnabled: Boolean(publicTokenHash), ...(compressionMessage ? { compressionMessage } : {}) });
+      return res.json({ ...visibleBoard, publicLinkEnabled: Boolean(publicTokenHash) });
     } catch (error) {
       logger.error('Error leyendo la carpeta fiscal:', error);
       return res.status(503).json({ error: 'No se pudo leer la carpeta fiscal.' });
@@ -1422,7 +1417,12 @@ async function startServer() {
       };
       await writeTenantFiscalBoard(nextBoard);
       const { publicTokenHash, ...visibleBoard } = nextBoard;
-      return res.json({ ...visibleBoard, publicLinkEnabled: Boolean(publicTokenHash) });
+      const compressionMessage = compressedCount
+        ? `PDF comprimido antes de guardar: ${compressedCount} archivo(s), ${(originalPdfBytes / (1024 * 1024)).toFixed(1)} MB → ${(storedPdfBytes / (1024 * 1024)).toFixed(1)} MB.`
+        : skippedCompressionCount
+          ? 'Los PDF se guardaron sin compresión: el compresor Ghostscript no está instalado o el archivo está firmado, no se pudo comprimir de forma segura o el resultado no era más pequeño.'
+          : '';
+      return res.json({ ...visibleBoard, publicLinkEnabled: Boolean(publicTokenHash), ...(compressionMessage ? { compressionMessage } : {}) });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo guardar la carpeta fiscal.';
       logger.error('Error guardando la carpeta fiscal:', error);
