@@ -1289,7 +1289,9 @@ async function startServer() {
     if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
     const imageBase64 = typeof req.body?.imageBase64 === 'string' ? req.body.imageBase64 : '';
     if (!imageBase64) return res.status(400).json({ error: 'Adjunta una fotografía del documento.' });
-    if (imageBase64.length > 12 * 1024 * 1024) return res.status(413).json({ error: 'La fotografía supera el tamaño permitido. Usa una imagen de hasta 8 MB.' });
+    // Los PDF de hasta 17 MB se expanden al codificarse en Base64; dejamos margen
+    // bajo el límite de express.json (25 MB) para el cuerpo completo de la petición.
+    if (imageBase64.length > 23 * 1024 * 1024) return res.status(413).json({ error: 'El documento supera el tamaño permitido. Usa un PDF o archivo original de hasta 17 MB.' });
     try {
       const result = await scanFiscalDocument(imageBase64);
       return res.json({ success: true, document: result, requiresReview: true });
