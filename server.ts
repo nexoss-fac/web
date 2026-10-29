@@ -489,6 +489,26 @@ async function startServer() {
     } catch { return res.status(503).json({ error: 'No se pudieron procesar las invitaciones.' }); }
   });
 
+  app.post('/api/platform/companies/:companyId/recover-owner', async (req, res) => {
+    const identity = (req as any).firebaseIdentity;
+    if (!identity?.uid || !identity.email || identity.emailVerified !== true) {
+      return res.status(403).json({ error: 'Inicia sesión con el correo empresarial verificado para recuperar el acceso.' });
+    }
+    if (!usePostgresControlPlane()) {
+      return res.status(503).json({ error: 'La recuperación segura de propietario requiere el control empresarial de PostgreSQL.' });
+    }
+    try {
+      const result = await getPostgresControlPlane().recoverCompanyOwner(req.params.companyId, identity);
+      if (result === 'ok') return res.json({ success: true });
+      if (result === 'email_mismatch') return res.status(403).json({ error: 'El correo verificado no coincide con el correo registrado de esta empresa. No se cambió ningún acceso.' });
+      if (result === 'identity_missing') return res.status(403).json({ error: 'No se pudo verificar la identidad y el correo de la sesión.' });
+      return res.status(404).json({ error: 'No se encontró la empresa indicada.' });
+    } catch (error) {
+      logger.error('No se pudo recuperar el propietario de la empresa:', error);
+      return res.status(503).json({ error: 'No se pudo recuperar el acceso. No se modificó la empresa; intenta de nuevo más tarde.' });
+    }
+  });
+
   app.get('/api/platform/companies', async (req, res) => {
     const identity = (req as any).firebaseIdentity;
     if (!identity?.uid) return res.status(401).json({ error: 'Se requiere identidad verificada.' });
