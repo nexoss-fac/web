@@ -790,6 +790,39 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     }
   }
 
+  async transferCompanyOwnership(companyId: string, targetEmail: string, actorUid: string): Promise<'ok' | 'company_missing' | 'target_missing' | 'already_owner'> {
+    const email = targetEmail.trim().toLowerCase();
+    return this.transaction(async (client) => {
+      const company = await client.query(`SELECT id FROM platform_companies WHERE id = $1 FOR UPDATE`, [companyId]);
+      if (!company.rows[0]) return 'company_missing';
+      const target = await client.query(
+        `SELECT id FROM platform_users WHERE auth_provider = 'firebase' AND lower(email) = $1 LIMIT 1 FOR UPDATE`,
+        [email],
+      );
+      if (!target.rows[0]) return 'target_missing';
+      const current = await client.query(
+        `SELECT user_id FROM company_memberships WHERE company_id = $1 AND role = 'owner' AND status = 'active' LIMIT 1 FOR UPDATE`,
+        [companyId],
+      );
+      if (current.rows[0]?.user_id === target.rows[0].id) return 'already_owner';
+      if (current.rows[0]) {
+        await client.query(
+          `UPDATE company_memberships SET role = 'admin', updated_at = NOW()
+           WHERE company_id = $1 AND user_id = $2 AND role = 'owner' AND status = 'active'`,
+          [companyId, current.rows[0].user_id],
+        );
+      }
+      await client.query(
+        `INSERT INTO company_memberships (company_id, user_id, role, status)
+         VALUES ($1, $2, 'owner', 'active')
+         ON CONFLICT (company_id, user_id) DO UPDATE SET role = 'owner', status = 'active', updated_at = NOW()`,
+        [companyId, target.rows[0].id],
+      );
+      await this.audit(client, actorUid, 'platform.company.owner_transferred', companyId, { targetEmail: email });
+      return 'ok';
+    });
+  }
+
   async adminOverview(): Promise<{ companies: unknown[]; plans: Plan[]; audit: AuditEvent[] }> {
     const client = await this.pool.connect();
     try {
