@@ -1964,7 +1964,16 @@ async function startServer() {
     if (sql) {
       try {
         const rows = await sql`SELECT * FROM shoe_products ORDER BY nombre ASC`;
-        return res.json({ source: 'neon_postgres', data: normalizeProducts(rows as any[]) });
+        // Recupera clasificaciones originales guardadas en el estado del espacio de trabajo por versiones anteriores.
+        const workspace = await readServerStore();
+        const workspaceProducts = new Map((workspace.products || []).map((product: any) => [String(product.id), product]));
+        const normalized = normalizeProducts(rows as any[]).map((row: any) => {
+          const saved = workspaceProducts.get(String(row.id)) as any;
+          return saved?.clasificacion_inventario
+            ? { ...row, clasificacion_inventario: saved.clasificacion_inventario }
+            : { ...row, clasificacion_inventario: row.clasificacion_inventario || 'Mercancía' };
+        });
+        return res.json({ source: 'neon_postgres', data: normalized });
       } catch (err) {
         logger.error('Neon products fetch error, using local fallback:', err);
         if (process.env.NODE_ENV === 'production') return res.status(503).json({ error: 'No se pudieron cargar los productos de esta empresa desde Neon.' });
@@ -1993,12 +2002,12 @@ async function startServer() {
       try {
         await sql`
           INSERT INTO shoe_products (
-            id, nombre, marca, modelo, color, genero, categoria,
+            id, nombre, marca, modelo, color, genero, categoria, clasificacion_inventario,
             talla, sku, precio, costo, stock, stock_minimo, stock_maximo,
             imagen_url, ubicacion, descripcion, es_original
           ) VALUES (
             ${p.id}, ${p.nombre}, ${p.marca}, ${p.modelo || ''}, ${p.color || ''},
-            ${p.genero || 'Unisex'}, ${p.categoria || 'Casual'}, ${p.talla}, ${p.sku},
+            ${p.genero || 'Unisex'}, ${p.categoria || 'Casual'}, ${p.clasificacion_inventario || 'Mercancía'}, ${p.talla}, ${p.sku},
             ${p.precio}, ${p.costo}, ${p.stock}, ${p.stock_minimo || 3}, ${p.stock_maximo || 30},
             ${p.imagen_url || p.imagen || null}, ${p.ubicacion || 'Almacén'}, ${p.descripcion || ''},
             ${p.es_original !== false}
@@ -2010,6 +2019,7 @@ async function startServer() {
             color = EXCLUDED.color,
             genero = EXCLUDED.genero,
             categoria = EXCLUDED.categoria,
+            clasificacion_inventario = EXCLUDED.clasificacion_inventario,
             talla = EXCLUDED.talla,
             sku = EXCLUDED.sku,
             precio = EXCLUDED.precio,
@@ -2088,12 +2098,12 @@ async function startServer() {
         for (const p of products) {
           statements.push(sql`
             INSERT INTO shoe_products (
-              id, nombre, marca, modelo, color, genero, categoria,
+              id, nombre, marca, modelo, color, genero, categoria, clasificacion_inventario,
               talla, sku, precio, costo, stock, stock_minimo, stock_maximo,
               imagen_url, ubicacion, descripcion
             ) VALUES (
               ${p.id}, ${p.nombre}, ${p.marca}, ${p.modelo || ''}, ${p.color || ''},
-              ${p.genero || 'Unisex'}, ${p.categoria || 'Casual'}, ${p.talla}, ${p.sku},
+              ${p.genero || 'Unisex'}, ${p.categoria || 'Casual'}, ${p.clasificacion_inventario || 'Mercancía'}, ${p.talla}, ${p.sku},
               ${p.precio}, ${p.costo}, ${p.stock}, ${p.stock_minimo || 3}, ${p.stock_maximo || 30},
               ${p.imagen_url || p.imagen || null}, ${p.ubicacion || 'Almacén'}, ${p.descripcion || ''}
             )
@@ -2101,6 +2111,7 @@ async function startServer() {
               stock = EXCLUDED.stock,
               precio = EXCLUDED.precio,
               costo = EXCLUDED.costo,
+              clasificacion_inventario = EXCLUDED.clasificacion_inventario,
               nombre = EXCLUDED.nombre;
           `);
         }
