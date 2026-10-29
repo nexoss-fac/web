@@ -662,7 +662,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
               ? 'hidden'
               : billingViewMode === 'split'
               ? 'lg:col-span-7 order-2 lg:order-1'
-              : 'lg:col-span-4 xl:col-span-4 order-2 lg:order-1'
+              : 'lg:col-span-7 xl:col-span-7 order-2 lg:order-1'
           }`}
         >
           
@@ -762,11 +762,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
           </div>
 
           {/* Product Cards Grid */}
-          <div className={`grid min-w-0 gap-3 max-h-[660px] overflow-y-auto pr-1 ${
-            cart.length > 0 && billingViewMode === 'expanded'
-              ? 'grid-cols-1'
-              : 'grid-cols-1 sm:grid-cols-2'
-          }`}>
+          <div className={`grid min-w-0 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[min(72vh,900px)] overflow-y-auto overscroll-contain pr-1 pb-1`}>
             {filteredProducts.length === 0 ? (
               <div className="col-span-2 py-12 text-center bg-white rounded-xl border border-dashed border-slate-200 text-slate-500">
                 <p className="text-sm font-semibold text-slate-700">No se encontraron {industry.productLabel.toLowerCase()}s con esos criterios.</p>
@@ -782,7 +778,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                   <div
                     key={prod.id ? `pos-prod-${prod.id}-${idx}` : `pos-idx-${idx}`}
                     id={`pos-card-${prod.id || idx}`}
-                    className={`p-3.5 rounded-xl border bg-white transition-all shadow-xs flex flex-col justify-between ${
+                    className={`group min-w-0 p-3.5 sm:p-4 rounded-2xl border bg-white transition-all shadow-sm hover:shadow-md flex flex-col justify-between ${
                       isOutOfStock
                         ? 'border-slate-200 opacity-60'
                         : 'border-slate-200 hover:border-indigo-400 hover:shadow-sm'
@@ -790,7 +786,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                   >
                     <div>
                       {/* Card Image and Badges */}
-                      <div className="relative mb-2.5 rounded-lg overflow-hidden bg-slate-100 h-32 flex items-center justify-center border border-slate-200/60">
+                      <div className="relative mb-3 rounded-xl overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100 h-36 sm:h-40 flex items-center justify-center border border-slate-200/70">
                         {prod.imagen ? (
                           <img
                             src={prod.imagen}
@@ -886,7 +882,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
               ? 'col-span-12'
               : billingViewMode === 'split'
               ? 'lg:col-span-5 order-1 lg:order-2'
-              : 'lg:col-span-8 xl:col-span-8 order-1 lg:order-2'
+              : 'lg:col-span-5 xl:col-span-5 order-1 lg:order-2'
           }`}
         >
           {cart.length === 0 ? (
@@ -912,7 +908,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
             </div>
           ) : (
             /* Active Billing Workbench */
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm space-y-5">
+            <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-5 shadow-sm space-y-5 min-w-0">
               
               {/* Top Toolbar: Title, View Switcher & Action buttons */}
               <div className="flex flex-wrap items-center justify-between gap-2.5 pb-4 border-b border-slate-100">
@@ -990,6 +986,18 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                     </button>
                   </div>
 
+                  {billingViewMode !== 'fullscreen' && (
+                    <button
+                      type="button"
+                      onClick={() => { setBillingViewMode('fullscreen'); setMobileActiveView('billing'); }}
+                      className="text-xs sm:text-sm text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-2 rounded-xl font-black flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap shadow-sm"
+                      title="Continuar al paso de pago y facturación"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                      <span>Proceder al pago</span>
+                    </button>
+                  )}
+
                   {billingViewMode === 'fullscreen' && (
                     <button
                       type="button"
@@ -998,7 +1006,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                       title="Volver al catálogo para agregar más productos"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>+ Calzado</span>
+                      <span>Volver a productos</span>
                     </button>
                   )}
 
@@ -1344,37 +1352,21 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                       <span>Datos del Comprador / Facturación</span>
                     </div>
 
-                    {/* Nombre y apellido para mantener el directorio de clientes completo */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      <div className="min-w-0">
-                        <label className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide block mb-1.5">
-                          Nombre(s) / Razón social
-                        </label>
-                        <div className="relative">
-                          <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                          <input
-                            type="text"
-                            id="pos-customer-razon-social"
-                            value={customerName}
-                            onChange={(e) => setCustomerName(e.target.value)}
-                            onBlur={() => void saveCustomerContact()}
-                            placeholder="Nombre o razón social"
-                            className="w-full min-w-0 pl-10 pr-3.5 py-2.5 sm:py-3 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs"
-                          />
-                        </div>
-                      </div>
-                      <div className="min-w-0">
-                        <label className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide block mb-1.5">
-                          Apellido(s)
-                        </label>
+                    {/* Razón social o nombre completo en un solo campo */}
+                    <div className="w-full min-w-0">
+                      <label className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide block mb-1.5">
+                        Razón social / Nombre completo
+                      </label>
+                      <div className="relative">
+                        <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                         <input
                           type="text"
-                          id="pos-customer-apellido"
-                          value={customerLastName}
-                          onChange={(e) => setCustomerLastName(e.target.value)}
+                          id="pos-customer-razon-social"
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
                           onBlur={() => void saveCustomerContact()}
-                          placeholder="Apellido(s)"
-                          className="w-full min-w-0 px-3 py-2.5 sm:py-3 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs"
+                          placeholder="Nombre y apellido o razón social"
+                          className="w-full min-w-0 pl-10 pr-3.5 py-2.5 sm:py-3 bg-white border border-slate-300 rounded-xl text-sm sm:text-base font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs"
                         />
                       </div>
                     </div>
