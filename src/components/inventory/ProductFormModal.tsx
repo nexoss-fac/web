@@ -1227,15 +1227,15 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
             <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
               <span>Precios y Márgenes de Ganancia</span>
-              <span className={`text-[11px] font-bold ${margenGanancia >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {clasificacionInventario !== 'Materia prima' && clasificacionInventario !== 'Productos en proceso' && <span className={`text-[11px] font-bold ${margenGanancia >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 Margen: ${margenGanancia.toFixed(2)} ({margenPorcentaje.toFixed(1)}%)
-              </span>
+              </span>}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <div>
                 <label className="block text-slate-600 font-semibold mb-1">
-                  Costo de Compra (USD) *
+                  {clasificacionInventario === 'Materia prima' || clasificacionInventario === 'Productos en proceso' ? 'Costo unitario de adquisición (USD) *' : 'Costo de compra unitario (USD) *'}
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-slate-400 font-bold">$</span>
@@ -1249,11 +1249,12 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                     className="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-900 font-mono font-bold focus:outline-none focus:border-indigo-500"
                   />
                 </div>
+                {(clasificacionInventario === 'Materia prima' || clasificacionInventario === 'Productos en proceso') && <p className="mt-1 text-[11px] leading-snug text-slate-500">Costo por unidad de medida de compra. Se usará para calcular el costo de las recetas y del producto fabricado.</p>}
               </div>
 
               <div>
                 <label className="block text-slate-600 font-semibold mb-1">
-                  Precio de Venta PVP (USD) *
+                  {clasificacionInventario === 'Materia prima' || clasificacionInventario === 'Productos en proceso' ? 'Precio de venta (opcional)' : 'Precio de Venta PVP (USD) *'}
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-slate-400 font-bold">$</span>
@@ -1261,7 +1262,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                     type="number"
                     step="0.01"
                     min="0"
-                    required
+                    required={clasificacionInventario !== 'Materia prima' && clasificacionInventario !== 'Productos en proceso'}
                     value={precio}
                     onChange={(e) => setPrecio(e.target.value)}
                     className="w-full pl-7 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-900 font-mono font-bold focus:outline-none focus:border-indigo-500"
