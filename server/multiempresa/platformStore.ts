@@ -207,3 +207,11 @@ export function hasActiveSubscription(state: PlatformState, companyId: string, n
 export function platformAdminUids(): Set<string> {
   return new Set((process.env.NEXOSS_PLATFORM_ADMIN_UIDS || '').split(',').map((uid) => uid.trim()).filter(Boolean));
 }
+
+export function isPlatformAdmin(identity: { uid?: string; email?: string; emailVerified?: boolean } | null | undefined): boolean {
+  if (!identity?.uid) return false;
+  if (platformAdminUids().has(identity.uid)) return true;
+  if (identity.emailVerified !== true || !identity.email) return false;
+  const allowedEmails = new Set((process.env.NEXOSS_PLATFORM_ADMIN_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean));
+  return allowedEmails.has(identity.email.trim().toLowerCase());
+}
