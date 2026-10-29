@@ -28,6 +28,7 @@ import { buildInspectionItems, compactEntries } from '../../domain/fiscalInspect
 import { FiscalCalendarPanel } from './FiscalCalendarPanel';
 import { FiscalPortalsPanel } from './FiscalPortalsPanel';
 import { FiscalInspectionPanel } from './FiscalInspectionPanel';
+import { compressImageFile, formatFileSize } from '../../utils/imageCompressor';
 
 type Section = 'Resumen' | 'Documentos' | 'Documentos por subir' | 'Inspección' | 'Calendario' | 'Portales' | 'Requisitos' | 'Auditoría';
 type StatusFilter = 'Todos' | 'Vigente' | 'Por vencer' | 'Vencido' | 'En trámite';
@@ -188,17 +189,40 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
       setError('El adjunto debe ser un PDF, PNG o JPEG.');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Cada adjunto debe pesar 5 MB o menos.');
+    // El API recibe JSON en Base64 con límite de 25 MB. Limitamos el archivo
+    // original para dejar margen al sobrecoste de Base64 y al resto de metadatos.
+    const maxOriginalSize = 17 * 1024 * 1024;
+    if (file.size > maxOriginalSize) {
+      setError(`El archivo original pesa ${formatFileSize(file.size)}. El máximo para cargarlo es 17 MB; reduce el PDF o exporta las páginas como un PDF optimizado e inténtalo de nuevo.`);
       return;
     }
     try {
-      const dataUrl = await readFileDataUrl(file);
-      setFileName(file.name);
+      let dataUrl: string;
+      let savedName = file.name;
+      if (file.type.startsWith('image/')) {
+        // Comprimir la fotografía antes de guardarla, manteniendo resolución
+        // suficiente para leer documentos fiscales.
+        const compressed = await compressImageFile(file, {
+          maxDimension: 2200,
+          quality: 0.84,
+          maxSizeBytes: 3 * 1024 * 1024,
+          mimeType: 'image/jpeg',
+        });
+        dataUrl = compressed.dataUrl;
+        savedName = file.name.replace(/\.(png|jpe?g)$/i, '.jpg');
+        setNotice(`Imagen optimizada: ${formatFileSize(file.size)} → ${formatFileSize(compressed.compressedSize)}.`);
+      } else {
+        // Los PDF se conservan íntegros para no perder páginas, texto ni firmas.
+        dataUrl = await readFileDataUrl(file);
+        setNotice(file.size > 5 * 1024 * 1024
+          ? `PDF cargado sin alterar su contenido (${formatFileSize(file.size)}).`
+          : '');
+      }
+      setFileName(savedName);
       setFileData(dataUrl);
       setError('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudo leer el archivo seleccionado.');
+      setError(cause instanceof Error ? cause.message : 'No se pudo leer o comprimir el archivo seleccionado.');
     }
   };
 
@@ -475,7 +499,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
     <div className="flex items-start justify-between"><div><p className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Carpeta de {companyName}</p><h2 className="mt-1 text-lg font-black text-slate-900">{pendingInspectionItemId ? 'Subir documento de inspección' : 'Agregar documento'}</h2>{pendingInspectionItemId && <p className="mt-1 text-[11px] text-indigo-700">Se vinculará automáticamente al punto: {title}</p>}</div><button type="button" onClick={() => setShowForm(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Cerrar"><X className="h-5 w-5" /></button></div>
     <section className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3">
       <div className="flex items-center gap-2"><Camera className="h-5 w-5 text-indigo-700" /><div><h3 className="text-xs font-extrabold text-indigo-950">Fotografiar e identificar documento</h3><p className="mt-0.5 text-[10px] text-indigo-800">Toma una foto nítida. NEXOSS intentará identificar el documento y completar los campos.</p></div></div>
-      <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Subir documento (PDF o imagen)</span><input type="file" accept=".pdf,application/pdf,image/png,image/jpeg" onChange={(event) => { void chooseFile(event.target.files?.[0]); setScanSummary(''); event.currentTarget.value = ''; }} className="block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold" /><span className="block text-[10px] text-slate-500">PDF, PNG o JPEG · máximo 5 MB</span></label><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Tomar foto con la cámara</span><input type="file" accept="image/*" capture="environment" onChange={(event) => { void chooseFile(event.target.files?.[0]); setScanSummary(''); event.currentTarget.value = ''; }} className="block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold" /></label></div>
+      <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Subir documento (PDF o imagen)</span><input type="file" accept=".pdf,application/pdf,image/png,image/jpeg" onChange={(event) => { void chooseFile(event.target.files?.[0]); setScanSummary(''); event.currentTarget.value = ''; }} className="block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold" /><span className="block text-[10px] text-slate-500">PDF hasta 17 MB · imágenes comprimidas automáticamente (máximo original 17 MB)</span></label><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Tomar foto con la cámara</span><input type="file" accept="image/*" capture="environment" onChange={(event) => { void chooseFile(event.target.files?.[0]); setScanSummary(''); event.currentTarget.value = ''; }} className="block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold" /></label></div>
       {fileName && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2"><span className="min-w-0 flex-1 truncate text-[10px] text-slate-600">{fileName}</span><button type="button" onClick={() => void scanSelectedDocument()} disabled={scanning} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50">{scanning ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ScanSearch className="h-3.5 w-3.5" />}{scanning ? 'Analizando…' : 'Leer foto y completar'}</button></div>}
       {scanSummary && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[10px] leading-5 text-emerald-800">{scanSummary}</p>}
     </section>
