@@ -154,6 +154,7 @@ export function validateFiscalBoardState(value: unknown, defaults: FiscalRequire
       ...(typeof document.documentNumber === 'string' ? { documentNumber: textField(document.documentNumber, 120) } : {}),
       ...(typeof document.ownerName === 'string' ? { ownerName: textField(document.ownerName, 200) } : {}),
       ...(typeof document.taxId === 'string' ? { taxId: textField(document.taxId, 80) } : {}),
+      ...(typeof document.fiscalAddress === 'string' ? { fiscalAddress: textField(document.fiscalAddress, 1000) } : {}),
       ...(typeof document.issueDate === 'string' ? { issueDate: textField(document.issueDate, 10) } : {}),
       ...(typeof document.notes === 'string' ? { notes: textField(document.notes, 2000) } : {}),
       ...(typeof document.suggestedRequirement === 'string' ? { suggestedRequirement: textField(document.suggestedRequirement, 200) } : {}),
