@@ -227,8 +227,10 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
   };
 
   const scanSelectedDocument = async () => {
-    if (!fileData || !fileName || !fileName.match(/\\.(png|jpe?g|webp)$/i)) {
-      setError('Primero toma o selecciona una fotografía en JPEG, PNG o WebP.');
+    const isPdf = /\.pdf$/i.test(fileName);
+    const isImage = /\.(png|jpe?g|webp)$/i.test(fileName);
+    if (!fileData || !fileName || (!isPdf && !isImage)) {
+      setError('Selecciona un PDF o una imagen JPEG, PNG o WebP para extraer sus datos.');
       return;
     }
     setScanning(true);
@@ -241,7 +243,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
         body: JSON.stringify({ imageBase64: fileData }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'No se pudo analizar la fotografía.');
+      if (!response.ok) throw new Error(data.error || 'No se pudo analizar el documento.');
       const doc = data.document;
       setTitle(doc.title || '');
       setCategory(categories.includes(doc.category) ? doc.category : 'Otro');
@@ -499,7 +501,7 @@ export const FiscalFolder: React.FC<{ companyId: string; companyName: string }> 
     <div className="flex items-start justify-between"><div><p className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Carpeta de {companyName}</p><h2 className="mt-1 text-lg font-black text-slate-900">{pendingInspectionItemId ? 'Subir documento de inspección' : 'Agregar documento'}</h2>{pendingInspectionItemId && <p className="mt-1 text-[11px] text-indigo-700">Se vinculará automáticamente al punto: {title}</p>}</div><button type="button" onClick={() => setShowForm(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" aria-label="Cerrar"><X className="h-5 w-5" /></button></div>
     <section className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/70 p-3">
       <div className="flex items-center gap-2"><Camera className="h-5 w-5 text-indigo-700" /><div><h3 className="text-xs font-extrabold text-indigo-950">Fotografiar e identificar documento</h3><p className="mt-0.5 text-[10px] text-indigo-800">Toma una foto nítida. NEXOSS intentará identificar el documento y completar los campos.</p></div></div>
-      <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Subir documento (PDF o imagen)</span><input type="file" accept=".pdf,application/pdf,image/png,image/jpeg" onChange={(event) => { void chooseFile(event.target.files?.[0]); setScanSummary(''); event.currentTarget.value = ''; }} className="block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold" /><span className="block text-[10px] text-slate-500">PDF hasta 17 MB · imágenes comprimidas automáticamente (máximo original 17 MB)</span></label><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Tomar foto con la cámara</span><input type="file" accept="image/*" capture="environment" onChange={(event) => { void chooseFile(event.target.files?.[0]); setScanSummary(''); event.currentTarget.value = ''; }} className="block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold" /></label></div>
+      <div className="grid gap-3 sm:grid-cols-2"><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Subir documento (PDF o imagen)</span><input type="file" accept=".pdf,application/pdf,image/png,image/jpeg" onChange={(event) => { void chooseFile(event.target.files?.[0]); setScanSummary(''); event.currentTarget.value = ''; }} className="block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold" /><span className="block text-[10px] text-slate-500">PDF hasta 17 MB e imágenes comprimidas · pulsa «Leer foto y completar» para extraer los datos</span></label><label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-700">Tomar foto con la cámara</span><input type="file" accept="image/*" capture="environment" onChange={(event) => { void chooseFile(event.target.files?.[0]); setScanSummary(''); event.currentTarget.value = ''; }} className="block w-full rounded-lg border border-slate-200 bg-white p-2 text-xs file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold" /></label></div>
       {fileName && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2"><span className="min-w-0 flex-1 truncate text-[10px] text-slate-600">{fileName}</span><button type="button" onClick={() => void scanSelectedDocument()} disabled={scanning} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50">{scanning ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ScanSearch className="h-3.5 w-3.5" />}{scanning ? 'Analizando…' : 'Leer foto y completar'}</button></div>}
       {scanSummary && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[10px] leading-5 text-emerald-800">{scanSummary}</p>}
     </section>
