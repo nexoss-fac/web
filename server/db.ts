@@ -154,10 +154,14 @@ export async function readTenantWorkspaceState(): Promise<Record<string, unknown
     )
   `;
   const rows = await sql`SELECT state FROM nexoss_workspace_state WHERE id = 'current' LIMIT 1`;
+  if (rows.length === 0) return null;
   const state = rows[0]?.state;
-  return state && typeof state === 'object' && !Array.isArray(state)
-    ? state as Record<string, unknown>
-    : null;
+  if (state && typeof state === 'object' && !Array.isArray(state)) {
+    return state as Record<string, unknown>;
+  }
+  // Distinguir una tabla sin estado (inicializable) de una fila existente dañada.
+  // Nunca devolver null para una fila corrupta, porque podría sobrescribirse.
+  throw new Error('El estado de datos de la empresa en Neon tiene un formato inválido.');
 }
 
 export async function writeTenantWorkspaceState(state: Record<string, unknown>): Promise<void> {
