@@ -67,7 +67,8 @@ export const ProductionManager: React.FC = () => {
       addNotification('Completa la receta', 'Indica nombre, producto final, rendimiento y al menos una materia prima con cantidad válida.', 'warning');
       return;
     }
-    const recipe: Recipe = { id: crypto.randomUUID(), name: recipeName.trim(), finishedProductId, outputQuantity: Number(outputQuantity), unit, lines: validLines.map(l => ({ materialId: l.materialId, quantity: Number(l.quantity) })), updatedAt: new Date().toISOString() };
+    const aggregatedLines = Array.from(validLines.reduce((map, line) => map.set(line.materialId, (map.get(line.materialId) || 0) + Number(line.quantity)), new Map<string, number>()), ([materialId, quantity]) => ({ materialId, quantity }));
+    const recipe: Recipe = { id: crypto.randomUUID(), name: recipeName.trim(), finishedProductId, outputQuantity: Number(outputQuantity), unit, lines: aggregatedLines, updatedAt: new Date().toISOString() };
     try {
       await persist([...recipes, recipe], orders, lots);
       setRecipeName(''); setFinishedProductId(''); setOutputQuantity('1'); setUnit('unidad'); setLines([{ materialId: '', quantity: 1 }]);
