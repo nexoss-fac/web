@@ -23,7 +23,7 @@ import {
   INITIAL_BANK_MOVEMENTS,
   INITIAL_CURRENCY_PURCHASES,
 } from '../data/initialData';
-import { BcvRateInfo } from '../services/bcvService';
+import { BcvRateInfo, fetchLiveBcvRate } from '../services/bcvService';
 import {
   getTodayVenezuela,
   getYesterdayVenezuela,
@@ -295,7 +295,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [isBcvSyncing, setIsBcvSyncing] = useState<boolean>(false);
-  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(false);
+  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(true);
 
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(() => auth?.currentUser ?? null);
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(Boolean(auth));
@@ -837,6 +837,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setIsBcvSyncing(false);
     }
   }, [addNotification]);
+
+  // Sincronizar al entrar y luego periódicamente. El valor histórico solo
+  // se registra bajo la fecha oficial devuelta por la fuente.
+  useEffect(() => {
+    if (!isAutoSyncEnabled) return;
+    void syncBcvRate(true);
+    const interval = setInterval(() => void syncBcvRate(true), 180000);
+    return () => clearInterval(interval);
+  }, [isAutoSyncEnabled, syncBcvRate]);
 
   const setExchangeRate = (rate: number, isManual = true) => {
     setExchangeRateState(rate);
