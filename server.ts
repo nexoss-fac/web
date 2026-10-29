@@ -41,6 +41,7 @@ import { verifyBdvPayment, getBdvApiConfig, getRecentVerifications } from './ser
 import { analyzeShoeImage } from './server/shoeAi.ts';
 import { analyzeReceiptImage } from './server/receiptAi.ts';
 import { scanFiscalDocument } from './server/fiscalDocumentAi.ts';
+import { compressFiscalPdfDataUrl } from './server/fiscalPdfCompression.ts';
 import { requireFirebaseAuth } from './server/auth/firebaseAuth.ts';
 import { LocalPlatformStore, acceptCompanyInvitation, createCompanyForVerifiedUser, createCompanyInvitation, findCompanyEmailMatches, getCompanyOnboardingMembership, hasActiveSubscription, isInvitationPending, normalizeInventoryCategories, platformAdminUids, type MembershipRole, type Plan } from './server/multiempresa/platformStore.ts';
 import { createPostgresControlPlaneRepositoryFromEnvironment, type PostgresControlPlaneRepository } from './server/multiempresa/postgresControlPlaneRepository.ts';
@@ -1359,7 +1360,12 @@ async function startServer() {
       if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
       const board = await readTenantFiscalBoard();
       const { publicTokenHash, ...visibleBoard } = board;
-      return res.json({ ...visibleBoard, publicLinkEnabled: Boolean(publicTokenHash) });
+      const compressionMessage = compressedCount
+        ? `PDF comprimido antes de guardar: ${compressedCount} archivo(s), ${(originalPdfBytes / (1024 * 1024)).toFixed(1)} MB → ${(storedPdfBytes / (1024 * 1024)).toFixed(1)} MB.`
+        : skippedCompressionCount
+          ? 'Los PDF se guardaron sin compresión: el compresor Ghostscript no está instalado o el archivo está firmado, no se pudo comprimir de forma segura o el resultado no era más pequeño.'
+          : '';
+      return res.json({ ...visibleBoard, publicLinkEnabled: Boolean(publicTokenHash), ...(compressionMessage ? { compressionMessage } : {}) });
     } catch (error) {
       logger.error('Error leyendo la carpeta fiscal:', error);
       return res.status(503).json({ error: 'No se pudo leer la carpeta fiscal.' });
@@ -1371,7 +1377,29 @@ async function startServer() {
       const tenant = (req as TenantAuthenticatedRequest).tenant;
       if (!tenant) return res.status(403).json({ error: 'No hay una empresa autorizada.' });
       const previous = await readTenantFiscalBoard();
-      const submitted = validateFiscalBoardState(req.body, NATIONAL_FISCAL_REQUIREMENTS);
+      const payload = req.body && typeof req.body === 'object' ? { ...req.body } as Record<string, unknown> : {};
+      const rawDocuments = Array.isArray(payload.documents) ? payload.documents : [];
+      let compressedCount = 0;
+      let skippedCompressionCount = 0;
+      let originalPdfBytes = 0;
+      let storedPdfBytes = 0;
+      payload.documents = await Promise.all(rawDocuments.map(async (rawDocument) => {
+        if (!rawDocument || typeof rawDocument !== 'object') return rawDocument;
+        const document = { ...(rawDocument as Record<string, unknown>) };
+        if (typeof document.fileData !== 'string' || !document.fileData.startsWith('data:application/pdf;base64,')) return document;
+        const result = await compressFiscalPdfDataUrl(document.fileData);
+        if (!result) return document;
+        originalPdfBytes += result.originalBytes;
+        storedPdfBytes += result.storedBytes;
+        if (result.compressed) {
+          document.fileData = result.dataUrl;
+          compressedCount += 1;
+        } else {
+          skippedCompressionCount += 1;
+        }
+        return document;
+      }));
+      const submitted = validateFiscalBoardState(payload, NATIONAL_FISCAL_REQUIREMENTS);
       const changedRequirements = submitted.requirements.filter((item) => {
         const old = previous.requirements.find((requirement) => requirement.id === item.id);
         return old && (old.status !== item.status || old.responsible !== item.responsible || old.dueDate !== item.dueDate || old.notes !== item.notes || old.evidenceDocumentId !== item.evidenceDocumentId);
