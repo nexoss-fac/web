@@ -796,7 +796,11 @@ export class PostgresControlPlaneRepository implements TenantRepository {
       const [companies, plans, audit] = await Promise.all([
         client.query(
           `SELECT c.*, to_jsonb(s) AS subscription, t.status AS tenant_connection_status,
-                  count(m.user_id)::integer AS memberships
+                  count(m.user_id)::integer AS memberships,
+                  (SELECT owner_user.email FROM company_memberships owner_membership
+                   JOIN platform_users owner_user ON owner_user.id = owner_membership.user_id
+                   WHERE owner_membership.company_id = c.id AND owner_membership.role = 'owner'
+                     AND owner_membership.status = 'active' LIMIT 1) AS owner_email
            FROM platform_companies c
            LEFT JOIN company_subscriptions s ON s.company_id = c.id
            LEFT JOIN tenant_database_connections t ON t.company_id = c.id
