@@ -30,14 +30,15 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
-  HeartPulse
+  HeartPulse,
+  Factory
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { MakdLogo } from './common/MakdLogo';
 import { UserWindowModal } from './common/UserWindowModal';
 import { CompanyProfileId, CompanyProfileSelector } from './companies/CompanyProfileSelector';
 
-export type NavigationTab = 'pos' | 'health' | 'inventory' | 'layaways' | 'reports' | 'cash' | 'expenses' | 'conciliacion' | 'contabilidad' | 'inventoryReport' | 'fiscal' | 'admin';
+export type NavigationTab = 'pos' | 'health' | 'inventory' | 'layaways' | 'reports' | 'cash' | 'expenses' | 'conciliacion' | 'contabilidad' | 'inventoryReport' | 'fiscal' | 'production' | 'admin';
 
 interface NavbarProps {
   activeTab: NavigationTab;
@@ -207,6 +208,16 @@ export const Sidebar: React.FC<{
               </div>
             );
           })}
+          {isCompanyAdmin && !isHealthIndustry && (
+            <button
+              id="sidebar-nav-production"
+              onClick={() => { setActiveTab('production'); setMobileOpen(false); }}
+              className={`w-full p-2.5 rounded-md flex items-center gap-3 text-xs font-medium cursor-pointer transition-colors ${activeTab === 'production' ? 'bg-slate-800 text-white font-semibold shadow-xs' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            >
+              <Factory className={`w-4 h-4 ${activeTab === 'production' ? 'text-indigo-400' : 'text-slate-400'}`} />
+              <span>Producción y lotes</span>
+            </button>
+          )}
           {userRole === 'admin' && <button
             id="sidebar-nav-contabilidad"
             onClick={() => {
