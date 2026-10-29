@@ -99,6 +99,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   const [customerLastName, setCustomerLastName] = useState('');
   const [customerRif, setCustomerRif] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerContactStatus, setCustomerContactStatus] = useState('');
 
   // Effective exchange rate for this sale (matches invoice date or custom rate)
   const effectiveExchangeRate = useMemo(() => {
@@ -454,17 +455,30 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     return false;
   };
 
-  // Guarda el directorio en cuanto ya hay documento y nombre, no solo al cerrar una venta.
+  // Guarda el cliente automáticamente al completar documento y nombre.
   const saveCustomerContact = async () => {
     const document = customerRif.trim();
     const name = customerName.trim();
     if (!document || !name || name.toLowerCase() === 'consumidor final') return;
+    setCustomerContactStatus('Guardando cliente…');
     try {
-      await fetch('/api/contacts', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'cliente', documento: document, nombre: name, apellido: customerLastName.trim(), telefono: customerPhone.trim() }),
+      const response = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'cliente', documento: document, nombre, apellido: customerLastName.trim(), telefono: customerPhone.trim() }),
       });
-    } catch (error) { console.warn('No se pudo guardar el cliente en el directorio:', error); }
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result?.success !== true) {
+        const message = typeof result?.error === 'string' ? result.error : 'No se pudo guardar el cliente.';
+        setCustomerContactStatus(message);
+        console.warn('[Clientes] Registro rechazado:', response.status, message);
+        return;
+      }
+      setCustomerContactStatus('Cliente guardado automáticamente.');
+    } catch (error) {
+      setCustomerContactStatus('No se pudo conectar con el directorio de clientes.');
+      console.warn('No se pudo guardar el cliente en el directorio:', error);
+    }
   };
 
   // Finalize Sale
@@ -579,10 +593,10 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   };
 
   return (
-    <div className="w-full min-w-0 max-w-none mx-0 space-y-5 px-3 sm:px-5 xl:px-6 2xl:px-8">
+    <div className="w-full min-w-0 max-w-none mx-0 space-y-4 px-2 sm:px-4 lg:px-5">
       
       {/* Top Banner / Stats */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-white via-white to-indigo-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <h1 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
             <span>Terminal de Ventas & Facturación</span>
@@ -635,7 +649,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       </div>
 
       {/* Main Grid: Catalog + Cart & Facturación */}
-      <div className="grid min-w-0 grid-cols-1 lg:grid-cols-12 gap-4 xl:gap-5 2xl:gap-6 items-start">
+      <div className="grid min-w-0 grid-cols-1 lg:grid-cols-12 gap-4 xl:gap-5 items-start">
         
         {/* Shoe Catalog Column */}
         <div
@@ -648,7 +662,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
               ? 'hidden'
               : billingViewMode === 'split'
               ? 'lg:col-span-7 order-2 lg:order-1'
-              : 'lg:col-span-8 order-2 lg:order-1'
+              : 'lg:col-span-4 xl:col-span-4 order-2 lg:order-1'
           }`}
         >
           
@@ -748,8 +762,10 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
           </div>
 
           {/* Product Cards Grid */}
-          <div className={`grid min-w-0 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[min(72vh,900px)] overflow-y-auto overscroll-contain pr-1 pb-1 ${
-            cart.length > 0 && billingViewMode === 'fullscreen' ? '2xl:grid-cols-4' : ''
+          <div className={`grid min-w-0 gap-3 max-h-[660px] overflow-y-auto pr-1 ${
+            cart.length > 0 && billingViewMode === 'expanded'
+              ? 'grid-cols-1'
+              : 'grid-cols-1 sm:grid-cols-2'
           }`}>
             {filteredProducts.length === 0 ? (
               <div className="col-span-2 py-12 text-center bg-white rounded-xl border border-dashed border-slate-200 text-slate-500">
@@ -766,7 +782,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                   <div
                     key={prod.id ? `pos-prod-${prod.id}-${idx}` : `pos-idx-${idx}`}
                     id={`pos-card-${prod.id || idx}`}
-                    className={`group min-w-0 p-3.5 sm:p-4 rounded-2xl border bg-white transition-all shadow-sm hover:shadow-md flex flex-col justify-between ${
+                    className={`p-3.5 rounded-xl border bg-white transition-all shadow-xs flex flex-col justify-between ${
                       isOutOfStock
                         ? 'border-slate-200 opacity-60'
                         : 'border-slate-200 hover:border-indigo-400 hover:shadow-sm'
@@ -774,7 +790,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                   >
                     <div>
                       {/* Card Image and Badges */}
-                      <div className="relative mb-3 rounded-xl overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100 h-36 sm:h-40 flex items-center justify-center border border-slate-200/70">
+                      <div className="relative mb-2.5 rounded-lg overflow-hidden bg-slate-100 h-32 flex items-center justify-center border border-slate-200/60">
                         {prod.imagen ? (
                           <img
                             src={prod.imagen}
@@ -870,7 +886,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
               ? 'col-span-12'
               : billingViewMode === 'split'
               ? 'lg:col-span-5 order-1 lg:order-2'
-              : 'lg:col-span-4 order-1 lg:order-2'
+              : 'lg:col-span-8 xl:col-span-8 order-1 lg:order-2'
           }`}
         >
           {cart.length === 0 ? (
@@ -920,7 +936,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                 </div>
 
                 {/* View Switchers & Action buttons */}
-                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <div className="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2 flex-wrap">
                   {/* Mobile Back to Catalog Button */}
                   <button
                     type="button"
@@ -1011,10 +1027,14 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
               </div>
 
               {/* Multi-Column Billing Workbench Layout */}
-              <div className="grid min-w-0 grid-cols-1 gap-5 items-start">
+              <div className={`grid gap-6 ${
+                billingViewMode === 'split'
+                  ? 'grid-cols-1'
+                  : 'grid-cols-1 xl:grid-cols-12 items-start'
+              }`}>
                 
                 {/* Left Section: Calzados a Facturar & Descuentos */}
-                <div className="min-w-0 space-y-4">
+                <div className={`${billingViewMode === 'split' ? 'space-y-4' : 'xl:col-span-7 space-y-4'}`}>
                   
                   <div className="flex items-center justify-between text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wider pb-1.5 border-b border-slate-200">
                     <span className="flex items-center gap-2">
@@ -1025,7 +1045,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                   </div>
 
                   {/* Cart Items List */}
-                  <div className="max-h-[min(38vh,460px)] overflow-y-auto overscroll-contain divide-y divide-slate-100 pr-1">
+                  <div className="max-h-[520px] overflow-y-auto divide-y divide-slate-100 pr-1">
                     {cart.map((item, idx) => {
                       const unitPrice = item.customPrice !== undefined ? item.customPrice : item.product.precio;
                       const unitCost = item.customCost !== undefined ? item.customCost : item.product.costo;
@@ -1315,7 +1335,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                 </div>
 
                 {/* Right Section: Customer Info (Razón Social en una sola línea), Payment & Big Totals */}
-                <div className="min-w-0 space-y-5 bg-slate-50/80 p-3.5 sm:p-5 rounded-2xl border border-slate-200">
+                <div className={`${billingViewMode === 'split' ? 'space-y-5 pt-4 border-t border-slate-200' : 'xl:col-span-5 space-y-5 bg-slate-50/70 p-4 sm:p-6 rounded-3xl border border-slate-200'}`}>
                   
                   {/* Customer Information (Razón Social en una sola línea) */}
                   <div className="space-y-3.5">
@@ -1374,6 +1394,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                         />
                       </div>
                     </div>
+
+                    {customerContactStatus && <p role="status" aria-live="polite" className={`text-xs font-semibold ${customerContactStatus.startsWith('Cliente guardado') ? 'text-emerald-700' : customerContactStatus === 'Guardando cliente…' ? 'text-slate-500' : 'text-rose-600'}`}>{customerContactStatus}</p>}
 
                     {/* Número de Factura */}
                     <div className="pt-2.5 border-t border-slate-200 mb-3">
