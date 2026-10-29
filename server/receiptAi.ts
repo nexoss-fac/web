@@ -152,7 +152,7 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
 
   // Model priority: start with gemini-3.1-flash-lite (high throughput, resistant to 503 spikes)
   // followed by gemini-flash-latest and gemini-3.8-flash
-  const modelsToTry = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+  const modelsToTry = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
   let lastErr: any = null;
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
