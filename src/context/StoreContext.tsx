@@ -340,9 +340,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved || '1234';
   });
 
+  const normalizeCashClosures = (value: unknown): DailyCashClosure[] => {
+    if (!Array.isArray(value)) return [];
+    const toNumber = (raw: unknown) => {
+      const parsed = typeof raw === 'number' ? raw : Number(String(raw ?? '').replace(/,/g, ''));
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    return value.filter((item): item is Record<string, any> => Boolean(item && typeof item === 'object')).map((item) => ({
+      ...item,
+      total_ventas_usd: toNumber(item.total_ventas_usd),
+      total_ventas_bs: toNumber(item.total_ventas_bs),
+      cantidad_transacciones: toNumber(item.cantidad_transacciones),
+      pares_vendidos: toNumber(item.pares_vendidos),
+      desglose_cuentas: Array.isArray(item.desglose_cuentas) ? item.desglose_cuentas.map((entry: any) => ({
+        ...entry,
+        monto: toNumber(entry?.monto),
+        monto_usd: toNumber(entry?.monto_usd),
+      })) : [],
+    })) as DailyCashClosure[];
+  };
+
   const [cashClosures, setCashClosures] = useState<DailyCashClosure[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_closures`);
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try { return normalizeCashClosures(JSON.parse(saved)); } catch { return []; }
   });
 
   const [notifications, setNotifications] = useState<ToastNotification[]>([]);
@@ -459,8 +480,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const applyClosuresData = (closuresArr: any[]) => {
-    setCashClosures(closuresArr);
-    try { localStorage.setItem(`${STORAGE_KEY}_closures`, JSON.stringify(closuresArr)); } catch {}
+    const normalized = normalizeCashClosures(closuresArr);
+    setCashClosures(normalized);
+    try { localStorage.setItem(`${STORAGE_KEY}_closures`, JSON.stringify(normalized)); } catch {}
   };
 
   // Master synchronization function from server store
