@@ -1110,13 +1110,18 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 onChange={(e) => setTipo(e.target.value as ShoeType)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs font-semibold"
               >
-                {Array.from(new Set([...getTypesForCategory(categoria), ...(tipo ? [tipo] : [])])).map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
+                {(isFootwear
+                ? Array.from(new Set([...getTypesForCategory(categoria), ...(tipo ? [tipo] : [])]))
+                : clasificacionInventario === 'Materia prima'
+                  ? ['Otros', 'Líquido', 'Sólido', 'Polvo', 'Granulado', 'Refrigerado', 'Congelado']
+                  : clasificacionInventario === 'Productos en proceso'
+                    ? ['Otros', 'En elaboración', 'En control de calidad', 'Pendiente de ensamblaje']
+                    : ['Otros', 'Unidad', 'Paquete', 'Caja', 'Litro', 'Kilogramo', 'Metro', 'Servicio']
+              ).map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
 
-            <div>
+            {isFootwear && <div>
               <label className="block text-slate-700 font-bold mb-1">
                 Color o Colores
               </label>
@@ -1132,9 +1137,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                   Si colocas varios colores separados por coma, se crearán para cada talla.
                 </span>
               )}
-            </div>
+            </div>}
 
-            <div>
+            {isFootwear && <div>
               <label className="block text-slate-700 font-bold mb-1">
                 Público / Género
               </label>
@@ -1149,11 +1154,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 <option value="Niño">Niño</option>
                 <option value="Niña">Niña</option>
               </select>
-            </div>
+            </div>}
           </div>
 
           {/* Autenticidad: Original vs Réplica */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+          {isFootwear && <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
             <label className="block text-slate-700 font-bold mb-2 text-xs">
               Autenticidad
             </label>
@@ -1183,14 +1188,14 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 Réplica
               </button>
             </div>
-          </div>
+          </div>}
 
           {/* Description & Social Media Copy */}
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-slate-800 font-bold text-xs flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Descripción Comercial & Redes Sociales (Catálogo)</span>
+                <span>{isFootwear ? 'Descripción comercial y catálogo' : 'Descripción del producto (opcional)'}</span>
               </label>
               {aiAnalysisSuccess && (
                 <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
@@ -1202,7 +1207,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               rows={3}
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
-              placeholder="Descripción comercial atractiva, detalles de silueta, materiales y copy para redes sociales..."
+              placeholder={isFootwear ? 'Descripción comercial, materiales y detalles del modelo...' : 'Descripción breve, composición, uso o especificaciones del producto (opcional)...'}
               className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-indigo-500 text-xs resize-none"
             />
             {descripcionOriginalIA && descripcion !== descripcionOriginalIA && (
