@@ -43,7 +43,7 @@ import { analyzeReceiptImage } from './server/receiptAi.ts';
 import { scanFiscalDocument } from './server/fiscalDocumentAi.ts';
 import { compressFiscalPdfDataUrl } from './server/fiscalPdfCompression.ts';
 import { requireFirebaseAuth } from './server/auth/firebaseAuth.ts';
-import { LocalPlatformStore, acceptCompanyInvitation, createCompanyForVerifiedUser, createCompanyInvitation, findCompanyEmailMatches, getCompanyOnboardingMembership, hasActiveSubscription, isInvitationPending, normalizeInventoryCategories, platformAdminUids, isPlatformAdmin, type MembershipRole, type Plan } from './server/multiempresa/platformStore.ts';
+import { LocalPlatformStore, acceptCompanyInvitation, createCompanyForVerifiedUser, createCompanyInvitation, findCompanyEmailMatches, getCompanyOnboardingMembership, hasActiveSubscription, isInvitationPending, normalizeInventoryCategories, isPlatformAdmin, type MembershipRole, type Plan } from './server/multiempresa/platformStore.ts';
 import { createPostgresControlPlaneRepositoryFromEnvironment, type PostgresControlPlaneRepository } from './server/multiempresa/postgresControlPlaneRepository.ts';
 import { createCompanyAccessMiddleware, createPostgresCompanyAccessMiddleware, requireTenantRole, tenantStorageContext, type TenantAuthenticatedRequest } from './server/multiempresa/companyAccess.ts';
 import { LocalEnvironmentTenantSecretProvider } from './server/multiempresa/tenantSecretProvider.ts';
