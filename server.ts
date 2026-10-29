@@ -1785,6 +1785,9 @@ async function startServer() {
             currencyPurchases: store.currencyPurchases || [],
             exchangeRate: store.exchangeRate || 807.39,
             historicalRates: store.historicalRates || {},
+            productionRecipes: store.productionRecipes || [],
+            productionOrders: store.productionOrders || [],
+            productionLots: store.productionLots || [],
             // Auditor y contable pueden leer el estado del workspace, pero el PIN
             // administrativo solo debe salir al propietario o al administrador.
             adminPin: role === 'owner' || role === 'admin' ? store.adminPin || '1234' : '',
