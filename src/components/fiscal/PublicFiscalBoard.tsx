@@ -34,6 +34,7 @@ export const PublicFiscalBoard: React.FC<{ companyId: string; token: string }> =
 
   useEffect(() => {
     let cancelled = false;
+    let objectUrl = '';
     setPdfPreviewUrl('');
     const dataUrl = selectedDocument?.fileData;
     if (!dataUrl?.startsWith('data:application/pdf;base64,')) return;
@@ -45,14 +46,15 @@ export const PublicFiscalBoard: React.FC<{ companyId: string; token: string }> =
       })
       .then((blob) => {
         if (cancelled) return;
-        const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-        setPdfPreviewUrl(url);
+        objectUrl = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+        setPdfPreviewUrl(objectUrl);
       })
       .catch((cause: unknown) => {
         if (!cancelled) console.error('No se pudo preparar la vista previa del PDF:', cause);
       });
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [selectedDocument?.fileData]);
 
