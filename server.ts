@@ -273,7 +273,7 @@ async function readServerStore(): Promise<ServerStoreState> {
         updatedAt: data.updatedAt || new Date().toISOString(),
       };
   }
-  if (data !== undefined) throw new Error('El archivo de datos de la empresa tiene un formato inválido.');
+  if (data !== undefined && data !== null) throw new Error('El archivo de datos de la empresa tiene un formato inválido.');
 
   const initial: ServerStoreState = {
     products: [],
