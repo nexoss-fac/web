@@ -785,24 +785,58 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // del mensaje de error, pero SIN que eso obligue a recrear la función cada
   // vez que la tasa cambia (eso era la causa del bug de abajo).
   const syncBcvRate = useCallback(async (silent = false) => {
-    setIsBcvSyncing(false);
-    setBcvInfo((prev) => ({ ...prev, status: 'manual', source: 'Solo local · sin conexión BCV' }));
-    if (!silent) addNotification('Tasa de demostración', 'La consulta automática del BCV está desactivada en NEXOSS local. Introduce una tasa de prueba manual si necesitas explorar los cálculos.', 'info');
+    setIsBcvSyncing(true);
+    setBcvInfo((prev) => ({ ...prev, status: 'syncing', error: undefined }));
+    try {
+      const result = await fetchLiveBcvRate();
+      const officialDate = result.officialDate;
+      const rate = Number(result.rate);
+      if (!Number.isFinite(rate) || rate <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(officialDate)) {
+        throw new Error('La tasa o su fecha oficial no son válidas.');
+      }
+
+      // La tasa se registra en la fecha de vigencia publicada, no en la fecha
+      // local de consulta. No se sobrescribe una tasa histórica ya existente.
+      setHistoricalRates((prev) => {
+        const next = prev[officialDate] ? prev : { ...prev, [officialDate]: rate };
+        safeLocalStorageSet(`${STORAGE_KEY}_historical_rates`, JSON.stringify(next));
+        return next;
+      });
+      setExchangeRateState(rate);
+      safeLocalStorageSet(`${STORAGE_KEY}_rate`, String(rate));
+      safeLocalStorageSet(`${STORAGE_KEY}_exchange_rate`, String(rate));
+      setBcvInfo({
+        rate,
+        officialDate,
+        lastSyncedAt: new Date().toISOString(),
+        source: result.source,
+        status: 'synced',
+        isWeekendRate: result.isWeekendRate,
+        effectiveMondayDate: result.effectiveMondayDate,
+        currentDayName: result.currentDayName,
+        cycleRuleDescription: result.cycleRuleDescription,
+      });
+
+      // Persistir en el almacén de la empresa activa sin borrar otras fechas.
+      try {
+        const response = await fetch('/api/store/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ exchangeRate: rate, historicalRates: { [officialDate]: rate } }),
+        });
+        if (!response.ok) throw new Error(`No se pudo guardar la tasa en el servidor (HTTP ${response.status}).`);
+      } catch (persistError) {
+        console.warn('La tasa BCV se consultó, pero no se confirmó su persistencia en el servidor:', persistError);
+      }
+      if (!silent) addNotification('Tasa BCV actualizada', `Bs. ${rate.toFixed(4)} por USD · vigencia ${officialDate}`, 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo consultar la tasa oficial.';
+      setBcvInfo((prev) => ({ ...prev, status: 'error', error: message }));
+      if (!silent) addNotification('Error de tasa BCV', `${message} Se conserva el último valor conocido y no se presenta como actualizado.`, 'critical');
+    } finally {
+      setIsBcvSyncing(false);
+    }
   }, [addNotification]);
-
-  // Esta copia utiliza únicamente la tasa local de demostración.
-  useEffect(() => {
-    setBcvInfo((prev) => ({ ...prev, status: 'manual', source: 'Solo local · sin conexión BCV' }));
-  }, []);
-
-  // Periodic real-time background sync every 3 minutes (180,000 ms)
-  useEffect(() => {
-    if (!isAutoSyncEnabled) return;
-    const interval = setInterval(() => {
-      syncBcvRate(true);
-    }, 180000);
-    return () => clearInterval(interval);
-  }, [isAutoSyncEnabled, syncBcvRate]);
 
   const setExchangeRate = (rate: number, isManual = true) => {
     setExchangeRateState(rate);
