@@ -7,22 +7,24 @@ export interface ScannedFiscalDocument {
   confidence: 'alta' | 'media' | 'baja'; notes: string;
 }
 
-function parseImage(input: string) {
-  const match = input.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-  if (match) return { mimeType: match[1], data: match[2] };
+function parseDocument(input: string) {
+  const match = input.match(/^data:(image\/[a-zA-Z0-9.+-]+|application\/pdf);base64,(.+)$/);
+  if (match) return { mimeType: match[1].toLowerCase(), data: match[2] };
   return { mimeType: 'image/jpeg', data: input };
 }
 
 export async function scanFiscalDocument(imageBase64: string): Promise<ScannedFiscalDocument> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('El escaneo inteligente no está configurado: falta GEMINI_API_KEY en el servidor.');
-  const parsedImage = parseImage(imageBase64);
-  if (!parsedImage.data || parsedImage.data.length < 100) throw new Error('La fotografía no contiene datos suficientes.');
-  if (!/^image\/(jpeg|png|webp)$/i.test(parsedImage.mimeType)) throw new Error('Toma una fotografía en JPEG, PNG o WebP.');
+  const parsedDocument = parseDocument(imageBase64);
+  if (!parsedDocument.data || parsedDocument.data.length < 100) throw new Error('El documento no contiene datos suficientes.');
+  if (!/^image\/(jpeg|png|webp)$/i.test(parsedDocument.mimeType) && parsedDocument.mimeType !== 'application/pdf') {
+    throw new Error('Adjunta un PDF o una imagen JPEG, PNG o WebP.');
+  }
 
   const ai = new GoogleGenAI({ apiKey });
   const prompt = [
-    'Analiza esta fotografía de un documento fiscal, legal, laboral, municipal o mercantil de Venezuela.',
+    'Analiza este documento fiscal, legal, laboral, municipal o mercantil de Venezuela. Puede ser un PDF multipágina o una imagen.',
     'Extrae solo información claramente visible. No inventes datos: usa cadenas vacías si no se pueden leer.',
     'Clasifica el documento y sugiere el lugar lógico para archivarlo. Devuelve ÚNICAMENTE JSON válido con esta forma:',
     '{"documentType":"RIF|Registro mercantil|Solvencia|Permiso nacional|Declaración|Comprobante de pago|Otro","title":"nombre descriptivo, incluyendo número si es legible","category":"una de esas categorías","issuer":"organismo o emisor","documentNumber":"número de documento/control/registro","ownerName":"nombre o razón social titular","taxId":"RIF o cédula visible","issueDate":"YYYY-MM-DD o cadena vacía","expiresAt":"YYYY-MM-DD o cadena vacía","area":"Tributos nacionales|Municipal (SIGAT / Alcaldía)|Bomberos y seguridad|Laboral y parafiscal|Legal y mercantil|Sanidad y manipulación de alimentos|cadena vacía","suggestedRequirement":"obligación relacionada si se identifica","confidence":"alta|media|baja","notes":"otros datos legibles importantes"}',
@@ -30,12 +32,12 @@ export async function scanFiscalDocument(imageBase64: string): Promise<ScannedFi
   ].join('\n');
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
-    contents: { parts: [{ inlineData: { mimeType: parsedImage.mimeType, data: parsedImage.data } }, { text: prompt }] },
+    contents: { parts: [{ inlineData: { mimeType: parsedDocument.mimeType, data: parsedDocument.data } }, { text: prompt }] },
     config: { responseMimeType: 'application/json', temperature: 0.1 },
   });
   const raw = (response.text || '').replace(/^\`\`\`json\s*/i, '').replace(/^\`\`\`\s*/i, '').replace(/\s*\`\`\`$/i, '').trim();
   let parsed: Record<string, unknown>;
-  try { parsed = JSON.parse(raw); } catch { throw new Error('No se pudo interpretar la respuesta del escáner. Intenta con una foto más nítida.'); }
+  try { parsed = JSON.parse(raw); } catch { throw new Error('No se pudo interpretar la respuesta del escáner. Intenta con un documento más legible o una imagen más nítida.'); }
   const allowedCategories = ['RIF', 'Registro mercantil', 'Solvencia', 'Permiso nacional', 'Declaración', 'Comprobante de pago', 'Otro'];
   const allowedAreas = ['Tributos nacionales', 'Municipal (SIGAT / Alcaldía)', 'Bomberos y seguridad', 'Laboral y parafiscal', 'Legal y mercantil', 'Sanidad y manipulación de alimentos'];
   const value = (key: string) => typeof parsed[key] === 'string' ? String(parsed[key]).trim().slice(0, 500) : '';
