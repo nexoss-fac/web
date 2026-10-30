@@ -227,7 +227,7 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
         INSERT INTO purchase_invoices
           (id, duplicate_key, supplier_name, supplier_tax_id, invoice_number, control_number, issue_date, currency, exchange_rate, grand_total, lines, document, status, accounting_entry_id, created_by, created_at)
         SELECT
-          ${invoiceId}, ${duplicateKey}, ${draft.supplierName}, ${draft.supplierTaxId}, ${draft.invoiceNumber || null}, ${draft.controlNumber || null}, ${draft.issueDate}::date, ${draft.currency}, ${exchangeRate}, ${grandTotal}, ${JSON.stringify(persistedLines)}::jsonb, ${JSON.stringify(invoicePayload)}::jsonb, 'processing', ${journalId}, ${input.userId}, ${now}::timestamptz
+          ${invoiceId}, ${duplicateKey}, ${draft.supplierName}, ${draft.supplierTaxId}, ${draft.invoiceNumber || null}, ${draft.controlNumber || null}, ${draft.issueDate}::date, ${draft.currency}, ${exchangeRate}, ${grandTotal}, ${JSON.stringify(persistedLines)}::jsonb, ${JSON.stringify(invoicePayload)}::jsonb, 'confirmed', ${journalId}, ${input.userId}, ${now}::timestamptz
         FROM updated
         RETURNING id
       ),
@@ -251,17 +251,11 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
         WHERE EXISTS (SELECT 1 FROM supplier_contact)
         RETURNING id
       ),
-      finalized AS (
-        UPDATE purchase_invoices
-        SET status = 'confirmed'
-        WHERE id = ${invoiceId} AND EXISTS (SELECT 1 FROM journal)
-        RETURNING id
-      )
       SELECT
         (SELECT COUNT(*)::int FROM inserted) AS inserted_count,
         (SELECT COUNT(*)::int FROM updated) AS updated_count,
         (SELECT COUNT(*)::int FROM journal) AS journal_count,
-        (SELECT COUNT(*)::int FROM finalized) AS finalized_count
+        (SELECT COUNT(*)::int FROM inserted) AS finalized_count
     `;
   } catch (error) {
     const dbError = error as { code?: unknown; constraint?: unknown; message?: unknown };
