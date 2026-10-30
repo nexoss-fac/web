@@ -18,6 +18,11 @@ export interface ScannedReceiptData {
   confianza: 'alta' | 'media' | 'baja';
   tasa_aplicada?: number;
   items?: Array<{ descripcion: string; cantidad?: number; total?: number }>;
+  tipo_documento?: 'factura' | 'recibo' | 'comprobante_transferencia' | 'comprobante_pago' | 'nota_entrega' | 'otro';
+  titular?: string;
+  origen?: string;
+  destino?: string;
+  operacion_ref?: string;
   error?: string;
 }
 
@@ -30,6 +35,7 @@ function getGenAI(): GoogleGenAI | null {
     aiClient = new GoogleGenAI({
       apiKey: key,
       httpOptions: {
+        timeout: 25000,
         headers: {
           'User-Agent': 'aistudio-build',
         },
@@ -75,7 +81,13 @@ export async function analyzeReceiptImage(
   const todayIso = now.toISOString().split('T')[0];
 
   const prompt = `Eres un asistente contable y auditor experto para la tienda de calzado "NEXOSS" en Venezuela.
-Tu tarea es examinar minuciosamente la fotografía adjunta de una factura, recibo de compra, ticket fiscal de caja registradora, comprobante de pago móvil, factura de servicios o nota de entrega y extraer los datos del gasto.
+Tu tarea es identificar primero el tipo de documento y luego examinar minuciosamente la fotografía. Puede ser una factura, recibo, ticket fiscal, comprobante de pago móvil, comprobante de transferencia bancaria, factura de servicios o nota de entrega. Extrae los datos visibles sin inventar información.
+
+TIPO DE DOCUMENTO Y TRANSFERENCIAS:
+- Devuelve tipo_documento como exactamente uno de: factura, recibo, comprobante_transferencia, comprobante_pago, nota_entrega, otro.
+- Si es una transferencia bancaria, extrae titular, origen (cuenta o teléfono parcialmente enmascarado), destino (cuenta o teléfono parcialmente enmascarado), beneficiario, número de operación/referencia y concepto.
+- No confundas el número de teléfono o cuenta con el número de operación. No inventes datos ocultos.
+- Un comprobante de transferencia NO debe registrarse automáticamente como gasto: debe quedar para revisión manual, porque puede ser un traspaso entre cuentas propias o un pago a un tercero.
 
 INSTRUCCIONES DE EXTRACCIÓN:
 1. MONTO TOTAL:
@@ -133,6 +145,11 @@ Tasa de cambio actual de referencia: ${exchangeRate.toFixed(2)} Bs/USD.
 
 IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con esta estructura exacta:
 {
+  "tipo_documento": "factura" | "recibo" | "comprobante_transferencia" | "comprobante_pago" | "nota_entrega" | "otro",
+  "titular": "nombre visible del titular de la cuenta",
+  "origen": "cuenta o teléfono de origen visible",
+  "destino": "cuenta o teléfono de destino visible",
+  "operacion_ref": "número de operación o referencia",
   "monto": 25.50,
   "moneda": "USD" | "Bs",
   "categoria": "Transporte",
@@ -149,16 +166,17 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
   ]
 }`;
 
-  // Model priority: start with gemini-3.1-flash-lite (high throughput, resistant to 503 spikes)
-  // followed by gemini-flash-latest and gemini-3.8-flash
-  const modelsToTry = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+  // Priorizar el modelo que ha respondido correctamente en producción; mantener
+  // dos alternativas para evitar depender de un único modelo saturado.
+  const modelsToTry = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
   let lastErr: any = null;
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   for (const model of modelsToTry) {
-    // Attempt up to 2 times per model if a transient 503 or 429 error occurs
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    // Un intento acotado por modelo: el siguiente fallback evita acumular esperas
+    // de varios minutos y reduce el riesgo de que Render cierre la petición.
+    for (let attempt = 1; attempt <= 1; attempt++) {
       try {
         logger.info(`[Gemini Receipt AI] Escaneando factura con ${model} (intento ${attempt})...`);
         const imagePart = {
@@ -219,9 +237,21 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
           monto_usd = effectiveRate > 0 ? Number((monto / effectiveRate).toFixed(2)) : 0;
         }
 
-        // Validar categoría
-        // Incluye categorías antiguas que el modelo pudiera devolver; lo desconocido queda "Sin clasificar".
-        const categoria: string = normalizeExpenseCategory(parsed.categoria);
+        // Validar categoría. Una transferencia queda sin clasificar para impedir
+        // que el modo automático la contabilice como gasto sin revisión humana.
+        const tipoDocumento = ['factura', 'recibo', 'comprobante_transferencia', 'comprobante_pago', 'nota_entrega', 'otro'].includes(String(parsed.tipo_documento))
+          ? String(parsed.tipo_documento)
+          : 'otro';
+        const esTransferencia = tipoDocumento === 'comprobante_transferencia';
+        const categoria: string = esTransferencia ? 'Sin clasificar' : normalizeExpenseCategory(parsed.categoria);
+        const origen = typeof parsed.origen === 'string' ? parsed.origen.trim() : '';
+        const destino = typeof parsed.destino === 'string' ? parsed.destino.trim() : '';
+        const titular = typeof parsed.titular === 'string' ? parsed.titular.trim() : '';
+        const operacionRef = typeof parsed.operacion_ref === 'string' ? parsed.operacion_ref.trim() : '';
+        const detallesBase = typeof parsed.detalles_detectados === 'string' ? parsed.detalles_detectados : '';
+        const detallesTransferencia = esTransferencia
+          ? [`Titular: ${titular}`, `Origen: ${origen}`, `Destino: ${destino}`, `Operación: ${operacionRef}`, `Concepto: ${parsed.descripcion || ''}`].filter((part) => !part.endsWith(': ')).join(' · ')
+          : '';
 
         return {
           success: true,
@@ -230,13 +260,20 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
           monto_usd,
           monto_bs,
           tasa_aplicada: effectiveRate,
+          tipo_documento: tipoDocumento,
+          titular,
+          origen,
+          destino,
+          operacion_ref: operacionRef,
           categoria,
-          descripcion: parsed.descripcion || 'Gasto operativo registrado por foto de factura',
-          beneficiario: parsed.beneficiario || 'Proveedor no especificado',
+          descripcion: esTransferencia
+            ? (parsed.descripcion || `Comprobante de transferencia${destino ? ` a ${destino}` : ''}`)
+            : (parsed.descripcion || 'Gasto operativo registrado por foto de factura'),
+          beneficiario: parsed.beneficiario || (esTransferencia ? destino : '') || 'Proveedor no especificado',
           fecha,
-          comprobante_ref: parsed.comprobante_ref || '',
+          comprobante_ref: operacionRef || parsed.comprobante_ref || '',
           cuenta_sugerida: parsed.cuenta_sugerida || (moneda === 'USD' ? 'Efectivo USD' : 'Pago Móvil (BDV)'),
-          detalles_detectados: parsed.detalles_detectados || '',
+          detalles_detectados: [detallesBase, detallesTransferencia].filter(Boolean).join(' · '),
           confianza: ['alta', 'media', 'baja'].includes(parsed.confianza) ? parsed.confianza : 'media',
           items: Array.isArray(parsed.items) ? parsed.items : [],
         };
@@ -246,18 +283,13 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
         lastErr = err;
 
         const isTransientOverload =
-          errMsg.includes('503') ||
-          errMsg.includes('high demand') ||
-          errMsg.includes('UNAVAILABLE') ||
-          errMsg.includes('429') ||
-          errMsg.includes('RESOURCE_EXHAUSTED');
+          /503|high demand|UNAVAILABLE|429|RESOURCE_EXHAUSTED|fetch failed|ECONNRESET|ETIMEDOUT|timeout|socket|network/i.test(errMsg);
 
-        if (isTransientOverload && attempt === 1) {
-          logger.info(`[Gemini Receipt AI] Esperando 1.2s antes de reintentar por sobrecarga temporal en ${model}...`);
-          await sleep(1200);
-          continue; // Try attempt 2 on same model
+        if (isTransientOverload) {
+          logger.warn(`[Gemini Receipt AI] Fallo transitorio en ${model}; se probará el siguiente modelo disponible.`);
+          await sleep(350);
         }
-        // If not transient or already tried twice, break to try next fallback model
+        // Cualquier error de proveedor continúa con el siguiente modelo de respaldo.
         break;
       }
     }
@@ -266,9 +298,9 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
   const rawErrMsg = lastErr?.message || '';
   let friendlyMsg = 'No se pudo procesar la imagen de la factura con IA.';
 
-  if (rawErrMsg.includes('503') || rawErrMsg.includes('high demand') || rawErrMsg.includes('UNAVAILABLE')) {
-    friendlyMsg = 'Los servidores de IA están saturados por alta demanda momentánea. Por favor, pulsa "Reintentar" o ingresa el monto manualmente con la foto.';
-  } else if (rawErrMsg.includes('429') || rawErrMsg.includes('RESOURCE_EXHAUSTED')) {
+  if (/503|high demand|UNAVAILABLE|fetch failed|ECONNRESET|ETIMEDOUT|timeout|socket|network/i.test(rawErrMsg)) {
+    friendlyMsg = 'El servicio de IA está temporalmente ocupado o perdió la conexión. Puedes reintentar; la foto se conserva para completar los datos manualmente.';
+  } else if (/429|RESOURCE_EXHAUSTED/i.test(rawErrMsg)) {
     friendlyMsg = 'Límite de solicitudes momentáneo alcanzado. Espera unos segundos y pulsa "Reintentar".';
   } else if (rawErrMsg) {
     try {
