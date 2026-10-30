@@ -231,6 +231,14 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
         FROM updated
         RETURNING id
       ),
+      supplier_contact AS (
+        INSERT INTO business_contacts (id, tipo, documento, nombre, created_at, updated_at)
+        SELECT ${randomUUID()}, 'proveedor', ${draft.supplierTaxId}, ${draft.supplierName}, NOW(), NOW()
+        FROM inserted
+        ON CONFLICT (tipo, documento) DO UPDATE
+          SET nombre = EXCLUDED.nombre, updated_at = NOW()
+        RETURNING id
+      ),
       journal AS (
         INSERT INTO accounting_entries
           (id, fecha, numero_asiento, tipo, origen, origen_id, sujeto, rif, documento, tipo_documento, metodo_pago, tasa_dolar, total_debe, total_haber, lineas, libro_compra_venta, total_compras, compras_no_gravadas, compras_gravadas, porcentaje_impuesto, observaciones, updated_at)
@@ -240,6 +248,7 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
           ${exchangeRate}, ${grandTotal}, ${grandTotal}, ${JSON.stringify(journalLines)}::jsonb, TRUE, ${grandTotal},
           ${draft.exemptBase}, ${draft.taxableBase}, 0, 'Asiento generado desde factura de compra confirmada.', NOW()
         FROM inserted
+        WHERE EXISTS (SELECT 1 FROM supplier_contact)
         RETURNING id
       ),
       finalized AS (
