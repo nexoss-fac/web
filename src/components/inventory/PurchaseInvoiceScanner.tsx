@@ -135,7 +135,6 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
     setDraft((current) => current ? { ...current, lines: current.lines.filter((_, i) => i !== index) } : current);
     setMappings((current) => current.filter((_, i) => i !== index));
   };
-  const money = (value: number) => Number(value || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex items-start justify-center p-2 sm:p-5 overflow-y-auto">
