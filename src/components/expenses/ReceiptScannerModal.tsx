@@ -249,11 +249,21 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
     setIsAnalyzing(true);
     setAnalysisError(null);
     setJustUploadedMessage(null);
+    // No conservar importes ni datos de un escaneo anterior si este intento falla.
+    setMontoInput('');
+    setCategoria(UNCLASSIFIED_EXPENSE);
+    setDescripcion('');
+    setBeneficiario('');
+    setComprobanteRef('');
+    setNotas('');
+    setDetallesDetectados('');
+    setConfidenceLevel('baja');
 
     try {
       const response = await fetch('/api/expenses/scan-receipt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(60000),
         body: JSON.stringify({
           imageBase64,
           exchangeRate,
@@ -336,7 +346,12 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
       }
     } catch (err: any) {
       console.error('Invoice analysis error:', err);
-      setAnalysisError(err.message || 'Error al procesar la factura con IA.');
+      const message = err?.name === 'TimeoutError' || err?.name === 'AbortError'
+        ? 'El análisis tardó demasiado y se canceló. La foto sigue disponible: puedes reintentar o completar los datos manualmente.'
+        : err?.message === 'Failed to fetch'
+          ? 'No se pudo completar la conexión con el servidor de análisis. La foto se conserva; reintenta o completa los datos manualmente.'
+          : (err.message || 'Error al procesar la factura con IA.');
+      setAnalysisError(message);
     } finally {
       setIsAnalyzing(false);
     }

@@ -35,7 +35,7 @@ function getGenAI(): GoogleGenAI | null {
     aiClient = new GoogleGenAI({
       apiKey: key,
       httpOptions: {
-        timeout: 25000,
+        timeout: 18000,
         headers: {
           'User-Agent': 'aistudio-build',
         },
@@ -250,7 +250,7 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
         const operacionRef = typeof parsed.operacion_ref === 'string' ? parsed.operacion_ref.trim() : '';
         const detallesBase = typeof parsed.detalles_detectados === 'string' ? parsed.detalles_detectados : '';
         const detallesTransferencia = esTransferencia
-          ? [`Titular: ${titular}`, `Origen: ${origen}`, `Destino: ${destino}`, `Operación: ${operacionRef}`, `Concepto: ${parsed.descripcion || ''}`].filter((part) => !part.endsWith(': ')).join(' · ')
+          ? [`Tipo de documento: comprobante de transferencia`, `Titular: ${titular}`, `Origen: ${origen}`, `Destino: ${destino}`, `Operación: ${operacionRef}`, `Concepto: ${parsed.descripcion || ''}`].filter((part) => !part.endsWith(': ')).join(' · ')
           : '';
 
         return {
