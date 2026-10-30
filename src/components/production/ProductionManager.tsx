@@ -16,6 +16,7 @@ export const ProductionManager: React.FC = () => {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [lots, setLots] = useState<ProductionLot[]>([]);
+  const [conversionCostByProduct, setConversionCostByProduct] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<'recipes' | 'orders' | 'lots'>('recipes');
@@ -57,6 +58,29 @@ export const ProductionManager: React.FC = () => {
       setRecipes(Array.isArray(data.productionRecipes) ? data.productionRecipes : []);
       setOrders(Array.isArray(data.productionOrders) ? data.productionOrders : []);
       setLots(Array.isArray(data.productionLots) ? data.productionLots : []);
+      // Costos de conversión del centro de costos: nómina y gastos indirectos del mes,
+      // distribuidos por producto según horas de producción (o unidades si no hay horas).
+      const costing = data.manufacturingCostData || {};
+      const monthKey = new Date().toISOString().slice(0, 7);
+      const staffCost = (Array.isArray(costing.staff) ? costing.staff : []).filter((x: any) => x.active !== false).reduce((sum: number, x: any) => {
+        const monthly = Number(x.pay || 0) * (x.frequency === 'quincenal' ? 2 : x.frequency === 'semanal' ? 52 / 12 : 1);
+        return sum + (x.department === 'produccion' ? monthly : monthly * Math.max(0, Math.min(100, Number(x.productionPercent || 0))) / 100);
+      }, 0);
+      const monthExpenses = Array.isArray(data.expenses) ? data.expenses.filter((x: any) => String(x.fecha || '').startsWith(monthKey)) : [];
+      const actualPayroll = monthExpenses.filter((x: any) => x.centro_costo === 'produccion' && x.naturaleza_costo === 'mano_obra').reduce((sum: number, x: any) => sum + Number(x.monto_usd || 0), 0);
+      const indirectCost = monthExpenses.filter((x: any) => x.centro_costo === 'produccion' && x.naturaleza_costo === 'indirecto').reduce((sum: number, x: any) => sum + Number(x.monto_usd || 0), 0);
+      const extraIndirect = (Array.isArray(costing.costs) ? costing.costs : []).filter((x: any) => String(x.date || '').startsWith(monthKey) && x.department === 'produccion').reduce((sum: number, x: any) => sum + Number(x.amount || 0), 0);
+      const conversionTotal = (actualPayroll > 0 ? actualPayroll : staffCost) + indirectCost + extraIndirect;
+      const monthOutputs = (Array.isArray(costing.outputs) ? costing.outputs : []).filter((x: any) => String(x.date || '').startsWith(monthKey));
+      const hoursTotal = monthOutputs.reduce((sum: number, x: any) => sum + Number(x.hours || 0), 0);
+      const unitsTotal = monthOutputs.reduce((sum: number, x: any) => sum + Number(x.goodUnits || 0), 0);
+      const costMap: Record<string, number> = {};
+      monthOutputs.forEach((x: any) => {
+        const weight = hoursTotal > 0 ? Number(x.hours || 0) / hoursTotal : unitsTotal > 0 ? Number(x.goodUnits || 0) / unitsTotal : 0;
+        const key = String(x.product || '').trim().toLowerCase();
+        if (key && Number(x.goodUnits || 0) > 0) costMap[key] = (costMap[key] || 0) + conversionTotal * weight / Number(x.goodUnits);
+      });
+      setConversionCostByProduct(costMap);
     } catch (error) {
       addNotification('Error cargando producción', error instanceof Error ? error.message : 'Error de conexión', 'critical');
     } finally { setLoading(false); }
@@ -108,7 +132,10 @@ export const ProductionManager: React.FC = () => {
     // Validamos todo antes de aplicar movimientos. La operación usa los mismos movimientos de inventario
     // que el resto de NEXOSS y conserva el vínculo de cada lote de fabricación.
     requirements.forEach(r => adjustStock(r.materialId, -r.required, `Consumo producción lote ${order.batchCode}`, 'salida_ajuste'));
-    const totalProductionCost = recipeBatchCost(recipe) * order.plannedQuantity / recipe.outputQuantity;
+    const monthlyConversionUnitCost = conversionCostByProduct[outputProduct.nombre.trim().toLowerCase()];
+    const materialCostForOrder = recipeMaterialCost(recipe) * order.plannedQuantity / recipe.outputQuantity;
+    const recipeConversionForOrder = ((Number(recipe.laborCost) || 0) + (Number(recipe.overheadCost) || 0)) * order.plannedQuantity / recipe.outputQuantity;
+    const totalProductionCost = materialCostForOrder + (monthlyConversionUnitCost !== undefined ? monthlyConversionUnitCost * actualOutput : recipeConversionForOrder);
     const productionUnitCost = totalProductionCost / actualOutput;
     const combinedStock = outputProduct.stock + actualOutput;
     const weightedUnitCost = combinedStock > 0
