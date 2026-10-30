@@ -75,14 +75,15 @@ export async function optimizeImageForAi(dataUrl: string, maxDim = 1000, quality
  */
 export async function analyzeShoeWithAi(
   imageBase64: string,
-  userHint?: string
+  userHint?: string,
+  industry = 'comercio general'
 ): Promise<ShoeAiResult> {
   // Optimize image size first for snappy API response (< 1000px, quality 0.85)
   const optimizedImage = await optimizeImageForAi(imageBase64);
 
   // Use clean relative endpoints without auth query parameters.
   // In reverse proxies, passing auth query params on POST requests causes 302 redirects to static error pages (HTTP 405).
-  const endpoints = ['/api/ai/analyze-shoe', '/api/analyze-shoe', '/api/shoe-ai', '/api/ai/shoe'];
+  const endpoints = ['/api/ai/analyze-product'];
   let lastErrorMsg = '';
 
   for (const endpoint of endpoints) {
@@ -96,6 +97,7 @@ export async function analyzeShoeWithAi(
         body: JSON.stringify({
           imageBase64: optimizedImage,
           userHint: userHint?.trim() || undefined,
+          industry,
         }),
       });
 
@@ -115,8 +117,23 @@ export async function analyzeShoeWithAi(
       }
 
       const data = await response.json();
-      if (data && (data.marca || data.nombre)) {
-        return data as ShoeAiResult;
+      if (data && data.success && data.nombre) {
+        return {
+          ...data,
+          marca: data.marca || '',
+          modelo: data.modelo || '',
+          categoria: data.categoria || '',
+          tipo: data.tipo || 'Otros',
+          genero: 'Unisex',
+          color: data.color || '',
+          material: data.material || '',
+          descripcion_comercial: data.descripcion_comercial || '',
+          copy_social: '',
+          hashtags: [],
+          precio_sugerido_usd: 0,
+          caracteristicas_clave: Array.isArray(data.caracteristicas_clave) ? data.caracteristicas_clave : [],
+          tallas_sugeridas: [],
+        } as ShoeAiResult;
       } else if (data && data.error) {
         lastErrorMsg = data.error;
       }
@@ -129,6 +146,6 @@ export async function analyzeShoeWithAi(
   // If both endpoints failed, report genuine actionable error instead of returning fake generic sneakers
   throw new Error(
     lastErrorMsg ||
-      'No se pudo conectar con el servicio de IA. Verifica tu conexión e intenta enfocar el zapato con buena iluminación.'
+      'No se pudo conectar con el servicio de IA. Verifica tu conexión e intenta tomar una foto nítida del producto.'
   );
 }
