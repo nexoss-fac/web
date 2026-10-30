@@ -323,6 +323,11 @@ export interface CurrencyPurchase {
   tasa_compra: number;      // Tasa en Bs por cada $
   monto_usd_recibido: number; // Dólares netos que se acreditan al balance positivo en USD
   comision_usd?: number;
+  tipo_operacion?: 'compra' | 'venta';
+  cuenta_origen?: string;
+  cuenta_destino?: string;
+  monto_bs_resultante?: number;
+  monto_usd_entregado?: number;
   referencia?: string;      // N° de orden Binance, ID de Zelle, etc.
   usuario: string;
   notas?: string;
