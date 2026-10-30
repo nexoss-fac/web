@@ -36,11 +36,13 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
   const duplicateKey = buildPurchaseInvoiceDuplicateKey(draft);
   if (!duplicateKey) throw new Error('No se pudo construir la clave de control de duplicados del documento.');
 
-  const state = await readTenantWorkspaceState();
+  await readTenantWorkspaceState();
+  const versionRows = await sql`SELECT state, updated_at FROM nexoss_workspace_state WHERE id = 'current' LIMIT 1`;
+  const state = versionRows[0]?.state as Record<string, unknown> | undefined;
   if (!state || !Array.isArray(state.products) || !Array.isArray(state.movements)) {
     throw new Error('No se pudo leer el inventario de la empresa. No se registró la compra.');
   }
-  const expectedUpdatedAt = String(state.updatedAt || '');
+  const expectedUpdatedAt = versionRows[0]?.updated_at;
   if (!expectedUpdatedAt) throw new Error('El estado de inventario no tiene versión; vuelve a cargar la aplicación antes de confirmar.');
 
   const products = (state.products as any[]).map((product) => ({ ...product }));
@@ -218,7 +220,7 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
         UPDATE nexoss_workspace_state
         SET state = ${JSON.stringify(nextState)}::jsonb, updated_at = NOW()
         WHERE id = 'current'
-          AND state->>'updatedAt' = ${expectedUpdatedAt}
+          AND updated_at = ${expectedUpdatedAt}::timestamptz
           AND NOT EXISTS (SELECT 1 FROM existing)
           AND EXISTS (SELECT 1 FROM lock_key)
         RETURNING id
