@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, FileText, Loader2, Plus, ScanLine, Trash2, Upload, X } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import type { ShoeProduct } from '../../types';
+import { getSaleDateKey, getTodayVenezuela } from '../../utils/dateUtils';
 
 type InvoiceLine = {
   description: string; sku: string; barcode: string; quantity: number; unit: string;
@@ -38,7 +39,7 @@ function suggestedProduct(line: InvoiceLine, products: ShoeProduct[]): string {
 }
 
 export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed: () => Promise<void> | void }> = ({ onClose, onConfirmed }) => {
-  const { products, exchangeRate, getExchangeRateForDate } = useStore();
+  const { products, exchangeRate, historicalRates, sales, expenses } = useStore();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
   const [draft, setDraft] = useState<InvoiceDraft | null>(null);
@@ -50,6 +51,18 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
   const [success, setSuccess] = useState('');
 
   const activeProducts = useMemo(() => products.filter((product) => product.activo !== false), [products]);
+  const getKnownRateForDate = (date: string): number => {
+    if (!date) return 0;
+    const key = getSaleDateKey(date);
+    if (key === getTodayVenezuela() && exchangeRate > 0) return exchangeRate;
+    if (Number(historicalRates[key] || 0) > 0) return Number(historicalRates[key]);
+    const sale = sales.find((item) => item.fecha && getSaleDateKey(item.fecha) === key && Number(item.tasa_cambio) > 0);
+    if (sale) return Number(sale.tasa_cambio);
+    const expense = expenses.find((item) => item.fecha && getSaleDateKey(item.fecha) === key && Number(item.tasa_cambio) > 0);
+    if (expense) return Number(expense.tasa_cambio);
+    const previous = Object.keys(historicalRates).filter((item) => item <= key).sort().pop();
+    return previous && Number(historicalRates[previous] || 0) > 0 ? Number(historicalRates[previous]) : 0;
+  };
   const updateHeader = (field: keyof InvoiceDraft, value: any) => setDraft((current) => current ? { ...current, [field]: value } : current);
   const updateLine = (index: number, field: keyof InvoiceLine, value: any) => setDraft((current) => {
     if (!current) return current;
@@ -87,7 +100,7 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
       if (!response.ok || !payload.success) throw new Error(payload.error || 'No se pudo analizar el documento.');
       const next = payload.draft as InvoiceDraft;
       setDraft(next);
-      const historicalRate = next.issueDate ? getExchangeRateForDate(next.issueDate) : 0;
+      const historicalRate = next.issueDate ? getKnownRateForDate(next.issueDate) : 0;
       setRate(historicalRate > 0 ? String(historicalRate) : '');
       setMappings(next.lines.map((line) => ({ productId: suggestedProduct(line, activeProducts), unitFactor: '' })));
     } catch (cause) {
@@ -175,7 +188,7 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
               <label className="text-xs font-semibold text-slate-600">RIF del proveedor<input value={draft.supplierTaxId} onChange={(e) => updateHeader('supplierTaxId', e.target.value.toUpperCase())} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-600">N.º de factura<input value={draft.invoiceNumber} onChange={(e) => updateHeader('invoiceNumber', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-600">N.º de control<input value={draft.controlNumber} onChange={(e) => updateHeader('controlNumber', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
-              <label className="text-xs font-semibold text-slate-600">Fecha de emisión<input type="date" value={draft.issueDate} onChange={(e) => { updateHeader('issueDate', e.target.value); const historicalRate = getExchangeRateForDate(e.target.value); setRate(historicalRate > 0 ? String(historicalRate) : ''); }} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+              <label className="text-xs font-semibold text-slate-600">Fecha de emisión<input type="date" value={draft.issueDate} onChange={(e) => { updateHeader('issueDate', e.target.value); const historicalRate = getKnownRateForDate(e.target.value); setRate(historicalRate > 0 ? String(historicalRate) : ''); }} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-600">Moneda<select value={draft.currency} onChange={(e) => updateHeader('currency', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"><option value="">Seleccionar</option><option value="USD">USD</option><option value="VES">Bolívares (VES)</option></select></label>
               <label className="text-xs font-semibold text-slate-600">Tasa BCV de la fecha<input type="number" min="0" step="0.0001" value={rate} onChange={(e) => setRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
             </div>
