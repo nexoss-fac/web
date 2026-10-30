@@ -2301,85 +2301,37 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Currency Purchases (Conversión de Bs a Divisas / Binance / Zelle)
   const addCurrencyPurchase = (purchaseData: Omit<CurrencyPurchase, 'id' | 'created_at'>) => {
-    const newPurchase: CurrencyPurchase = {
-      ...purchaseData,
-      id: `cp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      created_at: new Date().toISOString(),
-    };
-
+    const newPurchase: CurrencyPurchase = { ...purchaseData, tipo_operacion: purchaseData.tipo_operacion || 'compra', id: 'fx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), created_at: new Date().toISOString() };
     setCurrencyPurchases((prev) => [newPurchase, ...prev]);
-
-    // 1. Descontar los Bolívares del saldo en Bs (Pago Móvil / Efectivo Bs)
-    setAccounts((prevAccounts) =>
-      prevAccounts.map((acc) => {
-        if (acc.moneda === 'Bs' && (acc.nombre || '').toLowerCase().includes('pago móvil')) {
-          return {
-            ...acc,
-            saldo: Math.max(0, acc.saldo - purchaseData.monto_bs_gastado),
-          };
-        }
+    setAccounts((prevAccounts) => prevAccounts.map((acc) => {
+      if (newPurchase.tipo_operacion === 'venta') {
+        if (acc.nombre === newPurchase.cuenta_origen) return { ...acc, saldo: Math.max(0, acc.saldo - Number(newPurchase.monto_usd_entregado || newPurchase.monto_usd_recibido || 0)) };
+        if (acc.nombre === newPurchase.cuenta_destino) return { ...acc, saldo: acc.saldo + Number(newPurchase.monto_bs_resultante || newPurchase.monto_bs_gastado || 0) };
         return acc;
-      })
-    );
-
-    // 2. Acreditar los Dólares al saldo positivo en USD (Binance / Zelle / Efectivo)
-    setAccounts((prevAccounts) =>
-      prevAccounts.map((acc) => {
-        const methodLower = String(purchaseData.metodo || '').toLowerCase();
-        if (
-          (methodLower.includes('binance') && (acc.nombre || '').toLowerCase().includes('binance')) ||
-          (methodLower.includes('zelle') && (acc.nombre || '').toLowerCase().includes('zelle')) ||
-          (methodLower.includes('efectivo') && (acc.nombre || '').toLowerCase().includes('efectivo usd'))
-        ) {
-          return {
-            ...acc,
-            saldo: acc.saldo + purchaseData.monto_usd_recibido,
-          };
-        }
-        return acc;
-      })
-    );
-
-    addNotification(
-      'Compra de Divisas Registrada',
-      `Conversión: -${purchaseData.monto_bs_gastado.toLocaleString('es-VE')} Bs ➔ +$${purchaseData.monto_usd_recibido.toFixed(2)} (${purchaseData.metodo})`,
-      'success'
-    );
+      }
+      const methodLower = String(newPurchase.metodo || '').toLowerCase();
+      if (acc.moneda === 'Bs' && (acc.nombre || '').toLowerCase().includes('pago móvil')) return { ...acc, saldo: Math.max(0, acc.saldo - newPurchase.monto_bs_gastado) };
+      if ((methodLower.includes('binance') && (acc.nombre || '').toLowerCase().includes('binance')) || (methodLower.includes('zelle') && (acc.nombre || '').toLowerCase().includes('zelle')) || (methodLower.includes('efectivo') && (acc.nombre || '').toLowerCase().includes('efectivo usd')) || (methodLower.includes('transferencia') && acc.moneda === 'USD')) return { ...acc, saldo: acc.saldo + newPurchase.monto_usd_recibido };
+      return acc;
+    }));
+    addNotification(newPurchase.tipo_operacion === 'venta' ? 'Venta de divisas registrada' : 'Compra de divisas registrada', newPurchase.tipo_operacion === 'venta' ? 'Conversión: -$' + Number(newPurchase.monto_usd_entregado || newPurchase.monto_usd_recibido).toFixed(2) + ' ➔ +' + Number(newPurchase.monto_bs_resultante || newPurchase.monto_bs_gastado).toLocaleString('es-VE') + ' Bs' : 'Conversión: -' + newPurchase.monto_bs_gastado.toLocaleString('es-VE') + ' Bs ➔ +$' + newPurchase.monto_usd_recibido.toFixed(2) + ' (' + newPurchase.metodo + ')', 'success');
   };
-
   const deleteCurrencyPurchase = (id: string) => {
-    const target = currencyPurchases.find((c) => c.id === id);
-    if (!target) return;
-
+    const target = currencyPurchases.find((c) => c.id === id); if (!target) return;
     setCurrencyPurchases((prev) => prev.filter((c) => c.id !== id));
-
-    // Revertir balances
-    setAccounts((prevAccounts) =>
-      prevAccounts.map((acc) => {
-        if (acc.moneda === 'Bs' && (acc.nombre || '').toLowerCase().includes('pago móvil')) {
-          return {
-            ...acc,
-            saldo: acc.saldo + target.monto_bs_gastado,
-          };
-        }
-        const methodLower = String(target.metodo || '').toLowerCase();
-        if (
-          (methodLower.includes('binance') && (acc.nombre || '').toLowerCase().includes('binance')) ||
-          (methodLower.includes('zelle') && (acc.nombre || '').toLowerCase().includes('zelle')) ||
-          (methodLower.includes('efectivo') && (acc.nombre || '').toLowerCase().includes('efectivo usd'))
-        ) {
-          return {
-            ...acc,
-            saldo: Math.max(0, acc.saldo - target.monto_usd_recibido),
-          };
-        }
+    setAccounts((prevAccounts) => prevAccounts.map((acc) => {
+      if (target.tipo_operacion === 'venta') {
+        if (acc.nombre === target.cuenta_origen) return { ...acc, saldo: acc.saldo + Number(target.monto_usd_entregado || target.monto_usd_recibido || 0) };
+        if (acc.nombre === target.cuenta_destino) return { ...acc, saldo: Math.max(0, acc.saldo - Number(target.monto_bs_resultante || target.monto_bs_gastado || 0)) };
         return acc;
-      })
-    );
-
-    addNotification('Registro Eliminado', 'Se anuló la compra de divisas seleccionada.', 'info');
+      }
+      if (acc.moneda === 'Bs' && (acc.nombre || '').toLowerCase().includes('pago móvil')) return { ...acc, saldo: acc.saldo + target.monto_bs_gastado };
+      const methodLower = String(target.metodo || '').toLowerCase();
+      if ((methodLower.includes('binance') && (acc.nombre || '').toLowerCase().includes('binance')) || (methodLower.includes('zelle') && (acc.nombre || '').toLowerCase().includes('zelle')) || (methodLower.includes('efectivo') && (acc.nombre || '').toLowerCase().includes('efectivo usd')) || (methodLower.includes('transferencia') && acc.moneda === 'USD')) return { ...acc, saldo: Math.max(0, acc.saldo - target.monto_usd_recibido) };
+      return acc;
+    }));
+    addNotification('Registro eliminado', target.tipo_operacion === 'venta' ? 'Se revirtió la venta de divisas.' : 'Se anuló la compra de divisas seleccionada.', 'info');
   };
-
   const markNotificationsAsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
