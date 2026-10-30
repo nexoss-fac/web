@@ -988,6 +988,125 @@ async function startServer() {
   const adminOnly = requireTenantRole('owner', 'admin');
   registerHealthRoutes(app, adminOnly);
 
+  // Contactos de clientes privados por empresa: la conexión SQL se resuelve desde
+  // el contexto autenticado del tenant; nunca se usa una tabla global compartida.
+  const contactSchemaReady = new WeakMap<object, Promise<void>>();
+  const contactLookupWindows = new Map<string, number[]>();
+  const normalizeCustomerDocument = (value: unknown): string => String(value ?? '')
+    .normalize('NFKC').trim().toUpperCase().replace(/[.\s-]/g, '');
+  const isValidCustomerDocument = (value: string): boolean =>
+    /^(?:V|E|J|G|P|C|RIF)?[0-9]{5,12}$/.test(value);
+  const ensureContactSchema = async (sql: ReturnType<typeof getNeonSql>) => {
+    if (!sql) throw new Error('No hay conexión de base de datos para esta empresa.');
+    const key = sql as unknown as object;
+    let ready = contactSchemaReady.get(key);
+    if (!ready) {
+      ready = (async () => {
+        await sql`CREATE TABLE IF NOT EXISTS nexoss_customer_contacts (
+          id TEXT PRIMARY KEY,
+          tipo TEXT NOT NULL CHECK (tipo IN ('cliente')),
+          documento TEXT NOT NULL,
+          nombre TEXT NOT NULL,
+          apellido TEXT NOT NULL DEFAULT '',
+          telefono TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (tipo, documento)
+        )`;
+        await sql`CREATE TABLE IF NOT EXISTS nexoss_customer_contact_audit (
+          id TEXT PRIMARY KEY,
+          actor_uid TEXT NOT NULL,
+          documento TEXT NOT NULL,
+          action TEXT NOT NULL CHECK (action IN ('lookup', 'upsert')),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`;
+        await sql`CREATE INDEX IF NOT EXISTS nexoss_customer_contact_audit_actor_created_idx
+          ON nexoss_customer_contact_audit (actor_uid, created_at DESC)`;
+      })();
+      contactSchemaReady.set(key, ready);
+      ready.catch(() => contactSchemaReady.delete(key));
+    }
+    await ready;
+  };
+
+  app.get('/api/contacts', async (req, res) => {
+    const tenant = (req as TenantAuthenticatedRequest).tenant;
+    const sql = getNeonSql();
+    if (!tenant?.uid || !tenant.companyId || !sql) {
+      return res.status(503).json({ error: 'No hay una base de datos disponible para esta empresa.' });
+    }
+    if (String(req.query.tipo || 'cliente').toLowerCase() !== 'cliente') {
+      return res.status(400).json({ error: 'Tipo de contacto no válido.' });
+    }
+    const document = normalizeCustomerDocument(req.query.documento);
+    if (!isValidCustomerDocument(document)) {
+      return res.status(400).json({ error: 'Introduce una cédula o RIF venezolano válido.' });
+    }
+    const now = Date.now();
+    const rateKey = `${tenant.companyId}:${tenant.uid}:${document}`;
+    const recent = (contactLookupWindows.get(rateKey) || []).filter((time) => now - time < 5000);
+    if (recent.length >= 3) {
+      contactLookupWindows.set(rateKey, recent);
+      return res.status(429).json({ error: 'Demasiadas consultas para este documento. Espera unos segundos.' });
+    }
+    recent.push(now);
+    contactLookupWindows.set(rateKey, recent);
+    // Limpieza acotada para que el limitador en memoria no crezca indefinidamente.
+    if (contactLookupWindows.size > 5000) {
+      for (const [key, times] of contactLookupWindows) {
+        if (!times.some((time) => now - time < 5000)) contactLookupWindows.delete(key);
+      }
+    }
+    try {
+      await ensureContactSchema(sql);
+      const rows = await sql`SELECT documento, nombre, apellido, telefono
+        FROM nexoss_customer_contacts WHERE tipo = 'cliente' AND documento = ${document} LIMIT 1`;
+      await sql`INSERT INTO nexoss_customer_contact_audit (id, actor_uid, documento, action)
+        VALUES (${randomUUID()}, ${tenant.uid}, ${document}, 'lookup')`;
+      const row = rows[0] as { documento: string; nombre: string; apellido: string; telefono: string } | undefined;
+      return res.json({ contact: row ? { documento: row.documento, nombre: row.nombre, apellido: row.apellido, telefono: row.telefono } : null });
+    } catch (error) {
+      logger.warn('[Contactos] No se pudo consultar el directorio privado:', error instanceof Error ? error.message : error);
+      return res.status(503).json({ error: 'No se pudo consultar el directorio de clientes.' });
+    }
+  });
+
+  app.post('/api/contacts', async (req, res) => {
+    const tenant = (req as TenantAuthenticatedRequest).tenant;
+    const sql = getNeonSql();
+    if (!tenant?.uid || !tenant.companyId || !sql) {
+      return res.status(503).json({ error: 'No hay una base de datos disponible para esta empresa.' });
+    }
+    if (String(req.body?.tipo || 'cliente').toLowerCase() !== 'cliente') {
+      return res.status(400).json({ error: 'Tipo de contacto no válido.' });
+    }
+    const document = normalizeCustomerDocument(req.body?.documento);
+    const name = String(req.body?.nombre ?? '').trim().slice(0, 180);
+    const surname = String(req.body?.apellido ?? '').trim().slice(0, 180);
+    const phone = String(req.body?.telefono ?? '').trim().slice(0, 60);
+    if (!isValidCustomerDocument(document)) {
+      return res.status(400).json({ error: 'Introduce una cédula o RIF venezolano válido.' });
+    }
+    if (!name || name.toLowerCase() === 'consumidor final') {
+      return res.status(400).json({ error: 'El nombre del cliente es obligatorio.' });
+    }
+    try {
+      await ensureContactSchema(sql);
+      await sql`INSERT INTO nexoss_customer_contacts
+          (id, tipo, documento, nombre, apellido, telefono, created_at, updated_at)
+        VALUES (${randomUUID()}, 'cliente', ${document}, ${name}, ${surname}, ${phone}, NOW(), NOW())
+        ON CONFLICT (tipo, documento) DO UPDATE SET
+          nombre = EXCLUDED.nombre, apellido = EXCLUDED.apellido,
+          telefono = EXCLUDED.telefono, updated_at = NOW()`;
+      await sql`INSERT INTO nexoss_customer_contact_audit (id, actor_uid, documento, action)
+        VALUES (${randomUUID()}, ${tenant.uid}, ${document}, 'upsert')`;
+      return res.json({ success: true });
+    } catch (error) {
+      logger.warn('[Contactos] No se pudo guardar el contacto privado:', error instanceof Error ? error.message : error);
+      return res.status(503).json({ error: 'No se pudo guardar el cliente.' });
+    }
+  });
+
   // Web Push: solo propietarios/administradores con membresía activa pueden registrar dispositivos.
   app.get('/api/push/public-key', adminOnly, (_req, res) => {
     const key = (process.env.WEB_PUSH_VAPID_PUBLIC_KEY || '').trim();
