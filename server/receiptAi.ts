@@ -239,8 +239,9 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
 
         // Validar categoría. Una transferencia queda sin clasificar para impedir
         // que el modo automático la contabilice como gasto sin revisión humana.
-        const tipoDocumento: NonNullable<ScannedReceiptData['tipo_documento']> = ['factura', 'recibo', 'comprobante_transferencia', 'comprobante_pago', 'nota_entrega', 'otro'].includes(String(parsed.tipo_documento))
-          ? String(parsed.tipo_documento)
+        const tiposDocumento = ['factura', 'recibo', 'comprobante_transferencia', 'comprobante_pago', 'nota_entrega', 'otro'] as const;
+        const tipoDocumento: NonNullable<ScannedReceiptData['tipo_documento']> = tiposDocumento.includes(parsed.tipo_documento)
+          ? parsed.tipo_documento as NonNullable<ScannedReceiptData['tipo_documento']>
           : 'otro';
         const esTransferencia = tipoDocumento === 'comprobante_transferencia';
         const categoria: string = esTransferencia ? 'Sin clasificar' : normalizeExpenseCategory(parsed.categoria);
