@@ -54,7 +54,8 @@ export const Sidebar: React.FC<{
   setMobileOpen: (open: boolean) => void;
   isCompanyAdmin?: boolean;
   isHealthIndustry?: boolean;
-}> = ({ activeTab, setActiveTab, mobileOpen, setMobileOpen, isCompanyAdmin = false, isHealthIndustry = false }) => {
+  isManufacturingIndustry?: boolean;
+}> = ({ activeTab, setActiveTab, mobileOpen, setMobileOpen, isCompanyAdmin = false, isHealthIndustry = false, isManufacturingIndustry = false }) => {
   const { criticalStockProducts, userRole, layaways, logoutSession } = useStore();
   const activeLayawaysCount = layaways ? layaways.filter((l) => l.estado === 'activo').length : 0;
   const navGroups = [
