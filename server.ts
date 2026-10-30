@@ -6,6 +6,7 @@ import fs from 'fs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { addMoney, subtractMoney } from './server/money.ts';
 import { registerSalesRoutes } from './server/routes/salesRoutes.ts';
+import { registerPurchaseInvoiceRoutes } from './server/routes/purchaseInvoiceRoutes.ts';
 import { registerHealthRoutes } from './server/routes/healthRoutes.ts';
 import { createServer as createViteServer } from 'vite';
 import { 
@@ -2130,6 +2131,9 @@ async function startServer() {
 
   // 5. Sales API (Neon or Local JSON persistence)
   registerSalesRoutes(app, { readServerStore, writeServerStore, readLocalSales, getNeonSql, normalizeSales, updateSale, voidSale, onSaleRegistered: (sale) => notifyInBackground((company) => buildSaleNotice(sale, company)) });
+
+  // Lector independiente de facturas de compra: solo devuelve borradores revisables.
+  registerPurchaseInvoiceRoutes(app);
 
   // Layaways API (Sistema de Apartados)
   app.get('/api/layaways', async (req, res) => {
