@@ -101,7 +101,7 @@ export function registerAccountingFirmRoutes(app: Express) {
       const q = String(req.query.q || '').trim().slice(0, 80);
       const found = await client.query(
         `SELECT id, legal_name, trade_name, rif FROM platform_companies
-         WHERE status='active' AND workspace->>'accountingFirmEnabled'='true' AND id<>$1
+         WHERE status='active' AND id<>$1
          AND ($2='' OR legal_name ILIKE '%'||$2||'%' OR trade_name ILIKE '%'||$2||'%' OR rif ILIKE '%'||$2||'%')
          ORDER BY trade_name, legal_name LIMIT 20`, [companyId, q]);
       return res.json({ firms: found.rows });
