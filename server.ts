@@ -2425,15 +2425,18 @@ async function startServer() {
       logger.error('[API scan-receipt error]:', msg);
 
       let cleanError = msg;
-      if (msg.includes('503') || msg.includes('high demand') || msg.includes('UNAVAILABLE')) {
-        cleanError = 'Los servidores de IA están temporalmente saturados por alta demanda. Por favor, pulsa "Reintentar" o completa los campos manualmente con la foto.';
-      } else if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
-        cleanError = 'Límite de solicitudes momentáneo. Espera unos segundos y vuelve a intentar.';
+      const transientAiFailure = /503|high demand|UNAVAILABLE|429|RESOURCE_EXHAUSTED|fetch failed|ECONNRESET|ETIMEDOUT|timeout|socket|network/i.test(msg);
+      if (transientAiFailure) {
+        cleanError = 'El servicio de IA está temporalmente ocupado o perdió la conexión. La foto se conserva; vuelve a intentar o completa los datos manualmente.';
+        res.setHeader('Retry-After', '3');
       }
 
-      res.status(500).json({
+      // 503 comunica una indisponibilidad temporal real; no convertirla en 500
+      // evita que el cliente trate la saturación del proveedor como error interno.
+      res.status(transientAiFailure ? 503 : 500).json({
         success: false,
         error: cleanError,
+        retryable: transientAiFailure,
       });
     }
   };
