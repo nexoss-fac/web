@@ -205,58 +205,67 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
 
-  const result = await sql`
-    WITH reserved AS (
-      INSERT INTO purchase_invoices
-        (id, duplicate_key, supplier_name, supplier_tax_id, invoice_number, control_number, issue_date, currency, exchange_rate, grand_total, lines, document, status, accounting_entry_id, created_by, created_at)
-      VALUES
-        (${invoiceId}, ${duplicateKey}, ${draft.supplierName}, ${draft.supplierTaxId}, ${draft.invoiceNumber || null}, ${draft.controlNumber || null}, ${draft.issueDate}::date, ${draft.currency}, ${exchangeRate}, ${grandTotal}, ${JSON.stringify(persistedLines)}::jsonb, ${JSON.stringify(invoicePayload)}::jsonb, 'processing', ${journalId}, ${input.userId}, ${now}::timestamptz)
-      ON CONFLICT (duplicate_key) DO NOTHING
-      RETURNING id
-    ),
-    updated AS (
-      UPDATE nexoss_workspace_state
-      SET state = ${JSON.stringify(nextState)}::jsonb, updated_at = NOW()
-      WHERE id = 'current'
-        AND state->>'updatedAt' = ${expectedUpdatedAt}
-        AND EXISTS (SELECT 1 FROM reserved)
-      RETURNING id
-    ),
-    cleanup AS (
-      DELETE FROM purchase_invoices
-      WHERE id = ${invoiceId}
-        AND EXISTS (SELECT 1 FROM reserved)
-        AND NOT EXISTS (SELECT 1 FROM updated)
-      RETURNING id
-    ),
-    journal AS (
-      INSERT INTO accounting_entries
-        (id, fecha, numero_asiento, tipo, origen, origen_id, sujeto, rif, documento, tipo_documento, metodo_pago, tasa_dolar, total_debe, total_haber, lineas, libro_compra_venta, total_compras, compras_no_gravadas, compras_gravadas, porcentaje_impuesto, observaciones, updated_at)
+  let result: any[];
+  try {
+    result = await sql`
+      WITH lock_key AS (
+        SELECT pg_advisory_xact_lock(hashtext(${duplicateKey}))
+      ),
+      existing AS (
+        SELECT id FROM purchase_invoices WHERE duplicate_key = ${duplicateKey} LIMIT 1
+      ),
+      updated AS (
+        UPDATE nexoss_workspace_state
+        SET state = ${JSON.stringify(nextState)}::jsonb, updated_at = NOW()
+        WHERE id = 'current'
+          AND state->>'updatedAt' = ${expectedUpdatedAt}
+          AND NOT EXISTS (SELECT 1 FROM existing)
+          AND EXISTS (SELECT 1 FROM lock_key)
+        RETURNING id
+      ),
+      inserted AS (
+        INSERT INTO purchase_invoices
+          (id, duplicate_key, supplier_name, supplier_tax_id, invoice_number, control_number, issue_date, currency, exchange_rate, grand_total, lines, document, status, accounting_entry_id, created_by, created_at)
+        SELECT
+          ${invoiceId}, ${duplicateKey}, ${draft.supplierName}, ${draft.supplierTaxId}, ${draft.invoiceNumber || null}, ${draft.controlNumber || null}, ${draft.issueDate}::date, ${draft.currency}, ${exchangeRate}, ${grandTotal}, ${JSON.stringify(persistedLines)}::jsonb, ${JSON.stringify(invoicePayload)}::jsonb, 'processing', ${journalId}, ${input.userId}, ${now}::timestamptz
+        FROM updated
+        RETURNING id
+      ),
+      journal AS (
+        INSERT INTO accounting_entries
+          (id, fecha, numero_asiento, tipo, origen, origen_id, sujeto, rif, documento, tipo_documento, metodo_pago, tasa_dolar, total_debe, total_haber, lineas, libro_compra_venta, total_compras, compras_no_gravadas, compras_gravadas, porcentaje_impuesto, observaciones, updated_at)
+        SELECT
+          ${journalId}, ${draft.issueDate}::timestamptz, ${journal.numero_asiento}, 'compra', 'purchase_invoice', ${invoiceId},
+          ${draft.supplierName}, ${draft.supplierTaxId}, ${draft.invoiceNumber || draft.controlNumber}, 'FACTURA', 'Crédito proveedor',
+          ${exchangeRate}, ${grandTotal}, ${grandTotal}, ${JSON.stringify(journalLines)}::jsonb, TRUE, ${grandTotal},
+          ${draft.exemptBase}, ${draft.taxableBase}, 0, 'Asiento generado desde factura de compra confirmada.', NOW()
+        FROM inserted
+        RETURNING id
+      ),
+      finalized AS (
+        UPDATE purchase_invoices
+        SET status = 'confirmed'
+        WHERE id = ${invoiceId} AND EXISTS (SELECT 1 FROM journal)
+        RETURNING id
+      )
       SELECT
-        ${journalId}, ${draft.issueDate}::timestamptz, ${journal.numero_asiento}, 'compra', 'purchase_invoice', ${invoiceId},
-        ${draft.supplierName}, ${draft.supplierTaxId}, ${draft.invoiceNumber || draft.controlNumber}, 'FACTURA', 'Crédito proveedor',
-        ${exchangeRate}, ${grandTotal}, ${grandTotal}, ${JSON.stringify(journalLines)}::jsonb, TRUE, ${grandTotal},
-        ${draft.exemptBase}, ${draft.taxableBase}, 0, 'Asiento generado desde factura de compra confirmada.', NOW()
-      WHERE EXISTS (SELECT 1 FROM updated)
-      RETURNING id
-    ),
-    finalized AS (
-      UPDATE purchase_invoices
-      SET status = 'confirmed'
-      WHERE id = ${invoiceId} AND EXISTS (SELECT 1 FROM journal)
-      RETURNING id
-    )
-    SELECT
-      (SELECT COUNT(*)::int FROM reserved) AS reserved_count,
-      (SELECT COUNT(*)::int FROM updated) AS updated_count,
-      (SELECT COUNT(*)::int FROM journal) AS journal_count,
-      (SELECT COUNT(*)::int FROM finalized) AS finalized_count
-  `;
+        (SELECT COUNT(*)::int FROM inserted) AS inserted_count,
+        (SELECT COUNT(*)::int FROM updated) AS updated_count,
+        (SELECT COUNT(*)::int FROM journal) AS journal_count,
+        (SELECT COUNT(*)::int FROM finalized) AS finalized_count
+    `;
+  } catch (error) {
+    const dbError = error as { code?: unknown; constraint?: unknown; message?: unknown };
+    if (dbError?.code === '23505' || String(dbError?.constraint || '').includes('purchase_invoices_duplicate_key')) {
+      throw new Error('Esta factura ya fue registrada en esta empresa. No se modificó el inventario.');
+    }
+    throw error;
+  }
   const row = result[0] || {};
-  if (Number(row.reserved_count || 0) === 0) {
+  if (Number(row.inserted_count || 0) === 0) {
     const duplicate = await sql`SELECT id FROM purchase_invoices WHERE duplicate_key = ${duplicateKey} LIMIT 1`;
     if (duplicate.length) throw new Error('Esta factura ya fue registrada en esta empresa. No se modificó el inventario.');
-    throw new Error('No se pudo reservar la factura para su confirmación.');
+    throw new Error('El inventario cambió durante la confirmación. Actualiza la pantalla y vuelve a revisar.');
   }
   if (Number(row.updated_count || 0) !== 1 || Number(row.journal_count || 0) !== 1 || Number(row.finalized_count || 0) !== 1) {
     throw new Error('El inventario cambió durante la confirmación. No se registró la compra; actualiza la pantalla y vuelve a revisar.');
