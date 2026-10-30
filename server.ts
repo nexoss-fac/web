@@ -7,6 +7,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { addMoney, subtractMoney } from './server/money.ts';
 import { registerSalesRoutes } from './server/routes/salesRoutes.ts';
 import { registerPurchaseInvoiceRoutes } from './server/routes/purchaseInvoiceRoutes.ts';
+import { registerAccountingFirmRoutes } from './server/routes/accountingFirmRoutes.ts';
 import { registerHealthRoutes } from './server/routes/healthRoutes.ts';
 import { createServer as createViteServer } from 'vite';
 import { 
@@ -478,6 +479,7 @@ async function startServer() {
   // Salud permanece pública. Todas las rutas API operativas declaradas debajo
   // requieren un token Firebase verificado por el servidor.
   app.use('/api', requireFirebaseAuth);
+  registerAccountingFirmRoutes(app);
 
   // Onboarding y administración central necesitan identidad Firebase, pero
   // todavía no tienen un tenant seleccionado.
