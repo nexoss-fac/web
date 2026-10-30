@@ -29,7 +29,7 @@ function normalizeNumericRows<T extends Record<string, any>>(rows: T[], fields: 
 }
 
 export const NUMERIC_FIELDS = {
-  shoe_products: ['precio', 'costo', 'stock'],
+  shoe_products: ['precio', 'costo', 'stock', 'stock_minimo', 'stock_maximo'],
   sales_transactions: [
     'subtotal_usd',
     'descuento_usd',
@@ -405,6 +405,8 @@ export async function initDatabaseSchema() {
     // Las materias primas y productos fraccionables requieren existencias decimales (kg, litros, metros, etc.).
     await sql`ALTER TABLE shoe_products ALTER COLUMN stock TYPE NUMERIC(14, 4) USING stock::numeric`;
     await sql`ALTER TABLE shoe_products ALTER COLUMN costo TYPE NUMERIC(14, 4) USING costo::numeric`;
+    await sql`ALTER TABLE shoe_products ALTER COLUMN stock_minimo TYPE NUMERIC(14, 4) USING stock_minimo::numeric`;
+    await sql`ALTER TABLE shoe_products ALTER COLUMN stock_maximo TYPE NUMERIC(14, 4) USING stock_maximo::numeric`;
 
     await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS iva_incluido BOOLEAN DEFAULT FALSE`;
     await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS cliente_correo VARCHAR(150)`;
