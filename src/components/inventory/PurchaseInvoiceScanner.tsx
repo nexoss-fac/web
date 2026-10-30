@@ -38,7 +38,7 @@ function suggestedProduct(line: InvoiceLine, products: ShoeProduct[]): string {
 }
 
 export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed: () => Promise<void> | void }> = ({ onClose, onConfirmed }) => {
-  const { products, exchangeRate } = useStore();
+  const { products, exchangeRate, getExchangeRateForDate } = useStore();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
   const [draft, setDraft] = useState<InvoiceDraft | null>(null);
@@ -87,6 +87,7 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
       if (!response.ok || !payload.success) throw new Error(payload.error || 'No se pudo analizar el documento.');
       const next = payload.draft as InvoiceDraft;
       setDraft(next);
+      setRate(String((next.issueDate ? getExchangeRateForDate(next.issueDate) : 0) || exchangeRate || ''));
       setMappings(next.lines.map((line) => ({ productId: suggestedProduct(line, activeProducts), unitFactor: '' })));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo analizar el documento.');
@@ -173,7 +174,7 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
               <label className="text-xs font-semibold text-slate-600">RIF del proveedor<input value={draft.supplierTaxId} onChange={(e) => updateHeader('supplierTaxId', e.target.value.toUpperCase())} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-600">N.º de factura<input value={draft.invoiceNumber} onChange={(e) => updateHeader('invoiceNumber', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-600">N.º de control<input value={draft.controlNumber} onChange={(e) => updateHeader('controlNumber', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
-              <label className="text-xs font-semibold text-slate-600">Fecha de emisión<input type="date" value={draft.issueDate} onChange={(e) => updateHeader('issueDate', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+              <label className="text-xs font-semibold text-slate-600">Fecha de emisión<input type="date" value={draft.issueDate} onChange={(e) => { updateHeader('issueDate', e.target.value); const historicalRate = getExchangeRateForDate(e.target.value); if (historicalRate > 0) setRate(String(historicalRate)); }} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-600">Moneda<select value={draft.currency} onChange={(e) => updateHeader('currency', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"><option value="">Seleccionar</option><option value="USD">USD</option><option value="VES">Bolívares (VES)</option></select></label>
               <label className="text-xs font-semibold text-slate-600">Tasa BCV de la fecha<input type="number" min="0" step="0.0001" value={rate} onChange={(e) => setRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
             </div>
@@ -199,7 +200,7 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-lg bg-indigo-50/60 border border-indigo-100 p-3">
                       <label className="text-[11px] font-bold text-indigo-900 sm:col-span-2">Producto del inventario<select value={mappings[index]?.productId || ''} onChange={(e) => updateMapping(index, 'productId', e.target.value)} className="mt-1 w-full rounded-lg border border-indigo-200 bg-white p-2 text-xs"><option value="">Selecciona producto (obligatorio)</option>{activeProducts.map((product) => <option key={product.id} value={product.id}>{product.nombre} · SKU {product.sku} · stock {product.stock}</option>)}</select></label>
-                      <label className="text-[11px] font-bold text-indigo-900">Factor a unidad de inventario<input type="number" min="0.0001" step="0.0001" value={mappings[index]?.unitFactor || ''} onChange={(e) => updateMapping(index, 'unitFactor', e.target.value)} placeholder="Ej.: 12 unidades por caja" className="mt-1 w-full rounded-lg border border-indigo-200 bg-white p-2 text-xs" /><span className="block mt-1 font-normal text-indigo-700">Cuántas unidades de inventario ingresan por cada {line.unit || 'unidad facturada'} de la factura.</span></label>
+                      <label className="text-[11px] font-bold text-indigo-900">Factor a unidad de inventario<input type="number" min="0.0001" step="0.0001" value={mappings[index]?.unitFactor || ''} onChange={(e) => updateMapping(index, 'unitFactor', e.target.value)} placeholder="Ej.: 12 unidades por caja" className="mt-1 w-full rounded-lg border border-indigo-200 bg-white p-2 text-xs" /><span className="block mt-1 font-normal text-indigo-700">Cuántas unidades de inventario ingresan por cada {line.unit || 'unidad facturada'} de la factura. Entrada: {mappings[index]?.unitFactor && line.quantity > 0 ? (line.quantity * Number(mappings[index].unitFactor)).toLocaleString('es-VE') : '—'} unidades.</span></label>
                     </div>
                   </div>
                 ))}
