@@ -48,6 +48,7 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
   const products = (state.products as any[]).map((product) => ({ ...product }));
   const movements = [...(state.movements as any[])];
   const productIndex = new Map(products.map((product, index) => [String(product.id), index]));
+  const touchedProductIds = new Set<string>();
   const now = new Date().toISOString();
   const invoiceId = randomUUID();
   const journalId = randomUUID();
@@ -61,6 +62,7 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
       throw new Error(`Indica el factor de conversión de unidad para el renglón ${index + 1}.`);
     }
     const product = products[productAt];
+    touchedProductIds.add(String(product.id));
     const inventoryQuantity = round(line.quantity * mapping.unitFactor);
     if (!(inventoryQuantity > 0)) throw new Error(`La cantidad convertida del renglón ${index + 1} no es válida.`);
     const unitCostUsd = draft.currency === 'USD' ? round(line.unitCost / mapping.unitFactor) : round(line.unitCost / exchangeRate / mapping.unitFactor);
@@ -102,6 +104,17 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
       movementId: movement.id,
     };
   });
+
+  const changedProductRows = products
+    .filter((product) => touchedProductIds.has(String(product.id)))
+    .map((product) => ({
+      id: String(product.id),
+      stock: Number(product.stock || 0),
+      costo: Number(product.costo || 0),
+      clasificacion_inventario: String(product.clasificacion_inventario || 'Mercancía'),
+    }));
+  const expectedProductsCount = changedProductRows.length;
+  if (!expectedProductsCount) throw new Error('No hay productos del inventario vinculados a esta factura.');
 
   const lineNet = round(persistedLines.reduce((sum, line) => sum + Math.max(0, Number(line.lineTotal || 0) - Number(line.taxAmount || 0)), 0));
   const taxTotal = round(draft.taxTotal);
@@ -213,16 +226,41 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
       WITH lock_key AS (
         SELECT pg_advisory_xact_lock(hashtext(${duplicateKey}))
       ),
+      state_lock AS (
+        SELECT id
+        FROM nexoss_workspace_state
+        WHERE id = 'current' AND updated_at = ${expectedUpdatedAt}::timestamptz
+        FOR UPDATE
+      ),
       existing AS (
         SELECT id FROM purchase_invoices WHERE duplicate_key = ${duplicateKey} LIMIT 1
+      ),
+      requested_products AS (
+        SELECT *
+        FROM jsonb_to_recordset(${JSON.stringify(changedProductRows)}::jsonb)
+          AS requested(id text, stock numeric, costo numeric, clasificacion_inventario text)
+      ),
+      product_updates AS (
+        UPDATE shoe_products AS product
+        SET stock = requested.stock,
+            costo = requested.costo,
+            clasificacion_inventario = COALESCE(NULLIF(requested.clasificacion_inventario, ''), product.clasificacion_inventario),
+            updated_at = NOW()
+        FROM requested_products AS requested
+        WHERE product.id = requested.id
+          AND (SELECT COUNT(*) FROM shoe_products AS existing_products
+               WHERE existing_products.id IN (SELECT id FROM requested_products)) = ${expectedProductsCount}
+          AND EXISTS (SELECT 1 FROM state_lock)
+          AND EXISTS (SELECT 1 FROM lock_key)
+          AND NOT EXISTS (SELECT 1 FROM existing)
+        RETURNING product.id
       ),
       updated AS (
         UPDATE nexoss_workspace_state
         SET state = ${JSON.stringify(nextState)}::jsonb, updated_at = NOW()
         WHERE id = 'current'
           AND updated_at = ${expectedUpdatedAt}::timestamptz
-          AND NOT EXISTS (SELECT 1 FROM existing)
-          AND EXISTS (SELECT 1 FROM lock_key)
+          AND (SELECT COUNT(*) FROM product_updates) = ${expectedProductsCount}
         RETURNING id
       ),
       inserted AS (
@@ -252,9 +290,10 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
         FROM inserted
         WHERE EXISTS (SELECT 1 FROM supplier_contact)
         RETURNING id
-      ),
+      )
       SELECT
         (SELECT COUNT(*)::int FROM inserted) AS inserted_count,
+        (SELECT COUNT(*)::int FROM product_updates) AS products_updated_count,
         (SELECT COUNT(*)::int FROM updated) AS updated_count,
         (SELECT COUNT(*)::int FROM journal) AS journal_count,
         (SELECT COUNT(*)::int FROM inserted) AS finalized_count
@@ -272,8 +311,8 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
     if (duplicate.length) throw new Error('Esta factura ya fue registrada en esta empresa. No se modificó el inventario.');
     throw new Error('El inventario cambió durante la confirmación. Actualiza la pantalla y vuelve a revisar.');
   }
-  if (Number(row.updated_count || 0) !== 1 || Number(row.journal_count || 0) !== 1 || Number(row.finalized_count || 0) !== 1) {
+  if (Number(row.products_updated_count || 0) !== expectedProductsCount || Number(row.updated_count || 0) !== 1 || Number(row.journal_count || 0) !== 1 || Number(row.finalized_count || 0) !== 1) {
     throw new Error('El inventario cambió durante la confirmación. No se registró la compra; actualiza la pantalla y vuelve a revisar.');
   }
-  return { invoiceId, accountingEntryId: journalId, productsUpdated: persistedLines.length, grandTotal, currency: draft.currency };
+  return { invoiceId, accountingEntryId: journalId, productsUpdated: expectedProductsCount, grandTotal, currency: draft.currency };
 }
