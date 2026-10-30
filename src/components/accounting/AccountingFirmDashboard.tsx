@@ -60,10 +60,10 @@ export const AccountingFirmDashboard: React.FC<Props> = ({ companyId, companyNam
     finally { setBusy(''); }
   };
 
-  const requestFirm = async (firmCompanyId: string) => {
-    setBusy(firmCompanyId); setError('');
+  const requestFirm = async (clientCompanyId: string) => {
+    setBusy(clientCompanyId); setError('');
     try {
-      const response = await fetch('/api/accounting-firm/request', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firmCompanyId,clientCompanyId:companyId,scopes:['journal_read','ledger_read','reports_read','purchases_read','sales_read','expenses_read','tax_read']})});
+      const response = await fetch('/api/accounting-firm/request', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({firmCompanyId:companyId,clientCompanyId,scopes:['journal_read','ledger_read','reports_read','purchases_read','sales_read','expenses_read','tax_read']})});
       const data = await response.json(); if (!response.ok) throw new Error(data.error || 'No se pudo solicitar acceso.');
       setFirms([]); await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo solicitar acceso.'); }
