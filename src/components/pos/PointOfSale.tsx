@@ -457,7 +457,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       const response = await fetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'cliente', documento: document, nombre, apellido: customerLastName.trim(), telefono: customerPhone.trim() }),
+        body: JSON.stringify({ tipo: 'cliente', documento: document, nombre: name, apellido: customerLastName.trim(), telefono: customerPhone.trim() }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || result?.success !== true) {
