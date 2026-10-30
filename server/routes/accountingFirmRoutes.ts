@@ -97,6 +97,31 @@ async function audit(client: any, input: { grantId?: string; firmId: string; cli
     [randomUUID(), input.grantId || null, input.firmId, input.clientId, input.userId, input.action, JSON.stringify(input.metadata || {})]);
 }
 
+/** Revalida en control plane, en cada petición, identidad, membresía, firma, grant y tenant listo. */
+export async function findDelegatedBooksAccess(client: any, actorUid: string, firmId: string, clientId: string) {
+  const access = await client.query(
+        `SELECT u.id AS user_id, m.role AS member_role,
+                g.id AS grant_id, g.scopes, g.expires_at,
+                c.id AS client_company_id, c.status AS client_status, c.workspace AS client_workspace,
+                t.secret_reference, t.encrypted_connection_secret
+         FROM platform_users u
+         JOIN company_memberships m ON m.user_id=u.id AND m.status='active'
+         JOIN platform_companies firm ON firm.id=m.company_id AND firm.status='active'
+         JOIN company_accounting_firm_grants g
+           ON g.firm_company_id=firm.id AND g.client_company_id=$3 AND g.status='active'
+         JOIN platform_companies c ON c.id=g.client_company_id AND c.status='active'
+         JOIN tenant_database_connections t ON t.company_id=c.id AND t.status='ready'
+         WHERE u.auth_provider='firebase' AND u.auth_subject=$1 AND u.status='active'
+           AND firm.id=$2 AND firm.workspace->>'accountingFirmEnabled'='true'
+           AND m.role IN ('owner','admin','accountant','auditor')
+           AND (g.expires_at IS NULL OR g.expires_at>NOW())
+         LIMIT 1`,
+        [actorUid, firmId, clientId],
+      );
+  );
+  return access.rows[0] || null;
+}
+
 export function registerAccountingFirmRoutes(app: Express) {
   app.get('/api/accounting-firm/status', async (req, res) => {
     const actor = identity(req); const companyId = String(req.query.companyId || '');
@@ -243,26 +268,7 @@ export function registerAccountingFirmRoutes(app: Express) {
     const db = controlPlane();
     const client = await db.connect();
     try {
-      const access = await client.query(
-        `SELECT u.id AS user_id, m.role AS member_role,
-                g.id AS grant_id, g.scopes, g.expires_at,
-                c.id AS client_company_id, c.status AS client_status, c.workspace AS client_workspace,
-                t.secret_reference, t.encrypted_connection_secret
-         FROM platform_users u
-         JOIN company_memberships m ON m.user_id=u.id AND m.status='active'
-         JOIN platform_companies firm ON firm.id=m.company_id AND firm.status='active'
-         JOIN company_accounting_firm_grants g
-           ON g.firm_company_id=firm.id AND g.client_company_id=$3 AND g.status='active'
-         JOIN platform_companies c ON c.id=g.client_company_id AND c.status='active'
-         JOIN tenant_database_connections t ON t.company_id=c.id AND t.status='ready'
-         WHERE u.auth_provider='firebase' AND u.auth_subject=$1 AND u.status='active'
-           AND firm.id=$2 AND firm.workspace->>'accountingFirmEnabled'='true'
-           AND m.role IN ('owner','admin','accountant','auditor')
-           AND (g.expires_at IS NULL OR g.expires_at>NOW())
-         LIMIT 1`,
-        [actor.uid, firmId, clientId],
-      );
-      const row = access.rows[0];
+      const row = await findDelegatedBooksAccess(client, actor.uid, firmId, clientId);
       if (!row) return res.status(403).json({ error: 'No existe una autorización vigente para consultar esta empresa.' });
 
       const scopes = Array.isArray(row.scopes)
