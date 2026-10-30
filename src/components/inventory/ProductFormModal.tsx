@@ -1838,7 +1838,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         Marca: <strong>{aiAnalysisSuccess.marca}</strong> • Modelo: <strong>{aiAnalysisSuccess.modelo}</strong> • Tipo: <strong>{aiAnalysisSuccess.tipo}</strong>
                       </div>
                       <div className="text-[10px] text-emerald-600 mt-0.5">
-                        Campos de nombre, marca, color, precio sugerido (${aiAnalysisSuccess.precio_sugerido_usd}) y descripción completados.
+                        Campos de nombre, marca, color, material y descripción completados. Los precios deben confirmarse manualmente.
                       </div>
                     </div>
                   </div>
