@@ -88,6 +88,8 @@ export const ExpensesManager: React.FC = () => {
   const [montoInput, setMontoInput] = useState('');
   const [comprobanteRef, setComprobanteRef] = useState('');
   const [notas, setNotas] = useState('');
+  const [centroCosto, setCentroCosto] = useState<NonNullable<Expense['centro_costo']>>('administracion');
+  const [naturalezaCosto, setNaturalezaCosto] = useState<NonNullable<Expense['naturaleza_costo']>>('otro');
   const [formError, setFormError] = useState('');
 
   // Month date range helpers
@@ -292,6 +294,8 @@ export const ExpensesManager: React.FC = () => {
       comprobante_ref: comprobanteRef.trim() || undefined,
       registrado_por: 'Admin / Gerencia',
       notas: notas.trim() || undefined,
+      centro_costo: centroCosto,
+      naturaleza_costo: naturalezaCosto,
     });
 
     // Guarda el proveedor por RIF o nombre para reutilizarlo en próximos gastos.
@@ -1092,6 +1096,22 @@ export const ExpensesManager: React.FC = () => {
                   onChange={(e) => setDescripcion(e.target.value)}
                   className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Área que consume el gasto</label>
+                  <select value={centroCosto} onChange={e => setCentroCosto(e.target.value as NonNullable<Expense['centro_costo']>)} className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs">
+                    <option value="produccion">Producción</option><option value="ventas">Ventas</option><option value="despacho">Despacho</option><option value="administracion">Administración</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Naturaleza del costo</label>
+                  <select value={naturalezaCosto} onChange={e => setNaturalezaCosto(e.target.value as NonNullable<Expense['naturaleza_costo']>)} className="w-full rounded-lg border border-slate-200 bg-white p-2 text-xs">
+                    <option value="mano_obra">Mano de obra / nómina</option><option value="indirecto">Costo indirecto de fabricación</option><option value="materia_prima">Materia prima</option><option value="comercial">Gasto comercial / ventas</option><option value="logistico">Despacho y logística</option><option value="administrativo">Administrativo</option><option value="otro">Otro</option>
+                  </select>
+                </div>
+                <p className="col-span-2 text-[10px] leading-4 text-indigo-800">Esta clasificación permite distribuir los gastos reales entre producción, ventas, despacho y administración sin duplicar el egreso.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
