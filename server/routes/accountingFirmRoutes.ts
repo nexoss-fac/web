@@ -47,6 +47,19 @@ async function member(client: any, uid: string, companyId: string) {
   return row && ['owner', 'admin'].includes(row.role) ? row : null;
 }
 
+
+async function activeFirmMember(client: any, uid: string, companyId: string) {
+  const result = await client.query(
+    `SELECT u.id AS user_id, m.role, c.id AS company_id, c.workspace, c.status
+     FROM platform_users u
+     JOIN company_memberships m ON m.user_id=u.id AND m.status='active'
+     JOIN platform_companies c ON c.id=m.company_id
+     WHERE u.auth_provider='firebase' AND u.auth_subject=$1 AND c.id=$2
+       AND c.status='active' AND m.role IN ('owner','admin','accountant','auditor')
+     LIMIT 1`, [uid, companyId]);
+  return result.rows[0] || null;
+}
+
 async function audit(client: any, input: { grantId?: string; firmId: string; clientId: string; userId: string; action: string; metadata?: unknown }) {
   await client.query(
     `INSERT INTO accounting_firm_access_audit
@@ -61,8 +74,8 @@ export function registerAccountingFirmRoutes(app: Express) {
     if (!actor || !companyId) return res.status(400).json({ error: 'Selecciona una empresa.' });
     const db = controlPlane(); const client = await db.connect();
     try {
-      const own = await member(client, actor.uid, companyId);
-      if (!own) return res.status(403).json({ error: 'Solo el propietario o administrador puede gestionar esta función.' });
+      const own = await activeFirmMember(client, actor.uid, companyId);
+      if (!own) return res.status(403).json({ error: 'No tienes una membresía activa en esta firma contable.' });
       const enabled = own.workspace?.accountingFirmEnabled === true;
       const [outgoing, incoming] = await Promise.all([
         client.query(`SELECT g.id,g.status,g.scopes,g.requested_at,g.decided_at,
