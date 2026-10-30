@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_accounting_firm_grants_client_status
 
 -- Impide permisos vacíos o valores de scope que el backend no reconoce.
 -- Se añade de forma idempotente para instalaciones donde la tabla ya exista.
-DO $
+DO $nexoss$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -39,7 +39,7 @@ BEGIN
         ]::TEXT[]
       );
   END IF;
-END $;
+END $nexoss$;
 
 CREATE TABLE IF NOT EXISTS accounting_firm_access_audit (
   id UUID PRIMARY KEY,
