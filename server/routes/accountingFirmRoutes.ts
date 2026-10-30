@@ -117,7 +117,6 @@ export async function findDelegatedBooksAccess(client: any, actorUid: string, fi
            AND (g.expires_at IS NULL OR g.expires_at>NOW())
          LIMIT 1`,
         [actorUid, firmId, clientId],
-      );
   );
   return access.rows[0] || null;
 }
