@@ -5,6 +5,7 @@ import { getNeonSql, readTenantWorkspaceState } from '../db.ts';
 import { tenantStorageContext } from '../multiempresa/companyAccess.ts';
 import { resolveIndustryTemplate } from '../../src/domain/companyIndustries.ts';
 import { LocalEnvironmentTenantSecretProvider } from '../multiempresa/tenantSecretProvider.ts';
+import { logger } from '../logger.ts';
 
 const SCOPES = new Set([
   'journal_read', 'ledger_read', 'purchases_read', 'sales_read', 'expenses_read',
@@ -258,13 +259,11 @@ export function registerAccountingFirmRoutes(app: Express) {
           if (scopes.includes('ledger_read')) result.ledger = entries;
         }
         if (scopes.includes('purchases_read')) {
-          try {
-            result.purchases = await sql`SELECT id, supplier_name, supplier_tax_id, invoice_number,
-              issue_date, currency, exchange_rate, grand_total, status, created_at
-              FROM purchase_invoices ORDER BY issue_date DESC LIMIT 250`;
-          } catch {
-            result.purchases = [];
-          }
+          // Una consulta exitosa sin filas devuelve []; un error SQL debe propagarse
+          // para que el endpoint responda 503 y no simule que no existen compras.
+          result.purchases = await sql`SELECT id, supplier_name, supplier_tax_id, invoice_number,
+            issue_date, currency, exchange_rate, grand_total, status, created_at
+            FROM purchase_invoices ORDER BY issue_date DESC LIMIT 250`;
         }
         if (scopes.includes('sales_read')) result.sales = Array.isArray(state?.sales) ? state.sales.slice(0, 500) : [];
         if (scopes.includes('expenses_read')) result.expenses = Array.isArray(state?.expenses) ? state.expenses.slice(0, 500) : [];
