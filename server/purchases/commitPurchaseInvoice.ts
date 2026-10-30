@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { getNeonSql, readTenantWorkspaceState } from '../db.ts';
+import { getNeonSql, initDatabaseSchema, readTenantWorkspaceState } from '../db.ts';
 import { buildPurchaseInvoiceDuplicateKey, validatePurchaseInvoiceForConfirmation, type PurchaseInvoiceDraft } from './purchaseInvoice.ts';
 
 export interface PurchaseInvoiceMapping {
@@ -25,6 +25,7 @@ const inventoryAccount: Record<string, string> = {
 export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
   const sql = getNeonSql();
   if (!sql) throw new Error('No existe una conexión de base de datos para la empresa activa.');
+  await initDatabaseSchema();
   const { draft } = input;
   const errors = validatePurchaseInvoiceForConfirmation(draft);
   if (errors.length) throw new Error(errors.join(' '));
@@ -60,7 +61,6 @@ export async function commitPurchaseInvoice(input: CommitPurchaseInvoiceInput) {
     const product = products[productAt];
     const inventoryQuantity = round(line.quantity * mapping.unitFactor);
     if (!(inventoryQuantity > 0)) throw new Error(`La cantidad convertida del renglón ${index + 1} no es válida.`);
-    const incomingUnitCostUsd = round((line.unitCost / exchangeRate) * (draft.currency === 'VES' ? 1 : exchangeRate) / mapping.unitFactor);
     const unitCostUsd = draft.currency === 'USD' ? round(line.unitCost / mapping.unitFactor) : round(line.unitCost / exchangeRate / mapping.unitFactor);
     const oldStock = Number(product.stock || 0);
     const oldCost = Number(product.costo || 0);
