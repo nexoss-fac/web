@@ -2133,7 +2133,7 @@ async function startServer() {
   registerSalesRoutes(app, { readServerStore, writeServerStore, readLocalSales, getNeonSql, normalizeSales, updateSale, voidSale, onSaleRegistered: (sale) => notifyInBackground((company) => buildSaleNotice(sale, company)) });
 
   // Lector independiente de facturas de compra: solo devuelve borradores revisables.
-  registerPurchaseInvoiceRoutes(app);
+  registerPurchaseInvoiceRoutes(app, adminOnly);
 
   // Layaways API (Sistema de Apartados)
   app.get('/api/layaways', async (req, res) => {
