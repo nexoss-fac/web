@@ -201,6 +201,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
   useEffect(() => {
     if (isOpen && !editingProduct) {
+      setCategoria(defaultProductCategory as ProductCategory);
       setClasificacionInventario(classificationForCategory(defaultProductCategory));
       setSingleStock('0');
     }
@@ -1049,6 +1050,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 onChange={(event) => {
                   const nextClassification = event.target.value as InventoryClassification;
                   setClasificacionInventario(nextClassification);
+                  if (industryKey === 'food_manufacturing' && (industry.initialCategories as readonly string[]).includes(nextClassification)) {
+                    setCategoria(nextClassification as ProductCategory);
+                  }
                   if (nextClassification === 'Productos terminados' && !editingProduct) setSingleStock('0');
                 }}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-normal text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none"
@@ -1473,6 +1477,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                   onChange={(e) => setSingleStock(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono font-bold text-xs"
                 />
+                {industryKey === 'food_manufacturing' && clasificacionInventario === 'Productos terminados' && (
+                  <span className="mt-1 block text-[10px] font-normal text-slate-500">Si todavía no has fabricado este producto, déjalo en 0. Las existencias se agregarán al confirmar la primera producción.</span>
+                )}
               </div>
             </div>
           )}
