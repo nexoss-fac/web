@@ -421,10 +421,10 @@ export const ExpensesManager: React.FC = () => {
           <button
             onClick={() => setIsCurrencyModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-            title="Registrar compra de Binance USDT, Zelle o Dólares Efectivo con Bolívares"
+            title="Registrar compra o venta de dólares y actualizar los saldos de tus cuentas"
           >
             <ArrowRightLeft className="w-4 h-4" />
-            <span>Comprar Divisas</span>
+            <span>Comprar / Vender USD</span>
           </button>
 
           <button
