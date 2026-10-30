@@ -121,11 +121,23 @@ export async function findDelegatedBooksAccess(client: any, actorUid: string, fi
   return access.rows[0] || null;
 }
 
-export function registerAccountingFirmRoutes(app: Express) {
+export interface AccountingFirmRouteDependencies {
+  controlPlane?: () => Pool;
+  getConnectionString?: (secretReference: string | null, encryptedSecret: string | null) => Promise<string>;
+  readWorkspaceState?: typeof readTenantWorkspaceState;
+  getTenantSql?: typeof getNeonSql;
+}
+
+export function registerAccountingFirmRoutes(app: Express, dependencies: AccountingFirmRouteDependencies = {}) {
+  const getControlPlane = dependencies.controlPlane ?? controlPlane;
+  const resolveConnectionString = dependencies.getConnectionString
+    ?? ((reference, encrypted) => new LocalEnvironmentTenantSecretProvider().getConnectionString(reference, encrypted));
+  const readWorkspace = dependencies.readWorkspaceState ?? readTenantWorkspaceState;
+  const tenantSql = dependencies.getTenantSql ?? getNeonSql;
   app.get('/api/accounting-firm/status', async (req, res) => {
     const actor = identity(req); const companyId = String(req.query.companyId || '');
     if (!actor || !companyId) return res.status(400).json({ error: 'Selecciona una empresa.' });
-    const db = controlPlane(); const client = await db.connect();
+    const db = getControlPlane(); const client = await db.connect();
     try {
       const own = await activeFirmMember(client, actor.uid, companyId);
       if (!own) return res.status(403).json({ error: 'No tienes una membresía activa en esta firma contable.' });
@@ -276,9 +288,7 @@ export function registerAccountingFirmRoutes(app: Express) {
       if (scopes.length === 0) {
         return res.status(403).json({ error: 'Esta autorización no contiene permisos de lectura válidos.' });
       }
-      const connectionString = await new LocalEnvironmentTenantSecretProvider().getConnectionString(
-        row.secret_reference || null, row.encrypted_connection_secret || null,
-      );
+      const connectionString = await resolveConnectionString(row.secret_reference || null, row.encrypted_connection_secret || null);
       const workspace = row.client_workspace && typeof row.client_workspace === 'object' ? row.client_workspace : {};
       const context = {
         companyId: clientId,
@@ -289,8 +299,8 @@ export function registerAccountingFirmRoutes(app: Express) {
       };
 
       const books = await tenantStorageContext.run(context, async () => {
-        const state = await readTenantWorkspaceState();
-        const sql = getNeonSql();
+        const state = await readWorkspace();
+        const sql = tenantSql();
         if (!sql) throw new Error('No se pudo abrir la base de datos autorizada.');
         const result: Record<string, unknown> = {};
         if (scopes.includes('journal_read') || scopes.includes('ledger_read')) {
