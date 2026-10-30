@@ -39,6 +39,7 @@ import {
 } from './server/db.ts';
 import { verifyBdvPayment, getBdvApiConfig, getRecentVerifications } from './server/bdv.ts';
 import { analyzeShoeImage } from './server/shoeAi.ts';
+import { analyzeProductImage } from './server/productAi.ts';
 import { analyzeReceiptImage } from './server/receiptAi.ts';
 import { scanFiscalDocument } from './server/fiscalDocumentAi.ts';
 import { compressFiscalPdfDataUrl } from './server/fiscalPdfCompression.ts';
@@ -2562,30 +2563,21 @@ async function startServer() {
     }
 
     try {
-      const { imageBase64, userHint } = req.body || {};
+      const { imageBase64, userHint, industry } = req.body || {};
       if (!imageBase64 || typeof imageBase64 !== 'string') {
         return res.status(400).json({
           success: false,
-          error: 'Se requiere una imagen en formato Base64 para analizar el calzado.',
+          error: 'Se requiere una imagen en formato Base64 para analizar el producto.',
         });
       }
 
-      const analysis = await analyzeShoeImage(imageBase64, userHint);
+      const analysis = await analyzeProductImage(imageBase64, userHint, typeof industry === 'string' ? industry.slice(0, 120) : 'comercio general');
 
-      // Return unified response compatible with both frontend interfaces
-      res.json({
-        ...analysis,
-        // Also provide keys from user's custom prompt format
-        marcaModelo: `${analysis.marca} ${analysis.modelo}`.trim(),
-        estiloCategoria: analysis.tipo,
-        colores: analysis.color,
-        materiales: analysis.material,
-        tituloComercial: analysis.nombre,
-        descripcionTienda: analysis.descripcion_comercial,
-      });
+      // Response universal para inventarios de cualquier industria.
+      res.json({ ...analysis, marcaModelo: [analysis.marca, analysis.modelo].filter(Boolean).join(' '), estiloCategoria: analysis.tipo, colores: analysis.color, materiales: analysis.material, tituloComercial: analysis.nombre, descripcionTienda: analysis.descripcion_comercial });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error('[API analyze-shoe error]:', msg);
+      logger.error('[API analyze-product error]:', msg);
       res.status(500).json({
         success: false,
         error: msg,
@@ -2594,6 +2586,8 @@ async function startServer() {
   };
 
   // Support multiple endpoint paths and any HTTP verb to ensure maximum compatibility
+  app.all('/api/ai/analyze-product', handleShoeAnalysis);
+  // Legacy aliases kept for older app versions; the analyzer is now universal.
   app.all('/api/ai/analyze-shoe', handleShoeAnalysis);
   app.all('/api/analyze-shoe', handleShoeAnalysis);
   app.all('/api/shoe-ai', handleShoeAnalysis);
