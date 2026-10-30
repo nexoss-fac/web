@@ -21,7 +21,12 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { addCurrencyPurchase, exchangeRate } = useStore();
+  const { addCurrencyPurchase, exchangeRate, accounts } = useStore();
+  const [operation, setOperation] = useState<'compra' | 'venta'>('compra');
+  const usdAccounts = accounts.filter(a => a.moneda === 'USD');
+  const bsAccounts = accounts.filter(a => a.moneda === 'Bs');
+  const [usdAccount, setUsdAccount] = useState('');
+  const [bsAccount, setBsAccount] = useState('');
 
   const todayIso = new Date().toISOString().split('T')[0];
   const [fecha, setFecha] = useState(todayIso);
@@ -88,14 +93,24 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
       return;
     }
 
+    if (operation === 'venta') {
+      const source = usdAccounts.find(a => a.nombre === usdAccount);
+      const target = bsAccounts.find(a => a.nombre === bsAccount);
+      if (!source || !target) { setError('Selecciona las cuentas de origen USD y destino Bs.'); return; }
+      if (source.saldo < usdNum) { setError('El saldo disponible en ' + source.nombre + ' es insuficiente.'); return; }
+    }
     addCurrencyPurchase({
-      fecha,
-      metodo,
-      monto_bs_gastado: Number(bsNum.toFixed(2)),
-      tasa_compra: Number(tasaNum.toFixed(2)),
-      monto_usd_recibido: Number(usdNum.toFixed(2)),
+      fecha, metodo,
+      monto_bs_gastado: operation === 'compra' ? Number(bsNum.toFixed(2)) : 0,
+      tasa_compra: Number(tasaNum.toFixed(4)),
+      monto_usd_recibido: operation === 'compra' ? Number(usdNum.toFixed(2)) : 0,
+      tipo_operacion: operation,
+      cuenta_origen: operation === 'venta' ? usdAccount : undefined,
+      cuenta_destino: operation === 'venta' ? bsAccount : undefined,
+      monto_bs_resultante: operation === 'venta' ? Number(bsNum.toFixed(2)) : undefined,
+      monto_usd_entregado: operation === 'venta' ? Number(usdNum.toFixed(2)) : undefined,
       referencia: referencia.trim() || undefined,
-      usuario: 'Administrador de demostración',
+      usuario: 'Administrador',
       notas: notas.trim() || undefined,
     });
 
@@ -120,10 +135,8 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
               <ArrowRightLeft className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-bold tracking-tight">Comprar Divisas con Bs Positivos</h2>
-              <p className="text-xs text-blue-200">
-                Convierte bolívares en positivo a Binance USDT, Zelle o Dólares Efectivo.
-              </p>
+              <h2 className="text-lg font-bold tracking-tight">{operation === 'compra' ? 'Comprar divisas' : 'Vender divisas'}</h2>
+              <p className="text-xs text-blue-200">{operation === 'compra' ? 'Entrega bolívares y recibe dólares en tu cuenta.' : 'Entrega dólares y recibe bolívares en la cuenta seleccionada.'}</p>
             </div>
           </div>
           <button
@@ -142,6 +155,10 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
               <span>{error}</span>
             </div>
           )}
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+            <button type="button" onClick={() => { setOperation('compra'); setError(''); }} className={`rounded-lg px-3 py-2 text-sm font-bold ${operation === 'compra' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}>Comprar USD</button>
+            <button type="button" onClick={() => { setOperation('venta'); setError(''); }} className={`rounded-lg px-3 py-2 text-sm font-bold ${operation === 'venta' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}>Vender USD</button>
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -157,7 +174,7 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Destino de Divisa
+                {operation === 'compra' ? 'Destino de divisa' : 'Canal de venta'}
               </label>
               <select
                 value={metodo}
@@ -172,11 +189,15 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
             </div>
           </div>
 
+          {operation === 'venta' && <div className="grid grid-cols-2 gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <div><label className="mb-1 block text-xs font-semibold text-slate-700">Cuenta de origen (USD)</label><select required value={usdAccount} onChange={e => setUsdAccount(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs"><option value="">Seleccionar cuenta USD</option>{usdAccounts.map(a => <option key={a.id} value={a.nombre}>{a.nombre} · ${a.saldo.toFixed(2)}</option>)}</select></div>
+            <div><label className="mb-1 block text-xs font-semibold text-slate-700">Cuenta destino (Bs)</label><select required value={bsAccount} onChange={e => setBsAccount(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs"><option value="">Seleccionar cuenta Bs</option>{bsAccounts.map(a => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}</select></div>
+          </div>}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Bolívares Gastados (Bs.)
+                  {operation === 'compra' ? 'Bolívares entregados (Bs.)' : 'Bolívares recibidos (Bs.)'}
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">Bs.</span>
@@ -190,7 +211,7 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
                     required
                   />
                 </div>
-                <span className="text-[10px] text-slate-500">Se descuenta del saldo en Bs</span>
+                <span className="text-[10px] text-slate-500">{operation === 'compra' ? 'Se descuenta de la cuenta en Bs' : 'Se acredita a la cuenta en Bs'}</span>
               </div>
 
               <div>
@@ -229,7 +250,7 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
                   required
                 />
               </div>
-              <span className="text-[10px] text-blue-700 font-medium">Se acredita al positivo en dólares</span>
+              <span className="text-[10px] text-blue-700 font-medium">{operation === 'compra' ? 'Se acredita a la cuenta en USD' : 'Se descuenta de la cuenta en USD'}</span>
             </div>
           </div>
 
@@ -288,7 +309,7 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
               type="submit"
               className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all active:scale-95"
             >
-              Registrar Compra de Divisas
+              {operation === 'compra' ? 'Registrar compra de USD' : 'Registrar venta de USD'}
             </button>
           </div>
         </form>
