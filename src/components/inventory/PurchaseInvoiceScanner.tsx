@@ -87,7 +87,8 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
       if (!response.ok || !payload.success) throw new Error(payload.error || 'No se pudo analizar el documento.');
       const next = payload.draft as InvoiceDraft;
       setDraft(next);
-      setRate(String((next.issueDate ? getExchangeRateForDate(next.issueDate) : 0) || exchangeRate || ''));
+      const historicalRate = next.issueDate ? getExchangeRateForDate(next.issueDate) : 0;
+      setRate(historicalRate > 0 ? String(historicalRate) : '');
       setMappings(next.lines.map((line) => ({ productId: suggestedProduct(line, activeProducts), unitFactor: '' })));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo analizar el documento.');
@@ -174,7 +175,7 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
               <label className="text-xs font-semibold text-slate-600">RIF del proveedor<input value={draft.supplierTaxId} onChange={(e) => updateHeader('supplierTaxId', e.target.value.toUpperCase())} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-600">N.º de factura<input value={draft.invoiceNumber} onChange={(e) => updateHeader('invoiceNumber', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-600">N.º de control<input value={draft.controlNumber} onChange={(e) => updateHeader('controlNumber', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
-              <label className="text-xs font-semibold text-slate-600">Fecha de emisión<input type="date" value={draft.issueDate} onChange={(e) => { updateHeader('issueDate', e.target.value); const historicalRate = getExchangeRateForDate(e.target.value); if (historicalRate > 0) setRate(String(historicalRate)); }} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
+              <label className="text-xs font-semibold text-slate-600">Fecha de emisión<input type="date" value={draft.issueDate} onChange={(e) => { updateHeader('issueDate', e.target.value); const historicalRate = getExchangeRateForDate(e.target.value); setRate(historicalRate > 0 ? String(historicalRate) : ''); }} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
               <label className="text-xs font-semibold text-slate-600">Moneda<select value={draft.currency} onChange={(e) => updateHeader('currency', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"><option value="">Seleccionar</option><option value="USD">USD</option><option value="VES">Bolívares (VES)</option></select></label>
               <label className="text-xs font-semibold text-slate-600">Tasa BCV de la fecha<input type="number" min="0" step="0.0001" value={rate} onChange={(e) => setRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm" /></label>
             </div>
