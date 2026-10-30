@@ -105,7 +105,7 @@ export const AccountingFirmDashboard: React.FC<Props> = ({ companyId, companyNam
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">Empresas clientes autorizadas</p><p className="mt-1 text-3xl font-bold">{activeClients}</p></div>
       <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">Solicitudes recibidas</p><p className="mt-1 text-3xl font-bold">{pendingIncoming}</p></div>
-      <button onClick={onOpenBilling} className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-indigo-300"><p className="flex items-center gap-2 text-xs text-slate-500"><FileText className="h-4 w-4"/> Facturación propia</p><p className="mt-2 text-sm font-bold text-indigo-700">Facturar servicios contables →</p></button>
+      <button onClick={onOpenBilling} className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-indigo-300"><p className="flex items-center gap-2 text-xs text-slate-500"><FileText className="h-4 w-4"/> Facturación propia</p><p className="mt-2 text-sm font-bold text-indigo-700">Abrir facturación de mi empresa →</p></button>
       <button onClick={onOpenAccounting} className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-indigo-300"><p className="flex items-center gap-2 text-xs text-slate-500"><ShieldCheck className="h-4 w-4"/> Mi contabilidad</p><p className="mt-2 text-sm font-bold text-indigo-700">Abrir libros de PANTENTADOC →</p></button>
     </div>
 
