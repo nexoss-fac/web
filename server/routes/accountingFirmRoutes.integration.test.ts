@@ -13,9 +13,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
   let pool: Pool | undefined;
   try {
     await adminPool.query(`CREATE SCHEMA "${schema}"`);
-    const scopedUrl = new URL(connectionString!);
-    scopedUrl.searchParams.set('options', `-c search_path=${schema}`);
-    pool = new Pool({ connectionString: scopedUrl.toString(), max: 2, connectionTimeoutMillis: 5_000 });
+    pool = new Pool({ connectionString, max: 2, connectionTimeoutMillis: 5_000, options: `-c search_path=${schema}` });
 
     for (const migration of [
       '../../db/migrations/control-plane/001_control_plane.sql',
