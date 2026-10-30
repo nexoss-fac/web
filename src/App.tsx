@@ -100,7 +100,8 @@ function AppContent() {
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
         isCompanyAdmin={isCompanyAdmin}
-        isHealthIndustry={companyIndustry === 'health'}\n        isManufacturingIndustry={isManufacturingIndustry}
+        isHealthIndustry={companyIndustry === 'health'}
+        isManufacturingIndustry={isManufacturingIndustry}
       />
 
       {/* Main Content Area */}
