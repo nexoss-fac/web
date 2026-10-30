@@ -11,6 +11,29 @@ const SCOPES = new Set([
   'journal_read', 'ledger_read', 'purchases_read', 'sales_read', 'expenses_read',
   'reports_read', 'reconciliation_write', 'journal_write', 'tax_read', 'closures_write',
 ]);
+type DelegatedSql = NonNullable<ReturnType<typeof getNeonSql>>;
+
+/** Consulta compras del tenant delegado. Los errores SQL se propagan al handler HTTP. */
+export async function queryDelegatedPurchases(sql: DelegatedSql): Promise<any[]> {
+  return await sql`SELECT id, supplier_name, supplier_tax_id, invoice_number,
+    issue_date, currency, exchange_rate, grand_total, status, created_at
+    FROM purchase_invoices ORDER BY issue_date DESC LIMIT 250`;
+}
+
+/** Respuesta común del endpoint cuando falla la lectura de libros. */
+export function respondBooksReadError(
+  res: Pick<Response, 'status' | 'json'>,
+  error: unknown,
+  firmId: string,
+  clientId: string,
+  actorUid: string,
+) {
+  logger.error('[Accounting firm books] Error consultando libros autorizados:', {
+    firmCompanyId: firmId, clientCompanyId: clientId, actorUid, error,
+  });
+  return res.status(503).json({ error: 'No se pudieron abrir los libros autorizados.' });
+}
+
 let pool: Pool | undefined;
 
 function controlPlane(): Pool {
@@ -261,9 +284,7 @@ export function registerAccountingFirmRoutes(app: Express) {
         if (scopes.includes('purchases_read')) {
           // Una consulta exitosa sin filas devuelve []; un error SQL debe propagarse
           // para que el endpoint responda 503 y no simule que no existen compras.
-          result.purchases = await sql`SELECT id, supplier_name, supplier_tax_id, invoice_number,
-            issue_date, currency, exchange_rate, grand_total, status, created_at
-            FROM purchase_invoices ORDER BY issue_date DESC LIMIT 250`;
+          result.purchases = await queryDelegatedPurchases(sql);
         }
         if (scopes.includes('sales_read')) result.sales = Array.isArray(state?.sales) ? state.sales.slice(0, 500) : [];
         if (scopes.includes('expenses_read')) result.expenses = Array.isArray(state?.expenses) ? state.expenses.slice(0, 500) : [];
@@ -284,13 +305,7 @@ export function registerAccountingFirmRoutes(app: Express) {
       });
       return res.json({ success: true, clientCompanyId: clientId, scopes, books });
     } catch (error) {
-      logger.error('[Accounting firm books] Error consultando libros autorizados:', {
-        firmCompanyId: firmId,
-        clientCompanyId: clientId,
-        actorUid: actor.uid,
-        error,
-      });
-      return res.status(503).json({ error: 'No se pudieron abrir los libros autorizados.' });
+      return respondBooksReadError(res, error, firmId, clientId, actor.uid);
     } finally {
       client.release();
     }
