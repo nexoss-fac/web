@@ -140,26 +140,15 @@ export const InventoryManager: React.FC = () => {
   }, [products]);
 
   const shoeTypes = useMemo(() => {
+    if (!isFootwear) return ['Todos'];
     const requestedTypes = [
-      'Botines Fútbol Campo',
-      'Fútbol Campo',
-      'Micro Tacos',
-      'Futsala',
-      'Running',
-      'Béisbol',
-      'Béisbol Gancho',
-      'Casual',
-      'Deportivo',
-      'Botas',
-      'Tacones',
-      'Sandalias',
-      'Mocasines',
-      'Infantil',
-      'Otros',
+      'Botines Fútbol Campo', 'Fútbol Campo', 'Micro Tacos', 'Futsala', 'Running',
+      'Béisbol', 'Béisbol Gancho', 'Casual', 'Deportivo', 'Botas', 'Tacones',
+      'Sandalias', 'Mocasines', 'Infantil', 'Otros',
     ];
     const existing = products.map((p) => p.tipo).filter(Boolean);
     return ['Todos', ...Array.from(new Set([...requestedTypes, ...existing]))];
-  }, [products]);
+  }, [products, isFootwear]);
   const shoeSizes = ['Todas', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45'];
 
   // Filtered Products
