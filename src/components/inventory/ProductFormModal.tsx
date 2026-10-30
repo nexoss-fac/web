@@ -80,6 +80,12 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const defaultProductCategory = (industry.initialCategories as readonly string[]).includes('Productos terminados')
     ? 'Productos terminados'
     : industry.initialCategories[0];
+  const classificationForCategory = (category: string): InventoryClassification => {
+    if (category === 'Productos terminados') return 'Productos terminados';
+    if (category === 'Productos en proceso' || category === 'Producción en proceso') return 'Productos en proceso';
+    if (['Materia prima', 'Insumos y cultivos', 'Insumos de producción', 'Empaques'].includes(category)) return 'Materia prima';
+    return 'Mercancía';
+  };
   // Entry Mode: Multi-size model vs single item
   const [entryMode, setEntryMode] = useState<'multi' | 'single'>(
     editingProduct || !isFootwear ? 'single' : 'multi'
@@ -91,7 +97,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   );
   const [configuredProductCategories, setConfiguredProductCategories] = useState<string[]>([]);
   const [clasificacionInventario, setClasificacionInventario] = useState<InventoryClassification>(
-    editingProduct?.clasificacion_inventario || 'Mercancía'
+    editingProduct?.clasificacion_inventario || classificationForCategory(defaultProductCategory)
   );
 
   // Basic Info
@@ -151,7 +157,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
   // Single Item Mode: single size & stock
   const [singleTalla, setSingleTalla] = useState(editingProduct?.talla || (isFootwear ? '38' : 'Unidad'));
-  const [singleStock, setSingleStock] = useState(editingProduct?.stock?.toString() || '5');
+  const [singleStock, setSingleStock] = useState(editingProduct?.stock?.toString() || '0');
 
   // Multi-Sizes Mode: Matrix of sizes & stocks
   const defaultSizesForCalzado: SizeStockItem[] = [
@@ -194,7 +200,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   }, [editingProduct?.id, isOpen]);
 
   useEffect(() => {
-    if (isOpen && !editingProduct) setClasificacionInventario('Mercancía');
+    if (isOpen && !editingProduct) {
+      setClasificacionInventario(classificationForCategory(defaultProductCategory));
+      setSingleStock('0');
+    }
   }, [isOpen, editingProduct?.id]);
 
   // Auto-fill from initialAiData
@@ -293,6 +302,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   // When category changes, adjust default type
   const handleCategoryChange = (newCat: ProductCategory) => {
     setCategoria(newCat);
+    const nextClassification = classificationForCategory(String(newCat));
+    setClasificacionInventario(nextClassification);
+    if (nextClassification === 'Productos terminados') setSingleStock('0');
     const available = getTypesForCategory(newCat);
     setTipo(available[0]);
 
@@ -1034,7 +1046,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               <select
                 required
                 value={clasificacionInventario}
-                onChange={(event) => setClasificacionInventario(event.target.value as InventoryClassification)}
+                onChange={(event) => {
+                  const nextClassification = event.target.value as InventoryClassification;
+                  setClasificacionInventario(nextClassification);
+                  if (nextClassification === 'Productos terminados' && !editingProduct) setSingleStock('0');
+                }}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-normal text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none"
               >
                 {INVENTORY_CLASSIFICATIONS.map((classification) => (
