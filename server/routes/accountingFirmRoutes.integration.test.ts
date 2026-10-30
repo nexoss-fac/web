@@ -96,7 +96,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
         assert.equal(tenant?.connectionString, 'postgres://tenant-b.invalid/db');
         assert.match(strings.join(' '), /accounting_entries/);
         return [{ id: 'entry-client-b', numero_asiento: 'A-001' }];
-      }) as unknown as NonNullable<Parameters<typeof registerAccountingFirmRoutes>[1]>['getTenantSql'];
+      }) as any;
       registerAccountingFirmRoutes(app, {
         controlPlane: () => pool!,
         getConnectionString: async () => 'postgres://tenant-b.invalid/db',
@@ -104,7 +104,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
           assert.equal(tenantStorageContext.getStore()?.companyId, clientBId);
           return tenantState;
         },
-        getTenantSql: () => fakeTenantSql!,
+        getTenantSql: () => fakeTenantSql,
       });
       const server = createServer(app);
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
