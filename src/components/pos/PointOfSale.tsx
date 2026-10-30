@@ -164,25 +164,14 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   }, [products]);
 
   const shoeTypes = useMemo(() => {
+    if (!isFootwear) return ['Todos'];
     const requestedTypes = [
-      'Botines Fútbol Campo',
-      'Fútbol Campo',
-      'Micro Tacos',
-      'Futsala',
-      'Running',
-      'Béisbol',
-      'Béisbol Gancho',
-      'Casual',
-      'Deportivo',
-      'Botas',
-      'Tacones',
-      'Sandalias',
-      'Mocasines',
-      'Infantil',
-      'Otros',
+      'Botines Fútbol Campo', 'Fútbol Campo', 'Micro Tacos', 'Futsala', 'Running',
+      'Béisbol', 'Béisbol Gancho', 'Casual', 'Deportivo', 'Botas', 'Tacones',
+      'Sandalias', 'Mocasines', 'Infantil', 'Otros',
     ];
     const existing = products.map((p) => p.tipo).filter(Boolean);
-    return ['Todos', ...Array.from(new Set([...(isFootwear ? requestedTypes : []), ...existing]))];
+    return ['Todos', ...Array.from(new Set([...requestedTypes, ...existing]))];
   }, [products, isFootwear]);
   const variantOptions = useMemo(() => {
     if (isFootwear) return ['Todas', '36', '37', '38', '39', '40', '41', '42', '43', '44'];
@@ -199,6 +188,9 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     const query = (searchQuery || '').toLowerCase().trim();
     return products.filter((p) => {
       if (!p || !p.activo) return false;
+      // El punto de venta solo ofrece artículos vendibles. Las materias primas y
+      // productos en proceso se consumen en producción, nunca se facturan como producto final.
+      if (p.clasificacion_inventario === 'Materia prima' || p.clasificacion_inventario === 'Productos en proceso') return false;
 
       const nombre = (p.nombre || '').toLowerCase();
       const sku = (p.sku || '').toLowerCase();
