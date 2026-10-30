@@ -53,10 +53,15 @@ function identity(req: Request): { uid: string; email?: string } | null {
   return value?.uid ? { uid: value.uid, ...(value.email ? { email: value.email } : {}) } : null;
 }
 
-function scopesFrom(value: unknown): string[] {
-  if (!Array.isArray(value)) return ['journal_read', 'ledger_read', 'reports_read'];
-  const scopes = [...new Set(value.filter((item): item is string => typeof item === 'string' && SCOPES.has(item)))];
-  return scopes.length ? scopes : ['journal_read', 'ledger_read', 'reports_read'];
+const DEFAULT_ACCOUNTING_FIRM_SCOPES = ['journal_read', 'ledger_read', 'reports_read'];
+
+/** Solo se aplican permisos predeterminados cuando el cliente omite scopes.
+ * Una lista vacía, mal formada o sin permisos reconocidos nunca concede acceso.
+ */
+export function scopesFrom(value: unknown): string[] {
+  if (value === undefined || value === null) return [...DEFAULT_ACCOUNTING_FIRM_SCOPES];
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item): item is string => typeof item === 'string' && SCOPES.has(item)))];
 }
 
 async function member(client: any, uid: string, companyId: string) {
@@ -65,8 +70,8 @@ async function member(client: any, uid: string, companyId: string) {
      FROM platform_users u
      JOIN company_memberships m ON m.user_id = u.id AND m.status = 'active'
      JOIN platform_companies c ON c.id = m.company_id
-     WHERE u.auth_provider = 'firebase' AND u.auth_subject = $1 AND c.id = $2
-       AND c.status = 'active' LIMIT 1`, [uid, companyId]);
+     WHERE u.auth_provider = 'firebase' AND u.auth_subject = $1 AND u.status = 'active'
+       AND c.id = $2 AND c.status = 'active' LIMIT 1`, [uid, companyId]);
   const row = result.rows[0];
   return row && ['owner', 'admin'].includes(row.role) ? row : null;
 }
@@ -78,8 +83,8 @@ async function activeFirmMember(client: any, uid: string, companyId: string) {
      FROM platform_users u
      JOIN company_memberships m ON m.user_id=u.id AND m.status='active'
      JOIN platform_companies c ON c.id=m.company_id
-     WHERE u.auth_provider='firebase' AND u.auth_subject=$1 AND c.id=$2
-       AND c.status='active' AND m.role IN ('owner','admin','accountant','auditor')
+     WHERE u.auth_provider='firebase' AND u.auth_subject=$1 AND u.status='active'
+       AND c.id=$2 AND c.status='active' AND m.role IN ('owner','admin','accountant','auditor')
      LIMIT 1`, [uid, companyId]);
   return result.rows[0] || null;
 }
@@ -154,7 +159,9 @@ export function registerAccountingFirmRoutes(app: Express) {
     const actor = identity(req); const firmId = String(req.body?.firmCompanyId || '');
     const clientId = String(req.body?.clientCompanyId || '');
     if (!actor || !firmId || !clientId || firmId === clientId) return res.status(400).json({ error: 'Datos de solicitud inválidos.' });
-    const scopes = scopesFrom(req.body?.scopes); const db = controlPlane(); const client = await db.connect();
+    const scopes = scopesFrom(req.body?.scopes);
+    if (scopes.length === 0) return res.status(400).json({ error: 'Debes seleccionar al menos un permiso válido.' });
+    const db = controlPlane(); const client = await db.connect();
     try {
       await client.query('BEGIN');
       const firm = await member(client, actor.uid, firmId);
@@ -248,7 +255,8 @@ export function registerAccountingFirmRoutes(app: Express) {
            ON g.firm_company_id=firm.id AND g.client_company_id=$3 AND g.status='active'
          JOIN platform_companies c ON c.id=g.client_company_id AND c.status='active'
          JOIN tenant_database_connections t ON t.company_id=c.id AND t.status='ready'
-         WHERE u.auth_provider='firebase' AND u.auth_subject=$1 AND firm.id=$2
+         WHERE u.auth_provider='firebase' AND u.auth_subject=$1 AND u.status='active'
+           AND firm.id=$2 AND firm.workspace->>'accountingFirmEnabled'='true'
            AND m.role IN ('owner','admin','accountant','auditor')
            AND (g.expires_at IS NULL OR g.expires_at>NOW())
          LIMIT 1`,
@@ -257,7 +265,12 @@ export function registerAccountingFirmRoutes(app: Express) {
       const row = access.rows[0];
       if (!row) return res.status(403).json({ error: 'No existe una autorización vigente para consultar esta empresa.' });
 
-      const scopes = Array.isArray(row.scopes) ? row.scopes.filter((scope: unknown): scope is string => typeof scope === 'string' && SCOPES.has(scope)) : [];
+      const scopes = Array.isArray(row.scopes)
+        ? [...new Set(row.scopes.filter((scope: unknown): scope is string => typeof scope === 'string' && SCOPES.has(scope)))]
+        : [];
+      if (scopes.length === 0) {
+        return res.status(403).json({ error: 'Esta autorización no contiene permisos de lectura válidos.' });
+      }
       const connectionString = await new LocalEnvironmentTenantSecretProvider().getConnectionString(
         row.secret_reference || null, row.encrypted_connection_secret || null,
       );
