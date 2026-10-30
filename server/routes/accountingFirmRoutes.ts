@@ -284,6 +284,12 @@ export function registerAccountingFirmRoutes(app: Express) {
       });
       return res.json({ success: true, clientCompanyId: clientId, scopes, books });
     } catch (error) {
+      logger.error('[Accounting firm books] Error consultando libros autorizados:', {
+        firmCompanyId: firmId,
+        clientCompanyId: clientId,
+        actorUid: actor.uid,
+        error,
+      });
       return res.status(503).json({ error: 'No se pudieron abrir los libros autorizados.' });
     } finally {
       client.release();
