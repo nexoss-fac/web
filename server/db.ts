@@ -403,7 +403,8 @@ export async function initDatabaseSchema() {
     // productos (con sus fotos) cada vez que revisa si hay novedades.
     await sql`ALTER TABLE shoe_products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`;
     // Las materias primas y productos fraccionables requieren existencias decimales (kg, litros, metros, etc.).
-    await sql`ALTER TABLE shoe_products ALTER COLUMN stock TYPE NUMERIC(14, 3) USING stock::numeric`;
+    await sql`ALTER TABLE shoe_products ALTER COLUMN stock TYPE NUMERIC(14, 4) USING stock::numeric`;
+    await sql`ALTER TABLE shoe_products ALTER COLUMN costo TYPE NUMERIC(14, 4) USING costo::numeric`;
 
     await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS iva_incluido BOOLEAN DEFAULT FALSE`;
     await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS cliente_correo VARCHAR(150)`;
