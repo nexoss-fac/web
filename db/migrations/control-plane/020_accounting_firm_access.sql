@@ -19,6 +19,28 @@ CREATE INDEX IF NOT EXISTS idx_accounting_firm_grants_firm_status
 CREATE INDEX IF NOT EXISTS idx_accounting_firm_grants_client_status
   ON company_accounting_firm_grants (client_company_id, status);
 
+-- Impide permisos vacíos o valores de scope que el backend no reconoce.
+-- Se añade de forma idempotente para instalaciones donde la tabla ya exista.
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'company_accounting_firm_grants_scopes_valid'
+      AND conrelid = 'company_accounting_firm_grants'::regclass
+  ) THEN
+    ALTER TABLE company_accounting_firm_grants
+      ADD CONSTRAINT company_accounting_firm_grants_scopes_valid
+      CHECK (
+        cardinality(scopes) > 0
+        AND scopes <@ ARRAY[
+          'journal_read', 'ledger_read', 'purchases_read', 'sales_read',
+          'expenses_read', 'reports_read', 'reconciliation_write',
+          'journal_write', 'tax_read', 'closures_write'
+        ]::TEXT[]
+      );
+  END IF;
+END $;
+
 CREATE TABLE IF NOT EXISTS accounting_firm_access_audit (
   id UUID PRIMARY KEY,
   grant_id UUID REFERENCES company_accounting_firm_grants(id) ON DELETE SET NULL,
