@@ -53,7 +53,7 @@ test('PostgreSQL rejects cross-company reads, onboarding writes, invites and rev
     assert.deepEqual(before.rows[0].fiscal, {});
 
     const ownInvite = await repository.createInvitation(companyA.id, 'collaborator@example.invalid', 'cashier', { uid: 'integration-user-a' });
-    assert.ok(ownInvite);
+    assert.ok(ownInvite && 'id' in ownInvite);
     assert.equal(await repository.createInvitation(companyB.id, 'attacker@example.invalid', 'cashier', { uid: 'integration-user-a' }), null);
     assert.equal(await repository.revokeInvitation(companyA.id, ownInvite!.id, 'integration-user-b'), false);
     assert.equal(await repository.revokeInvitation(companyB.id, ownInvite!.id, 'integration-user-a'), false);
