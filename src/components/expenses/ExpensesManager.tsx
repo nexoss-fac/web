@@ -37,7 +37,7 @@ import { GoogleSheetsSyncModal } from '../common/GoogleSheetsSyncModal';
 import { ReceiptScannerModal } from './ReceiptScannerModal';
 import { ManufacturingCosting } from './ManufacturingCosting';
 
-export const ExpensesManager: React.FC = () => {
+export const ExpensesManager: React.FC<{ isManufacturingIndustry?: boolean }> = ({ isManufacturingIndustry = false }) => {
   const {
     expenses: storedExpenses,
     addExpense,
@@ -351,11 +351,11 @@ export const ExpensesManager: React.FC = () => {
       ? 'Mes Anterior (Agosto 2026)' 
       : 'Histórico Total';
 
-  if (showCosting) return <div className="space-y-4 pb-12"><button onClick={() => setShowCosting(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">← Volver a Gastos</button><ManufacturingCosting /></div>;
+  if (showCosting && isManufacturingIndustry) return <div className="space-y-4 pb-12"><button onClick={() => setShowCosting(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">← Volver a Gastos</button><ManufacturingCosting /></div>;
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="flex justify-end"><button onClick={() => setShowCosting(true)} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100"><Calculator className="h-4 w-4"/> Centro de costos y nómina</button></div>
+      {isManufacturingIndustry && <div className="flex justify-end"><button onClick={() => setShowCosting(true)} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100"><Calculator className="h-4 w-4"/> Centro de costos y nómina</button></div>}
       {/* Header Bar */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

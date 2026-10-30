@@ -48,6 +48,8 @@ function AppContent() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { userRole, currentUser, isAuthLoading, products, criticalStockProducts, logoutUserAction } = useStore();
   const isCompanyAdmin = companyRole === 'owner' || companyRole === 'admin';
+  // Producción y trazabilidad solo corresponden a empresas que transforman/fabrican productos.
+  const isManufacturingIndustry = companyIndustry === 'manufacturing' || companyIndustry === 'food_manufacturing';
   useEffect(() => {
     const syncRole = () => {
       setCompanyRole(localStorage.getItem('nexoss_active_company_role') || '');
@@ -70,8 +72,9 @@ function AppContent() {
   }, []);
   useEffect(() => {
     if ((userRole === 'cajera' || !isCompanyAdmin) && activeTab === 'admin') setActiveTab('pos');
+    if (!isManufacturingIndustry && activeTab === 'production') setActiveTab('pos');
     if (userRole === 'cajera') setActiveTab('pos');
-  }, [userRole, isCompanyAdmin, activeTab]);
+  }, [userRole, isCompanyAdmin, isManufacturingIndustry, activeTab]);
   const handleCompanySelect = (companyId: string) => {
     setActiveCompanyId(companyId);
     setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
@@ -97,7 +100,7 @@ function AppContent() {
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
         isCompanyAdmin={isCompanyAdmin}
-        isHealthIndustry={companyIndustry === 'health'}
+        isHealthIndustry={companyIndustry === 'health'}\n        isManufacturingIndustry={isManufacturingIndustry}
       />
 
       {/* Main Content Area */}
@@ -120,12 +123,12 @@ function AppContent() {
           <Suspense fallback={<ViewFallback />}>
             {activeTab === 'pos' && <PointOfSale key={activeCompanyId} industryTemplate={companyIndustry} onNavigateToLayaways={userRole === 'admin' ? () => setActiveTab('layaways') : undefined} />}
             {activeTab === 'inventory' && <InventoryManager />}
-            {activeTab === 'production' && isCompanyAdmin && <ProductionManager key={activeCompanyId} />}
+            {activeTab === 'production' && isCompanyAdmin && isManufacturingIndustry && <ProductionManager key={activeCompanyId} />}
             {activeTab === 'inventoryReport' && <InventoryMovementReport />}
             {activeTab === 'layaways' && <LayawaysManager />}
                     {activeTab === 'reports' && <SalesReports />}
             {activeTab === 'cash' && <CashClosure />}
-            {activeTab === 'expenses' && <ExpensesManager />}
+            {activeTab === 'expenses' && <ExpensesManager isManufacturingIndustry={isManufacturingIndustry} />}
             {activeTab === 'conciliacion' && <BankReconciliationView />}
             {activeTab === 'contabilidad' && <AccountingManager />}
             {activeTab === 'admin' && isCompanyAdmin && <CompanyAdminPanel companyId={activeCompanyId} />}

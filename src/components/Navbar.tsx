@@ -208,14 +208,14 @@ export const Sidebar: React.FC<{
               </div>
             );
           })}
-          {isCompanyAdmin && !isHealthIndustry && (
+          {isCompanyAdmin && isManufacturingIndustry && !isHealthIndustry && (
             <button
               id="sidebar-nav-production"
               onClick={() => { setActiveTab('production'); setMobileOpen(false); }}
               className={`w-full p-2.5 rounded-md flex items-center gap-3 text-xs font-medium cursor-pointer transition-colors ${activeTab === 'production' ? 'bg-slate-800 text-white font-semibold shadow-xs' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
               <Factory className={`w-4 h-4 ${activeTab === 'production' ? 'text-indigo-400' : 'text-slate-400'}`} />
-              <span>Producción y lotes</span>
+              <span>Manufactura y trazabilidad</span>
             </button>
           )}
           {userRole === 'admin' && <button
