@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { Express, Request, Response } from 'express';
+import { getNeonSql, readTenantWorkspaceState } from '../db.ts';
+import { tenantStorageContext } from '../multiempresa/companyAccess.ts';
+import { resolveIndustryTemplate } from '../../src/domain/companyIndustries.ts';
+import { LocalEnvironmentTenantSecretProvider } from '../multiempresa/tenantSecretProvider.ts';
 
 const SCOPES = new Set([
   'journal_read', 'ledger_read', 'purchases_read', 'sales_read', 'expenses_read',
@@ -181,4 +185,97 @@ export function registerAccountingFirmRoutes(app: Express) {
     } catch { await client.query('ROLLBACK'); return res.status(503).json({ error: 'No se pudo revocar el acceso.' }); }
     finally { client.release(); }
   });
+
+  // Lectura delegada: el contador nunca cambia el tenant activo de su sesión.
+  // Cada petición vuelve a comprobar membresía, grant vigente y scopes en control plane.
+  app.get('/api/accounting-firm/clients/:clientCompanyId/books', async (req, res) => {
+    const actor = identity(req);
+    const firmId = String(req.query.firmCompanyId || '');
+    const clientId = String(req.params.clientCompanyId || '');
+    if (!actor || !firmId || !clientId || firmId === clientId) {
+      return res.status(400).json({ error: 'Solicitud de consulta inválida.' });
+    }
+
+    const db = controlPlane();
+    const client = await db.connect();
+    try {
+      const access = await client.query(
+        `SELECT u.id AS user_id, m.role AS member_role,
+                g.id AS grant_id, g.scopes, g.expires_at,
+                c.id AS client_company_id, c.status AS client_status, c.workspace AS client_workspace,
+                t.secret_reference, t.encrypted_connection_secret
+         FROM platform_users u
+         JOIN company_memberships m ON m.user_id=u.id AND m.status='active'
+         JOIN platform_companies firm ON firm.id=m.company_id AND firm.status='active'
+         JOIN company_accounting_firm_grants g
+           ON g.firm_company_id=firm.id AND g.client_company_id=$3 AND g.status='active'
+         JOIN platform_companies c ON c.id=g.client_company_id AND c.status='active'
+         JOIN tenant_database_connections t ON t.company_id=c.id AND t.status='ready'
+         WHERE u.auth_provider='firebase' AND u.auth_subject=$1 AND firm.id=$2
+           AND m.role IN ('owner','admin','accountant','auditor')
+           AND (g.expires_at IS NULL OR g.expires_at>NOW())
+         LIMIT 1`,
+        [actor.uid, firmId, clientId],
+      );
+      const row = access.rows[0];
+      if (!row) return res.status(403).json({ error: 'No existe una autorización vigente para consultar esta empresa.' });
+
+      const scopes = Array.isArray(row.scopes) ? row.scopes.filter((scope: unknown): scope is string => typeof scope === 'string' && SCOPES.has(scope)) : [];
+      const connectionString = await new LocalEnvironmentTenantSecretProvider().getConnectionString(
+        row.secret_reference || null, row.encrypted_connection_secret || null,
+      );
+      const workspace = row.client_workspace && typeof row.client_workspace === 'object' ? row.client_workspace : {};
+      const context = {
+        companyId: clientId,
+        uid: actor.uid,
+        role: 'auditor' as const,
+        industryTemplate: resolveIndustryTemplate(workspace.industryTemplate),
+        connectionString,
+      };
+
+      const books = await tenantStorageContext.run(context, async () => {
+        const state = await readTenantWorkspaceState();
+        const sql = getNeonSql();
+        if (!sql) throw new Error('No se pudo abrir la base de datos autorizada.');
+        const result: Record<string, unknown> = {};
+        if (scopes.includes('journal_read') || scopes.includes('ledger_read')) {
+          const entries = await sql`SELECT id, fecha, numero_asiento, tipo, origen, sujeto, rif, documento,
+            total_debe, total_haber, lineas FROM accounting_entries ORDER BY fecha DESC LIMIT 500`;
+          if (scopes.includes('journal_read')) result.journal = entries;
+          if (scopes.includes('ledger_read')) result.ledger = entries;
+        }
+        if (scopes.includes('purchases_read')) {
+          try {
+            result.purchases = await sql`SELECT id, supplier_name, supplier_tax_id, invoice_number,
+              issue_date, currency, exchange_rate, grand_total, status, created_at
+              FROM purchase_invoices ORDER BY issue_date DESC LIMIT 250`;
+          } catch {
+            result.purchases = [];
+          }
+        }
+        if (scopes.includes('sales_read')) result.sales = Array.isArray(state?.sales) ? state.sales.slice(0, 500) : [];
+        if (scopes.includes('expenses_read')) result.expenses = Array.isArray(state?.expenses) ? state.expenses.slice(0, 500) : [];
+        if (scopes.includes('reports_read')) {
+          result.summary = {
+            salesCount: Array.isArray(state?.sales) ? state.sales.length : 0,
+            expensesCount: Array.isArray(state?.expenses) ? state.expenses.length : 0,
+            journalCount: Array.isArray(state?.accountingEntries) ? state.accountingEntries.length : 0,
+          };
+        }
+        if (scopes.includes('tax_read')) result.tax = state?.fiscalBoard || {};
+        return result;
+      });
+
+      await audit(client, {
+        grantId: row.grant_id, firmId, clientId, userId: row.user_id,
+        action: 'books.read', metadata: { scopes: Object.keys(books) },
+      });
+      return res.json({ success: true, clientCompanyId: clientId, scopes, books });
+    } catch (error) {
+      return res.status(503).json({ error: 'No se pudieron abrir los libros autorizados.' });
+    } finally {
+      client.release();
+    }
+  });
+
 }
