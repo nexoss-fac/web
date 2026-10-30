@@ -268,6 +268,8 @@ export interface Expense {
   comprobante_ref?: string;
   registrado_por: string;
   notas?: string;
+  centro_costo?: 'produccion' | 'ventas' | 'despacho' | 'administracion';
+  naturaleza_costo?: 'materia_prima' | 'mano_obra' | 'indirecto' | 'comercial' | 'administrativo' | 'logistico' | 'otro';
   foto_factura?: string;
   created_at: string;
 }
