@@ -34,7 +34,8 @@ export const ManufacturingCosting: React.FC = () => {
  const totalHours=monthlyOutputs.reduce((a,o)=>a+o.hours,0); const totalUnits=monthlyOutputs.reduce((a,o)=>a+o.goodUnits,0);
  const payrollProduction=monthlyStaff.reduce((a,x)=>a+x.production,0);
  const payrollByDept=DEPARTMENTS.map(d=>({ ...d, total:monthlyStaff.reduce((a,x)=>a+(x.s.department===d.id?x.total:x.s.department!=='produccion'&&d.id==='produccion'?x.total*x.s.productionPercent/100:0),0)}));
- const expenseMonth=companyExpenses.filter(e=>monthKey(e.fecha)===month);\n const overheadProduction=expenseMonth.filter(e=>e.centro_costo==='produccion'&&e.naturaleza_costo==='indirecto').reduce((a,e)=>a+(Number(e.monto_usd)||0),0)+monthlyCosts.filter(c=>c.department==='produccion').reduce((a,c)=>a+c.amount,0);
+ const expenseMonth=companyExpenses.filter(e=>monthKey(e.fecha)===month);
+ const overheadProduction=expenseMonth.filter(e=>e.centro_costo==='produccion'&&e.naturaleza_costo==='indirecto').reduce((a,e)=>a+(Number(e.monto_usd)||0),0)+monthlyCosts.filter(c=>c.department==='produccion').reduce((a,c)=>a+c.amount,0);
  const directNonProduction=expenseMonth.filter(e=>e.centro_costo&&e.centro_costo!=='produccion').reduce((a,e)=>a+(Number(e.monto_usd)||0),0)+monthlyCosts.filter(c=>c.department!=='produccion').reduce((a,c)=>a+c.amount,0);
  const totalCost=payrollProduction+overheadProduction; const unitCost=totalUnits>0?totalCost/totalUnits:0;
  const addStaff=()=>{if(!staffName.trim()||Number(staffPay)<=0)return;void persist({...data,staff:[...data.staff,{id:crypto.randomUUID(),name:staffName.trim(),role:staffRole.trim(),pay:Number(staffPay),frequency,department,productionPercent:Math.min(100,Math.max(0,Number(productionPercent)||0)),active:true}]});setStaffName('');setStaffRole('');setStaffPay('');};
