@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { queryDelegatedPurchases, respondBooksReadError } from './accountingFirmRoutes.ts';
+import { queryDelegatedPurchases, respondBooksReadError, scopesFrom } from './accountingFirmRoutes.ts';
 
 function fakeResponse() {
   const response = {
@@ -39,4 +39,22 @@ test('una consulta SQL exitosa sin registros devuelve una lista vacía de compra
 
   assert.deepEqual(purchases, []);
   assert.ok(Array.isArray(purchases));
+});
+
+
+test('los permisos predeterminados solo se aplican cuando scopes se omite', () => {
+  assert.deepEqual(scopesFrom(undefined), ['journal_read', 'ledger_read', 'reports_read']);
+  assert.deepEqual(scopesFrom(null), ['journal_read', 'ledger_read', 'reports_read']);
+});
+
+test('una lista de permisos vacía o inválida no concede permisos implícitos', () => {
+  assert.deepEqual(scopesFrom([]), []);
+  assert.deepEqual(scopesFrom(['unknown_scope', 42, null]), []);
+  assert.deepEqual(scopesFrom('journal_read'), []);
+});
+
+test('solo conserva permisos reconocidos y elimina duplicados', () => {
+  assert.deepEqual(scopesFrom(['journal_read', 'journal_read', 'invalid', 'purchases_read']), [
+    'journal_read', 'purchases_read',
+  ]);
 });
