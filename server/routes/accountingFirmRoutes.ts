@@ -1,0 +1,184 @@
+import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
+import type { Express, Request, Response } from 'express';
+
+const SCOPES = new Set([
+  'journal_read', 'ledger_read', 'purchases_read', 'sales_read', 'expenses_read',
+  'reports_read', 'reconciliation_write', 'journal_write', 'tax_read', 'closures_write',
+]);
+let pool: Pool | undefined;
+
+function controlPlane(): Pool {
+  const connectionString = process.env.CONTROL_PLANE_DATABASE_URL?.trim();
+  if (!connectionString) throw new Error('CONTROL_PLANE_DATABASE_URL no está configurada.');
+  if (!pool) {
+    const parsed = new URL(connectionString);
+    if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) throw new Error('Conexión de control plane inválida.');
+    pool = new Pool({ connectionString, max: 4, connectionTimeoutMillis: 5000,
+      ssl: parsed.hostname.endsWith('.neon.tech') ? { rejectUnauthorized: true } : undefined });
+  }
+  return pool;
+}
+
+function identity(req: Request): { uid: string; email?: string } | null {
+  const value = (req as Request & { firebaseIdentity?: { uid?: string; email?: string } }).firebaseIdentity;
+  return value?.uid ? { uid: value.uid, ...(value.email ? { email: value.email } : {}) } : null;
+}
+
+function scopesFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return ['journal_read', 'ledger_read', 'reports_read'];
+  const scopes = [...new Set(value.filter((item): item is string => typeof item === 'string' && SCOPES.has(item)))];
+  return scopes.length ? scopes : ['journal_read', 'ledger_read', 'reports_read'];
+}
+
+async function member(client: any, uid: string, companyId: string) {
+  const result = await client.query(
+    `SELECT u.id AS user_id, m.role, c.id AS company_id, c.workspace, c.status
+     FROM platform_users u
+     JOIN company_memberships m ON m.user_id = u.id AND m.status = 'active'
+     JOIN platform_companies c ON c.id = m.company_id
+     WHERE u.auth_provider = 'firebase' AND u.auth_subject = $1 AND c.id = $2
+       AND c.status = 'active' LIMIT 1`, [uid, companyId]);
+  const row = result.rows[0];
+  return row && ['owner', 'admin'].includes(row.role) ? row : null;
+}
+
+async function audit(client: any, input: { grantId?: string; firmId: string; clientId: string; userId: string; action: string; metadata?: unknown }) {
+  await client.query(
+    `INSERT INTO accounting_firm_access_audit
+     (id, grant_id, firm_company_id, client_company_id, actor_user_id, action, metadata)
+     VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+    [randomUUID(), input.grantId || null, input.firmId, input.clientId, input.userId, input.action, JSON.stringify(input.metadata || {})]);
+}
+
+export function registerAccountingFirmRoutes(app: Express) {
+  app.get('/api/accounting-firm/status', async (req, res) => {
+    const actor = identity(req); const companyId = String(req.query.companyId || '');
+    if (!actor || !companyId) return res.status(400).json({ error: 'Selecciona una empresa.' });
+    const db = controlPlane(); const client = await db.connect();
+    try {
+      const own = await member(client, actor.uid, companyId);
+      if (!own) return res.status(403).json({ error: 'Solo el propietario o administrador puede gestionar esta función.' });
+      const enabled = own.workspace?.accountingFirmEnabled === true;
+      const [outgoing, incoming] = await Promise.all([
+        client.query(`SELECT g.id,g.status,g.scopes,g.requested_at,g.decided_at,
+          c.id AS client_company_id,c.legal_name,c.trade_name,c.rif
+          FROM company_accounting_firm_grants g JOIN platform_companies c ON c.id=g.client_company_id
+          WHERE g.firm_company_id=$1 ORDER BY g.requested_at DESC`, [companyId]),
+        client.query(`SELECT g.id,g.status,g.scopes,g.requested_at,
+          f.id AS firm_company_id,f.legal_name,f.trade_name,f.rif
+          FROM company_accounting_firm_grants g JOIN platform_companies f ON f.id=g.firm_company_id
+          WHERE g.client_company_id=$1 ORDER BY g.requested_at DESC`, [companyId]),
+      ]);
+      return res.json({ enabled, outgoing: outgoing.rows, incoming: incoming.rows });
+    } catch (error) {
+      return res.status(503).json({ error: 'No se pudo cargar el módulo de firma contable.' });
+    } finally { client.release(); }
+  });
+
+  app.post('/api/accounting-firm/enable', async (req, res) => {
+    const actor = identity(req); const companyId = String(req.body?.companyId || '');
+    if (!actor || !companyId) return res.status(400).json({ error: 'Selecciona una empresa.' });
+    const db = controlPlane(); const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const own = await member(client, actor.uid, companyId);
+      if (!own) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'No puedes activar esta función.' }); }
+      await client.query(`UPDATE platform_companies SET workspace = COALESCE(workspace,'{}'::jsonb) || '{"accountingFirmEnabled":true}'::jsonb, updated_at=NOW() WHERE id=$1`, [companyId]);
+      await client.query('COMMIT');
+      return res.json({ enabled: true });
+    } catch (error) { await client.query('ROLLBACK'); return res.status(503).json({ error: 'No se pudo activar la firma contable.' }); }
+    finally { client.release(); }
+  });
+
+  app.get('/api/accounting-firm/directory', async (req, res) => {
+    const actor = identity(req); const companyId = String(req.query.companyId || '');
+    if (!actor || !companyId) return res.status(400).json({ error: 'Selecciona una empresa.' });
+    const db = controlPlane(); const client = await db.connect();
+    try {
+      const own = await member(client, actor.uid, companyId);
+      if (!own) return res.status(403).json({ error: 'No puedes consultar el directorio.' });
+      const q = String(req.query.q || '').trim().slice(0, 80);
+      const found = await client.query(
+        `SELECT id, legal_name, trade_name, rif FROM platform_companies
+         WHERE status='active' AND workspace->>'accountingFirmEnabled'='true' AND id<>$1
+         AND ($2='' OR legal_name ILIKE '%'||$2||'%' OR trade_name ILIKE '%'||$2||'%' OR rif ILIKE '%'||$2||'%')
+         ORDER BY trade_name, legal_name LIMIT 20`, [companyId, q]);
+      return res.json({ firms: found.rows });
+    } catch { return res.status(503).json({ error: 'No se pudo consultar el directorio.' }); }
+    finally { client.release(); }
+  });
+
+  app.post('/api/accounting-firm/request', async (req, res) => {
+    const actor = identity(req); const firmId = String(req.body?.firmCompanyId || '');
+    const clientId = String(req.body?.clientCompanyId || '');
+    if (!actor || !firmId || !clientId || firmId === clientId) return res.status(400).json({ error: 'Datos de solicitud inválidos.' });
+    const scopes = scopesFrom(req.body?.scopes); const db = controlPlane(); const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const firm = await member(client, actor.uid, firmId);
+      if (!firm || firm.workspace?.accountingFirmEnabled !== true) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'La empresa debe activar primero su perfil de firma contable.' }); }
+      const target = await client.query(`SELECT id FROM platform_companies WHERE id=$1 AND status='active'`, [clientId]);
+      if (!target.rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'No se encontró la empresa cliente.' }); }
+      const inserted = await client.query(
+        `INSERT INTO company_accounting_firm_grants
+         (id,firm_company_id,client_company_id,scopes,status,requested_by_user_id,requested_at)
+         VALUES ($1,$2,$3,$4,'requested',$5,NOW())
+         ON CONFLICT (firm_company_id,client_company_id) DO UPDATE
+         SET scopes=EXCLUDED.scopes,status='requested',requested_by_user_id=EXCLUDED.requested_by_user_id,
+             requested_at=NOW(),decided_by_user_id=NULL,decided_at=NULL,revoked_at=NULL
+         WHERE company_accounting_firm_grants.status IN ('rejected','revoked')
+         RETURNING id`,
+        [randomUUID(), firmId, clientId, scopes, firm.user_id]);
+      if (!inserted.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Ya existe una solicitud o autorización para esta empresa.' }); }
+      await audit(client, { grantId: inserted.rows[0].id, firmId, clientId, userId: firm.user_id, action: 'access.requested', metadata: { scopes } });
+      await client.query('COMMIT');
+      return res.status(201).json({ success: true, grantId: inserted.rows[0].id });
+    } catch { await client.query('ROLLBACK'); return res.status(503).json({ error: 'No se pudo crear la solicitud.' }); }
+    finally { client.release(); }
+  });
+
+  app.post('/api/accounting-firm/requests/:id/decision', async (req, res) => {
+    const actor = identity(req); const clientId = String(req.body?.clientCompanyId || '');
+    const decision = req.body?.decision;
+    if (!actor || !clientId || !['approve','reject'].includes(decision)) return res.status(400).json({ error: 'Decisión inválida.' });
+    const db = controlPlane(); const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const own = await member(client, actor.uid, clientId);
+      if (!own) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Solo el administrador de la empresa cliente puede decidir.' }); }
+      const result = await client.query(
+        `UPDATE company_accounting_firm_grants SET status=$2,decided_by_user_id=$3,decided_at=NOW()
+         WHERE id=$1 AND client_company_id=$4 AND status='requested'
+         RETURNING id,firm_company_id,client_company_id,scopes`,
+        [req.params.id, decision === 'approve' ? 'active' : 'rejected', own.user_id, clientId]);
+      if (!result.rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'La solicitud ya no está pendiente.' }); }
+      const row = result.rows[0];
+      await audit(client, { grantId: row.id, firmId: row.firm_company_id, clientId, userId: own.user_id, action: decision === 'approve' ? 'access.approved' : 'access.rejected', metadata: { scopes: row.scopes } });
+      await client.query('COMMIT');
+      return res.json({ success: true, status: decision === 'approve' ? 'active' : 'rejected' });
+    } catch { await client.query('ROLLBACK'); return res.status(503).json({ error: 'No se pudo procesar la decisión.' }); }
+    finally { client.release(); }
+  });
+
+  app.delete('/api/accounting-firm/grants/:id', async (req, res) => {
+    const actor = identity(req); const companyId = String(req.body?.companyId || req.query.companyId || '');
+    if (!actor || !companyId) return res.status(400).json({ error: 'Selecciona la empresa.' });
+    const db = controlPlane(); const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const own = await member(client, actor.uid, companyId);
+      if (!own) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'No puedes revocar este acceso.' }); }
+      const result = await client.query(
+        `UPDATE company_accounting_firm_grants SET status='revoked',revoked_at=NOW()
+         WHERE id=$1 AND client_company_id=$2 AND status='active'
+         RETURNING id,firm_company_id,client_company_id`, [req.params.id, companyId]);
+      if (!result.rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'No se encontró un acceso activo.' }); }
+      const row = result.rows[0];
+      await audit(client, { grantId: row.id, firmId: row.firm_company_id, clientId: companyId, userId: own.user_id, action: 'access.revoked' });
+      await client.query('COMMIT');
+      return res.json({ success: true });
+    } catch { await client.query('ROLLBACK'); return res.status(503).json({ error: 'No se pudo revocar el acceso.' }); }
+    finally { client.release(); }
+  });
+}
