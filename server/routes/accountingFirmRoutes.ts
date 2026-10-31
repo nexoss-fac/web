@@ -276,7 +276,7 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
       return res.status(400).json({ error: 'Solicitud de consulta inválida.' });
     }
 
-    const db = controlPlane();
+    const db = getControlPlane();
     const client = await db.connect();
     try {
       const row = await findDelegatedBooksAccess(client, actor.uid, firmId, clientId);
