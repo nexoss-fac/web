@@ -33,6 +33,7 @@ import { ShoeLabelModal } from './ShoeLabelModal';
 import { ExcelImportModal } from './ExcelImportModal';
 import { ShoeAiScannerModal } from './ShoeAiScannerModal';
 import { BatchWhiteBackgroundModal } from './BatchWhiteBackgroundModal';
+import { PurchaseInvoiceScanner } from './PurchaseInvoiceScanner';
 import { ShoeAiResult } from '../../services/aiShoeService';
 import { COMPANY_INDUSTRIES, resolveIndustryTemplate } from '../../domain/companyIndustries';
 
@@ -51,6 +52,7 @@ export const InventoryManager: React.FC = () => {
     adjustStock,
     deleteProduct,
     userRole,
+    forceSync,
   } = useStore();
 
   const [activeSubTab, setActiveSubTab] = useState<'catalog' | 'kardex' | 'alerts'>('catalog');
@@ -67,6 +69,7 @@ export const InventoryManager: React.FC = () => {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ShoeProduct | null>(null);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [isPurchaseInvoiceOpen, setIsPurchaseInvoiceOpen] = useState(false);
   const [isAiScannerOpen, setIsAiScannerOpen] = useState(false);
   const [initialAiData, setInitialAiData] = useState<ShoeAiResult | null>(null);
   const [initialAiImage, setInitialAiImage] = useState<string | null>(null);
@@ -234,6 +237,16 @@ export const InventoryManager: React.FC = () => {
 
         {/* Action Buttons: Primary + Clean Toolbar */}
         <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+          <button
+            id="scan-purchase-invoice-btn"
+            type="button"
+            onClick={() => setIsPurchaseInvoiceOpen(true)}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+            title="Leer una factura de proveedor, revisar sus renglones y registrar la entrada de inventario"
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>Leer factura de compra</span>
+          </button>
           <button
             id="new-product-btn"
             type="button"
@@ -984,6 +997,13 @@ export const InventoryManager: React.FC = () => {
             )}
           </div>
         </div>
+      )}
+
+      {isPurchaseInvoiceOpen && (
+        <PurchaseInvoiceScanner
+          onClose={() => setIsPurchaseInvoiceOpen(false)}
+          onConfirmed={async () => { await forceSync(); }}
+        />
       )}
 
       {/* Modal: New / Edit Product */}
