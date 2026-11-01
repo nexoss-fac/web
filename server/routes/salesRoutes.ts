@@ -112,6 +112,27 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
             )
           `];
 
+          // Mantiene el directorio operativo de clientes de esta empresa sincronizado
+          // con las facturas emitidas, sin mezclar datos entre empresas.
+          const customerTaxId = String(s.cliente_rif || '').trim().toUpperCase();
+          if (customerTaxId) {
+            const customerName = [s.cliente_nombre, s.cliente_apellido].filter(Boolean).join(' ').trim() || 'Cliente';
+            const customerContactId = `${String(s.id).slice(0, 48)}-cliente`;
+            statements.push(sql`
+              INSERT INTO business_contacts
+                (id, tipo, documento, nombre, apellido, telefono, correo, created_at, updated_at)
+              VALUES
+                (${customerContactId}, 'cliente', ${customerTaxId}, ${customerName},
+                 ${s.cliente_apellido || null}, ${s.cliente_telefono || null}, ${s.cliente_correo || null}, NOW(), NOW())
+              ON CONFLICT (tipo, documento) DO UPDATE SET
+                nombre = EXCLUDED.nombre,
+                apellido = COALESCE(EXCLUDED.apellido, business_contacts.apellido),
+                telefono = COALESCE(EXCLUDED.telefono, business_contacts.telefono),
+                correo = COALESCE(EXCLUDED.correo, business_contacts.correo),
+                updated_at = NOW()
+            `);
+          }
+
           if (Array.isArray(s.items)) {
             for (const item of s.items) {
               const qty = Math.max(1, Number(item.cantidad) || 1);
