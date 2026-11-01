@@ -149,6 +149,7 @@ export function registerSharedContactsRoutes(app: Express): void {
     const correo = text(body.correo, 254).toLowerCase();
     const direccion = text(body.direccion, 2000);
     const notas = text(body.notas, 2000);
+    const notesProvided = typeof body.notas === 'string';
     const country = text(body.countryCode || body.pais, 3).toUpperCase();
 
     if (!tipo) return res.status(400).json({ success: false, error: 'Selecciona cliente o proveedor.' });
@@ -185,11 +186,24 @@ export function registerSharedContactsRoutes(app: Express): void {
              (id, document_normalized, document_display, name, surname, trade_name,
               phone, email, fiscal_address, country_code, created_by_uid, updated_by_uid)
            VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+           ON CONFLICT (document_normalized)
+             WHERE document_normalized IS NOT NULL AND document_normalized <> ''
+           DO NOTHING
            RETURNING *`,
           [randomUUID(), normalized, documento, nombre, apellido, tradeName, telefono, correo, direccion, country, actor.uid],
         );
         contact = inserted.rows[0];
-        created = true;
+        created = Boolean(contact);
+        // Si otra solicitud registró el mismo RIF simultáneamente, reutilizar el registro ganador.
+        if (!contact && normalized) {
+          const concurrent = await client.query(
+            `SELECT * FROM platform_shared_contacts
+             WHERE document_normalized = $1 FOR UPDATE`,
+            [normalized],
+          );
+          contact = concurrent.rows[0];
+        }
+        if (!contact) throw new Error('No se pudo crear ni recuperar el contacto compartido.');
       }
       // Si el documento ya existe, los datos globales no se sobrescriben aquí.
       // La corrección de identidad compartida requiere un flujo explícito de revisión.
@@ -198,9 +212,10 @@ export function registerSharedContactsRoutes(app: Express): void {
            (id, company_id, contact_id, contact_type, private_notes, created_by_uid)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (company_id, contact_id, contact_type)
-         DO UPDATE SET private_notes = EXCLUDED.private_notes, updated_at = NOW()
+         DO UPDATE SET private_notes = CASE WHEN $7 THEN EXCLUDED.private_notes ELSE company_shared_contact_relations.private_notes END,
+           updated_at = NOW()
          RETURNING id, contact_type, private_notes, created_at, updated_at`,
-        [randomUUID(), tenant.companyId, contact.id, tipo, notas, actor.uid],
+        [randomUUID(), tenant.companyId, contact.id, tipo, notas, actor.uid, notesProvided],
       );
       await audit(client, actor.uid, tenant.companyId, created ? 'shared_contact.created' : 'shared_contact.associated', contact.id);
       await client.query('COMMIT');
