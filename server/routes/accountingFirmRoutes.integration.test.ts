@@ -139,6 +139,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
+              idempotencyKey: 'integration-test-entry-001',
               fecha: '2026-10-30T12:00:00.000Z',
               sujeto: 'Asiento de prueba',
               lineas: [
