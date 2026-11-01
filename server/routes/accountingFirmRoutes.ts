@@ -127,6 +127,7 @@ export interface AccountingFirmRouteDependencies {
   readWorkspaceState?: typeof readTenantWorkspaceState;
   getTenantSql?: typeof getNeonSql;
   saveEntry?: typeof saveAccountingEntry;
+  getAccountingBooks?: typeof getAccountingLedger;
 }
 
 export function registerAccountingFirmRoutes(app: Express, dependencies: AccountingFirmRouteDependencies = {}) {
@@ -136,6 +137,7 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
   const readWorkspace = dependencies.readWorkspaceState ?? readTenantWorkspaceState;
   const tenantSql = dependencies.getTenantSql ?? getNeonSql;
   const saveEntry = dependencies.saveEntry ?? saveAccountingEntry;
+  const getAccountingBooks = dependencies.getAccountingBooks ?? getAccountingLedger;
   app.get('/api/accounting-firm/status', async (req, res) => {
     const actor = identity(req); const companyId = String(req.query.companyId || '');
     if (!actor || !companyId) return res.status(400).json({ error: 'Selecciona una empresa.' });
@@ -308,7 +310,7 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
         if (scopes.includes('journal_read') || scopes.includes('ledger_read')) {
           // Diario y mayor se calculan desde las fuentes operativas del tenant,
           // incluyendo ventas/gastos automáticos y asientos manuales/compras.
-          const accounting = await getAccountingLedger();
+          const accounting = await getAccountingBooks();
           if (scopes.includes('journal_read')) result.journal = accounting.entries.slice(0, 500);
           if (scopes.includes('ledger_read')) result.ledger = accounting.ledger;
         }
