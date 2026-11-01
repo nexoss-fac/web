@@ -70,7 +70,10 @@ async function audit(client: any, uid: string, companyId: string, action: string
   );
 }
 
-export function registerSharedContactsRoutes(app: Express): void {
+export interface SharedContactsRouteDependencies { controlPlane?: () => Pick<Pool, 'connect'>; }
+
+export function registerSharedContactsRoutes(app: Express, dependencies: SharedContactsRouteDependencies = {}): void {
+  const getControlPlane = dependencies.controlPlane ?? controlPlane;
   app.get('/api/contacts', async (req: Request, res: Response) => {
     const tenant = tenantStorageContext.getStore();
     const actor = identity(req);
@@ -79,7 +82,7 @@ export function registerSharedContactsRoutes(app: Express): void {
     if (req.query.tipo && !tipo) return res.status(400).json({ success: false, error: 'Tipo de contacto inválido.' });
     const document = normalizeDocument(req.query.documento);
     const search = text(req.query.nombre || req.query.q, 80);
-    const db = controlPlane();
+    const db = getControlPlane();
     const client = await db.connect();
     try {
       if (!await assertMembership(client, actor.uid, tenant.companyId)) {
@@ -160,7 +163,7 @@ export function registerSharedContactsRoutes(app: Express): void {
       return res.status(400).json({ success: false, error: 'El documento es obligatorio para registrar un cliente.' });
     }
 
-    const db = controlPlane();
+    const db = getControlPlane();
     const client = await db.connect();
     try {
       await client.query('BEGIN');
