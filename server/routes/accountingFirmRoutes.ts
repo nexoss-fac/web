@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { Express, Request, Response } from 'express';
 import { getNeonSql, getAccountingLedger, readTenantWorkspaceState, saveAccountingEntry } from '../db.ts';
@@ -366,6 +366,12 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
         return res.status(403).json({ success: false, error: 'La autorización no permite registrar asientos.' });
       }
       const body = req.body || {};
+      // La clave debe permanecer igual en los reintentos del mismo envío.
+      // Así una pérdida de respuesta no crea un segundo asiento contable.
+      const idempotencyKey = typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
+      if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+        return res.status(400).json({ success: false, error: 'Envía una clave idempotencyKey estable (8 a 128 caracteres) para evitar asientos duplicados.' });
+      }
       const rawLines = Array.isArray(body.lineas) ? body.lineas : [];
       if (rawLines.length < 2 || rawLines.length > 100) {
         return res.status(400).json({ success: false, error: 'El asiento debe contener entre 2 y 100 líneas.' });
@@ -400,13 +406,16 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
         companyId: clientId, uid: actor.uid, role: 'accountant' as const,
         industryTemplate: resolveIndustryTemplate(workspace.industryTemplate), connectionString,
       };
-      const entryId = randomUUID();
+      const requestFingerprint = createHash('sha256')
+        .update([firmId, clientId, actor.uid, idempotencyKey].join(':'))
+        .digest('hex');
+      const entryId = `af-${requestFingerprint.slice(0, 48)}`;
       const result = await tenantStorageContext.run(context, () => saveEntry({
         id: entryId,
         fecha: typeof body.fecha === 'string' ? body.fecha : new Date().toISOString(),
         tipo: 'manual',
         origen: 'accounting_firm_delegated',
-        origen_id: entryId,
+        origen_id: requestFingerprint,
         sujeto: typeof body.sujeto === 'string' ? body.sujeto.slice(0, 180) : '',
         rif: typeof body.rif === 'string' ? body.rif.slice(0, 60) : '',
         documento: typeof body.documento === 'string' ? body.documento.slice(0, 100) : '',
@@ -414,11 +423,16 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
         tasa_dolar: Number(body.tasa_dolar || 0),
         lineas,
       }));
-      await audit(client, {
-        grantId: row.grant_id, firmId, clientId, userId: row.user_id,
-        action: 'journal.delegated_write', metadata: { entryId, totalDebe, totalHaber },
+      if (!(result as any)?.alreadySaved) {
+        await audit(client, {
+          grantId: row.grant_id, firmId, clientId, userId: row.user_id,
+          action: 'journal.delegated_write', metadata: { entryId, totalDebe, totalHaber },
+        });
+      }
+      return res.status((result as any)?.alreadySaved ? 200 : 201).json({
+        success: true, alreadySaved: Boolean((result as any)?.alreadySaved),
+        clientCompanyId: clientId, entry: result,
       });
-      return res.status(201).json({ success: true, clientCompanyId: clientId, entry: result });
     } catch (error) {
       logger.error('[Accounting firm journal] Error registrando asiento delegado:', {
         firmCompanyId: firmId, clientCompanyId: clientId, actorUid: actor.uid, error,
