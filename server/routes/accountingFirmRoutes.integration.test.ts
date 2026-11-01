@@ -22,6 +22,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
       '../../db/migrations/control-plane/001_control_plane.sql',
       '../../db/migrations/control-plane/002_current_platform_model.sql',
       '../../db/migrations/control-plane/020_accounting_firm_access.sql',
+      '../../db/migrations/control-plane/021_shared_contacts.sql',
     ]) {
       await pool.query(fs.readFileSync(new URL(migration, import.meta.url), 'utf8'));
     }
