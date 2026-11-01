@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/deploy-nexoss
+      - feature/nexoss-universal-product-ai
   pull_request:
     branches:
       - codex/deploy-nexoss
