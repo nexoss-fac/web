@@ -61,7 +61,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
     await pool.query(
       `INSERT INTO company_accounting_firm_grants
        (id,firm_company_id,client_company_id,scopes,status,requested_by_user_id,expires_at)
-       VALUES ($1,$2,$3,ARRAY['journal_read','reports_read'],'active',$4,NOW()+INTERVAL '1 day'),
+       VALUES ($1,$2,$3,ARRAY['journal_read','reports_read','journal_write'],'active',$4,NOW()+INTERVAL '1 day'),
               ($5,$2,$6,ARRAY['journal_read'],'active',$4,NOW()-INTERVAL '1 minute')`,
       [grantBId, firmId, clientBId, firmUserId, grantCId, clientCId],
     );
@@ -71,7 +71,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
       const allowed = await findDelegatedBooksAccess(db, firmUid, firmId, clientBId);
       assert.equal(allowed?.client_company_id, clientBId);
       assert.equal(allowed?.secret_reference, 'local-env:CLIENT_B_DATABASE_URL');
-      assert.deepEqual(allowed?.scopes, ['journal_read', 'reports_read']);
+      assert.deepEqual(allowed?.scopes, ['journal_read', 'reports_read', 'journal_write']);
 
       // Recorrido HTTP real: middleware de identidad de prueba, autorización SQL real,
       // contexto tenant aislado, respuesta de libros y auditoría persistida en PostgreSQL.
@@ -82,6 +82,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
       });
       let observedTenantCompany: string | undefined;
       let observedConnection: string | undefined;
+      let delegatedEntry: any;
       const tenantState = {
         sales: [{ id: 'sale-client-b', total: 125 }],
         expenses: [{ id: 'expense-client-b', amount: 25 }],
@@ -106,6 +107,17 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
           return tenantState;
         },
         getTenantSql: () => fakeTenantSql,
+        getAccountingBooks: async () => ({
+          entries: [{ id: 'entry-client-b', numero_asiento: 'A-001' }],
+          ledger: [{ cuenta: 'Caja', debe: 125, haber: 0, saldo: 125 }],
+        }),
+        saveEntry: async (entry: any) => {
+          const tenant = tenantStorageContext.getStore();
+          assert.equal(tenant?.companyId, clientBId);
+          assert.equal(tenant?.role, 'accountant');
+          delegatedEntry = entry;
+          return { id: entry.id, totalDebe: 100, totalHaber: 100 };
+        },
       });
       const server = createServer(app);
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -120,16 +132,38 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
         assert.deepEqual(payload.books.journal, [{ id: 'entry-client-b', numero_asiento: 'A-001' }]);
         assert.equal(observedTenantCompany, clientBId);
         assert.equal(observedConnection, 'postgres://tenant-b.invalid/db');
+
+        const writeResponse = await fetch(
+          `http://127.0.0.1:${address.port}/api/accounting-firm/clients/${clientBId}/journal?firmCompanyId=${firmId}`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              fecha: '2026-10-30T12:00:00.000Z',
+              sujeto: 'Asiento de prueba',
+              lineas: [
+                { cuenta: 'Caja', debe: 100, haber: 0 },
+                { cuenta: 'Ingresos', debe: 0, haber: 100 },
+              ],
+            }),
+          },
+        );
+        assert.equal(writeResponse.status, 201);
+        const writePayload = await writeResponse.json() as any;
+        assert.equal(writePayload.success, true);
+        assert.equal(delegatedEntry.origen, 'accounting_firm_delegated');
+        assert.equal(delegatedEntry.lineas.length, 2);
+
         const auditRows = await db.query(
           `SELECT action, grant_id, firm_company_id, client_company_id, actor_user_id, metadata
-           FROM accounting_firm_access_audit WHERE grant_id=$1 AND action='books.read'`,
+           FROM accounting_firm_access_audit WHERE grant_id=$1 AND action IN ('books.read','journal.delegated_write')
+           ORDER BY action`,
           [grantBId],
         );
-        assert.equal(auditRows.rows.length, 1);
-        assert.equal(auditRows.rows[0].firm_company_id, firmId);
-        assert.equal(auditRows.rows[0].client_company_id, clientBId);
-        assert.equal(auditRows.rows[0].actor_user_id, firmUserId);
-        assert.deepEqual(auditRows.rows[0].metadata, { scopes: ['journal', 'summary'] });
+        assert.equal(auditRows.rows.length, 2);
+        assert.ok(auditRows.rows.every((audit: any) => audit.firm_company_id === firmId));
+        assert.ok(auditRows.rows.every((audit: any) => audit.client_company_id === clientBId));
+        assert.ok(auditRows.rows.every((audit: any) => audit.actor_user_id === firmUserId));
       } finally {
         await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
       }
