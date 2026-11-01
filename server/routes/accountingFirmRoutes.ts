@@ -126,6 +126,7 @@ export interface AccountingFirmRouteDependencies {
   getConnectionString?: (secretReference: string | null, encryptedSecret: string | null) => Promise<string>;
   readWorkspaceState?: typeof readTenantWorkspaceState;
   getTenantSql?: typeof getNeonSql;
+  saveEntry?: typeof saveAccountingEntry;
 }
 
 export function registerAccountingFirmRoutes(app: Express, dependencies: AccountingFirmRouteDependencies = {}) {
@@ -134,6 +135,7 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
     ?? ((reference, encrypted) => new LocalEnvironmentTenantSecretProvider().getConnectionString(reference, encrypted));
   const readWorkspace = dependencies.readWorkspaceState ?? readTenantWorkspaceState;
   const tenantSql = dependencies.getTenantSql ?? getNeonSql;
+  const saveEntry = dependencies.saveEntry ?? saveAccountingEntry;
   app.get('/api/accounting-firm/status', async (req, res) => {
     const actor = identity(req); const companyId = String(req.query.companyId || '');
     if (!actor || !companyId) return res.status(400).json({ error: 'Selecciona una empresa.' });
@@ -397,7 +399,7 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
         industryTemplate: resolveIndustryTemplate(workspace.industryTemplate), connectionString,
       };
       const entryId = randomUUID();
-      const result = await tenantStorageContext.run(context, () => saveAccountingEntry({
+      const result = await tenantStorageContext.run(context, () => saveEntry({
         id: entryId,
         fecha: typeof body.fecha === 'string' ? body.fecha : new Date().toISOString(),
         tipo: 'manual',
