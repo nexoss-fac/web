@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { Express, Request, Response } from 'express';
-import { getNeonSql, readTenantWorkspaceState, saveAccountingEntry } from '../db.ts';
+import { getNeonSql, getAccountingLedger, readTenantWorkspaceState, saveAccountingEntry } from '../db.ts';
 import { tenantStorageContext } from '../multiempresa/companyAccess.ts';
 import { resolveIndustryTemplate } from '../../src/domain/companyIndustries.ts';
 import { LocalEnvironmentTenantSecretProvider } from '../multiempresa/tenantSecretProvider.ts';
@@ -304,10 +304,11 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
         if (!sql) throw new Error('No se pudo abrir la base de datos autorizada.');
         const result: Record<string, unknown> = {};
         if (scopes.includes('journal_read') || scopes.includes('ledger_read')) {
-          const entries = await sql`SELECT id, fecha, numero_asiento, tipo, origen, sujeto, rif, documento,
-            total_debe, total_haber, lineas FROM accounting_entries ORDER BY fecha DESC LIMIT 500`;
-          if (scopes.includes('journal_read')) result.journal = entries;
-          if (scopes.includes('ledger_read')) result.ledger = entries;
+          // Diario y mayor se calculan desde las fuentes operativas del tenant,
+          // incluyendo ventas/gastos automáticos y asientos manuales/compras.
+          const accounting = await getAccountingLedger();
+          if (scopes.includes('journal_read')) result.journal = accounting.entries.slice(0, 500);
+          if (scopes.includes('ledger_read')) result.ledger = accounting.ledger;
         }
         if (scopes.includes('purchases_read')) {
           // Una consulta exitosa sin filas devuelve []; un error SQL debe propagarse
