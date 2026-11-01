@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { Express, Request, Response } from 'express';
-import { getNeonSql, readTenantWorkspaceState } from '../db.ts';
+import { getNeonSql, readTenantWorkspaceState, saveAccountingEntry } from '../db.ts';
 import { tenantStorageContext } from '../multiempresa/companyAccess.ts';
 import { resolveIndustryTemplate } from '../../src/domain/companyIndustries.ts';
 import { LocalEnvironmentTenantSecretProvider } from '../multiempresa/tenantSecretProvider.ts';
@@ -334,6 +334,91 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
       return res.json({ success: true, clientCompanyId: clientId, scopes, books });
     } catch (error) {
       return respondBooksReadError(res, error, firmId, clientId, actor.uid);
+    } finally {
+      client.release();
+    }
+  });
+
+  // Escritura delegada de asientos: se valida el grant y su scope en cada petición.
+  // El asiento se guarda en el tenant del cliente; nunca se cambia el tenant activo del contador.
+  app.post('/api/accounting-firm/clients/:clientCompanyId/journal', async (req, res) => {
+    const actor = identity(req);
+    const firmId = String(req.query.firmCompanyId || req.body?.firmCompanyId || '');
+    const clientId = String(req.params.clientCompanyId || '');
+    if (!actor || !firmId || !clientId || firmId === clientId) {
+      return res.status(400).json({ success: false, error: 'Solicitud de registro inválida.' });
+    }
+    const db = getControlPlane();
+    const client = await db.connect();
+    try {
+      const row = await findDelegatedBooksAccess(client, actor.uid, firmId, clientId);
+      if (!row) return res.status(403).json({ success: false, error: 'No existe una autorización vigente para esta empresa.' });
+      if (row.member_role === 'auditor') {
+        return res.status(403).json({ success: false, error: 'El rol auditor es de solo lectura.' });
+      }
+      const scopes = Array.isArray(row.scopes) ? row.scopes : [];
+      if (!scopes.includes('journal_write')) {
+        return res.status(403).json({ success: false, error: 'La autorización no permite registrar asientos.' });
+      }
+      const body = req.body || {};
+      const rawLines = Array.isArray(body.lineas) ? body.lineas : [];
+      if (rawLines.length < 2 || rawLines.length > 100) {
+        return res.status(400).json({ success: false, error: 'El asiento debe contener entre 2 y 100 líneas.' });
+      }
+      const lineas = rawLines.map((line: any) => ({
+        partida: String(line?.partida || '01').slice(0, 20),
+        cuenta: String(line?.cuenta || '').trim().slice(0, 180),
+        subcuenta: String(line?.subcuenta || '').trim().slice(0, 180),
+        clasificacion: String(line?.clasificacion || '').trim().slice(0, 100),
+        subclasificacion: String(line?.subclasificacion || '').trim().slice(0, 120),
+        moneda: String(line?.moneda || 'USD').slice(0, 10),
+        debe: Number(line?.debe || 0),
+        haber: Number(line?.haber || 0),
+        debe_usd: Number(line?.debe_usd || 0),
+        haber_usd: Number(line?.haber_usd || 0),
+        venta_compra: String(line?.venta_compra || '').slice(0, 30),
+      }));
+      if (lineas.some((line: any) => !line.cuenta
+        || ![line.debe, line.haber, line.debe_usd, line.haber_usd].every(Number.isFinite)
+        || line.debe < 0 || line.haber < 0 || line.debe_usd < 0 || line.haber_usd < 0
+        || (line.debe > 0 && line.haber > 0))) {
+        return res.status(400).json({ success: false, error: 'Hay líneas contables inválidas.' });
+      }
+      const totalDebe = lineas.reduce((sum: number, line: any) => sum + line.debe, 0);
+      const totalHaber = lineas.reduce((sum: number, line: any) => sum + line.haber, 0);
+      if (!(totalDebe > 0) || Math.abs(totalDebe - totalHaber) > 0.01) {
+        return res.status(400).json({ success: false, error: 'El asiento debe estar cuadrado: Debe = Haber.' });
+      }
+      const connectionString = await resolveConnectionString(row.secret_reference || null, row.encrypted_connection_secret || null);
+      const workspace = row.client_workspace && typeof row.client_workspace === 'object' ? row.client_workspace : {};
+      const context = {
+        companyId: clientId, uid: actor.uid, role: 'accountant' as const,
+        industryTemplate: resolveIndustryTemplate(workspace.industryTemplate), connectionString,
+      };
+      const entryId = randomUUID();
+      const result = await tenantStorageContext.run(context, () => saveAccountingEntry({
+        id: entryId,
+        fecha: typeof body.fecha === 'string' ? body.fecha : new Date().toISOString(),
+        tipo: 'manual',
+        origen: 'accounting_firm_delegated',
+        origen_id: entryId,
+        sujeto: typeof body.sujeto === 'string' ? body.sujeto.slice(0, 180) : '',
+        rif: typeof body.rif === 'string' ? body.rif.slice(0, 60) : '',
+        documento: typeof body.documento === 'string' ? body.documento.slice(0, 100) : '',
+        observaciones: typeof body.observaciones === 'string' ? body.observaciones.slice(0, 1000) : '',
+        tasa_dolar: Number(body.tasa_dolar || 0),
+        lineas,
+      }));
+      await audit(client, {
+        grantId: row.grant_id, firmId, clientId, userId: row.user_id,
+        action: 'journal.delegated_write', metadata: { entryId, totalDebe, totalHaber },
+      });
+      return res.status(201).json({ success: true, clientCompanyId: clientId, entry: result });
+    } catch (error) {
+      logger.error('[Accounting firm journal] Error registrando asiento delegado:', {
+        firmCompanyId: firmId, clientCompanyId: clientId, actorUid: actor.uid, error,
+      });
+      return res.status(503).json({ success: false, error: 'No se pudo registrar el asiento en la empresa autorizada.' });
     } finally {
       client.release();
     }
