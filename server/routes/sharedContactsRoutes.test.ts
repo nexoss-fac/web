@@ -54,7 +54,7 @@ test('GET por documento normaliza RIF y solo consulta el contacto compartido y l
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.contact.associated, false);
   assert.equal(calls.length, 2);
-  assert.equal(calls.some((call) => /company_shared_contact_relations.*company_id/.test(call.sql)), true);
+  assert.equal(calls.some((call) => call.sql.includes('company_shared_contact_relations') && call.sql.includes('r.company_id = $2')), true);
 });
 
 test('POST crea identidad global una sola vez y guarda notas en la relación privada', async () => {
