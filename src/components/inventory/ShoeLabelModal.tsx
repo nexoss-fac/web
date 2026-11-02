@@ -39,7 +39,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
   const [showBarcode, setShowBarcode] = useState<boolean>(true);
   const [showStoreAddress, setShowStoreAddress] = useState<boolean>(true);
   const [showAvailableSizes, setShowAvailableSizes] = useState<boolean>(true);
-  const [labelFormat, setLabelFormat] = useState<LabelFormat>('thermal_40x25');
+  const [labelFormat, setLabelFormat] = useState<LabelFormat>('thermal_40x20');
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
@@ -474,7 +474,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                   </div>
                   {showBarcode && (
                     <div className="w-full flex justify-center overflow-hidden">
-                      <BarcodeSvg value={product.sku} width={316} height={34} />
+                      <BarcodeSvg value={product.sku} width={316} height={labelFormat === 'thermal_40x20' ? 26 : 34} />
                     </div>
                   )}
                 </div>
@@ -659,6 +659,13 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                       overflow: hidden !important;
                       border: none !important;
                     }
+                    .thermal-label-40x20 {
+                      padding: 0.6mm !important;
+                    }
+                    .thermal-label-40x20 > div {
+                      transform: scaleY(0.82);
+                      transform-origin: center;
+                    }
                     `
                     : `
                     .shoe-tag-item {
@@ -677,7 +684,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                 <div
                   key={idx}
                   className={`shoe-tag-item p-2 bg-white text-black font-sans flex flex-col justify-between border-0 ${
-                    labelFormat === 'thermal_40x20' ? 'w-[40mm] h-[20mm]' : labelFormat === 'thermal_40x25' ? 'w-[40mm] h-[25mm]' : 'w-72 min-h-44'
+                    labelFormat === 'thermal_40x20' ? 'thermal-label-40x20 w-[40mm] h-[20mm]' : labelFormat === 'thermal_40x25' ? 'w-[40mm] h-[25mm]' : 'w-72 min-h-44'
                   }`}
                   style={{ boxSizing: 'border-box' }}
                 >
