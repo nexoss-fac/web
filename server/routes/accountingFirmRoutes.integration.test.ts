@@ -189,7 +189,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
         const reconciliationResponse = await fetch(
           `http://127.0.0.1:${address.port}/api/accounting-firm/clients/${clientBId}/reconciliations?firmCompanyId=${firmId}`,
           { method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ id: 'bank-move-001', fecha: '2026-10-30', banco: 'BDV', tipo: 'deposito',
+            body: JSON.stringify({ id: 'bank-move-001', fecha: '2026-10-30', banco: 'BDV', tipo: 'credito_ingreso',
               referencia: 'REF-001', descripcion: 'Depósito de prueba', monto_bs: 400, monto_usd: 10,
               estado_conciliacion: 'conciliado' }) },
         );
