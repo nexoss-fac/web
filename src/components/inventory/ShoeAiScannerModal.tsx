@@ -230,20 +230,19 @@ export const ShoeAiScannerModal: React.FC<ShoeAiScannerModalProps> = ({
       setIsCompressing(true);
       try {
         const compressed = await compressImageDataUrl(rawDataUrl, {
-          maxDimension: 1600,
-          quality: 0.88,
-          maxSizeBytes: 500 * 1024,
+          maxDimension: 1800,
+          quality: 0.9,
+          maxSizeBytes: 1024 * 1024,
         });
         setOriginalImage(compressed.dataUrl);
         setCapturedImage(compressed.dataUrl);
         setCompressionInfo(compressed);
-        processWhiteBackground(compressed.dataUrl);
+        // La foto original se conserva. El fondo blanco nunca se aplica automáticamente.
         runAnalysis(compressed.dataUrl);
       } catch (err) {
         console.warn('Compression error on photo capture:', err);
         setOriginalImage(rawDataUrl);
         setCapturedImage(rawDataUrl);
-        processWhiteBackground(rawDataUrl);
         runAnalysis(rawDataUrl);
       } finally {
         setIsCompressing(false);
@@ -264,14 +263,14 @@ export const ShoeAiScannerModal: React.FC<ShoeAiScannerModalProps> = ({
     setIsCompressing(true);
     try {
       const compressed = await compressImageFile(file, {
-        maxDimension: 1280,
-        quality: 0.82,
-        maxSizeBytes: 500 * 1024,
+        maxDimension: 1800,
+        quality: 0.9,
+        maxSizeBytes: 1024 * 1024,
       });
       setOriginalImage(compressed.dataUrl);
       setCapturedImage(compressed.dataUrl);
       setCompressionInfo(compressed);
-      processWhiteBackground(compressed.dataUrl);
+      // Analizamos sin alterar ni sustituir la fotografía original.
       runAnalysis(compressed.dataUrl);
     } catch (err) {
       console.error('Error comprimiendo imagen subida:', err);
@@ -282,7 +281,6 @@ export const ShoeAiScannerModal: React.FC<ShoeAiScannerModalProps> = ({
           const dataUrl = event.target.result;
           setOriginalImage(dataUrl);
           setCapturedImage(dataUrl);
-          processWhiteBackground(dataUrl);
           runAnalysis(dataUrl);
         }
       };
@@ -921,7 +919,7 @@ export const ShoeAiScannerModal: React.FC<ShoeAiScannerModalProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          onSelectForProduct(aiResult, whiteBgImage || capturedImage!);
+                          onSelectForProduct(aiResult, originalImage || capturedImage!);
                           stopCamera();
                           onClose();
                         }}
