@@ -514,11 +514,11 @@ export const ShoeAiScannerModal: React.FC<ShoeAiScannerModalProps> = ({
                       className="w-full h-full object-contain bg-white"
                     />
 
-                    {/* Studio White Background Badge / Spinner */}
+                    {/* El análisis de IA no sustituye la foto original del producto. */}
                     {isProcessingWhiteBg ? (
                       <div className="absolute top-2.5 left-2.5 z-10 px-2.5 py-1 bg-amber-950/85 border border-amber-500/50 rounded-lg text-[10px] font-bold text-amber-300 backdrop-blur-xs flex items-center gap-1.5 shadow-lg">
                         <Sparkles className="w-3 h-3 animate-spin text-amber-400" />
-                        <span>Quitando fondo a blanco...</span>
+                        <span>Preparando vista de catálogo...</span>
                       </div>
                     ) : whiteBgImage ? (
                       <div className="absolute top-2.5 left-2.5 z-10 px-2.5 py-1 bg-emerald-950/85 border border-emerald-500/50 rounded-lg text-[10px] font-bold text-emerald-300 backdrop-blur-xs flex items-center gap-1.5 shadow-lg">
@@ -572,7 +572,7 @@ export const ShoeAiScannerModal: React.FC<ShoeAiScannerModalProps> = ({
                           className="px-2 py-1 bg-slate-900/90 hover:bg-slate-800 text-indigo-300 border border-slate-700 rounded-lg text-[10px] font-semibold backdrop-blur-xs flex items-center gap-1 cursor-pointer"
                         >
                           <Wand2 className="w-3 h-3 text-indigo-400" />
-                          <span>Re-limpiar</span>
+                          <span>Revisar fondo</span>
                         </button>
                       </div>
                     )}
@@ -926,7 +926,7 @@ export const ShoeAiScannerModal: React.FC<ShoeAiScannerModalProps> = ({
                         className="w-full py-3 px-4 bg-linear-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-indigo-500 text-white rounded-xl font-bold text-sm shadow-xl shadow-indigo-500/20 flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-[0.99]"
                       >
                         <Plus className="w-4 h-4" />
-                        <span>Usar Datos y Foto (Fondo Blanco) para Registrar Calzado</span>
+                        <span>Usar Datos y Foto Original para Registrar Calzado</span>
                       </button>
                     </div>
                   )}
