@@ -583,19 +583,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     setLastSale(newSale);
     const localNextNumber = `MK-${String(Number((finalInvoiceNumber.match(/(\d+)$/) || [0, 0])[1]) + 1).padStart(6, '0')}`;
     setInvoiceNumber(localNextNumber);
-    setReservedInvoiceNumber('');
-    // Reserva el próximo correlativo desde el servidor para que otras cajas
-    // de la misma empresa no reciban el mismo número.
-    void fetch('/api/invoices/next', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('No se pudo reservar el siguiente correlativo.');
-        const payload = await response.json();
-        if (typeof payload?.numero_factura === 'string' && payload.numero_factura) {
-          setInvoiceNumber(payload.numero_factura);
-          setReservedInvoiceNumber(payload.numero_factura);
-        }
-      })
-      .catch((error) => console.warn('No se pudo reservar el próximo número de factura:', error));
+    // Al actualizarse la lista de ventas, el efecto de reserva inicial vuelve
+    // a ejecutarse y obtiene el siguiente correlativo único del servidor.
   };
 
   return (
