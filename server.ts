@@ -37,6 +37,7 @@ import {
   getSalesClosures,
   addSalesClosure,
   getAccountingLedger,
+  getNextInvoiceNumber,
   saveAccountingEntry,
   deleteAccountingEntry,
 } from './server/db.ts';
@@ -2048,6 +2049,19 @@ async function startServer() {
 
   // 5. Sales API (Neon or Local JSON persistence)
   registerSalesRoutes(app, { readServerStore, writeServerStore, readLocalSales, getNeonSql, normalizeSales, updateSale, voidSale, onSaleRegistered: (sale) => notifyInBackground((company) => buildSaleNotice(sale, company)) });
+
+  // Reserva atómica del siguiente correlativo de factura en la base del tenant.
+  // La secuencia evita que dos terminales de la misma empresa reciban el mismo número.
+  app.post('/api/invoices/next', async (_req, res) => {
+    try {
+      const numero = await getNextInvoiceNumber();
+      if (!numero) return res.status(503).json({ error: 'No se pudo reservar el número de factura en la base de datos de esta empresa.' });
+      return res.json({ numero_factura: numero });
+    } catch (error) {
+      logger.error('Error reservando número de factura:', error);
+      return res.status(503).json({ error: 'No se pudo reservar el siguiente número de factura.' });
+    }
+  });
 
   // Lector independiente de facturas de compra: solo devuelve borradores revisables.
   registerPurchaseInvoiceRoutes(app, adminOnly);
