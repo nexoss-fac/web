@@ -199,10 +199,10 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
         const closureResponse = await fetch(
           `http://127.0.0.1:${address.port}/api/accounting-firm/clients/${clientBId}/closures?firmCompanyId=${firmId}`,
           { method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ id: 'cash-close-001', fecha: '2026-10-30', monto_apertura_usd: 10,
-              monto_apertura_bs: 0, total_ventas_usd: 100, total_ventas_bs: 4000,
-              monto_declarado_usd: 108, monto_declarado_bs: 0, diferencia_usd: -2, diferencia_bs: 0,
-              tasa_bcv: 40, totales_por_cuenta: { Zelle: 100 } }) },
+            body: JSON.stringify({ id: 'cash-close-001', fecha: '2026-10-30', usuario: 'Contador',
+              total_ventas_usd: 100, total_ventas_bs: 4000, cantidad_transacciones: 2, pares_vendidos: 3,
+              desglose_cuentas: [{ cuenta: 'Zelle', moneda: 'USD', monto: 100, monto_usd: 100 }],
+              notas: 'Cierre de prueba' }) },
         );
         assert.equal(closureResponse.status, 201);
         assert.equal((await closureResponse.json() as any).success, true);
