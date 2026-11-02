@@ -478,7 +478,7 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
         VALUES (${id},${fecha},${banco},${tipo},${referencia},${descripcion},${montoBs},${montoUsd},${estado},${b.vinculado_tipo || null},${b.vinculado_id || null},${typeof b.notas === 'string' ? b.notas.slice(0,2000) : ''},NOW())
         ON CONFLICT (id) DO UPDATE SET estado_conciliacion=EXCLUDED.estado_conciliacion,vinculado_tipo=EXCLUDED.vinculado_tipo,vinculado_id=EXCLUDED.vinculado_id,notas=EXCLUDED.notas,updated_at=NOW()
         RETURNING id
-        `);
+        `;
       });
       await audit(client,{grantId:row.grant_id,firmId,clientId,userId:row.user_id,action:'reconciliation.delegated_write',metadata:{movementId:id,status:estado}});
       return res.json({success:true,id:saved[0]?.id || id});
@@ -519,7 +519,7 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
         VALUES
           (${id},${fecha},${JSON.stringify(closure)}::jsonb,${amounts.monto_apertura_usd},${amounts.monto_apertura_bs},${amounts.total_ventas_usd},${amounts.total_ventas_bs},${JSON.stringify(b.totales_por_cuenta)}::jsonb,${amounts.monto_declarado_usd},${amounts.monto_declarado_bs},${amounts.diferencia_usd},${amounts.diferencia_bs},${amounts.tasa_bcv},${closure.usuario},${typeof b.observaciones==='string'?b.observaciones.slice(0,2000):''},'cerrado')
         ON CONFLICT (id) DO NOTHING RETURNING id
-        `);
+        `;
       });
       if (!inserted.length) return res.status(409).json({success:false,error:'Ya existe un cierre con ese identificador; no se modificó.'});
       await audit(client,{grantId:row.grant_id,firmId,clientId,userId:row.user_id,action:'closure.delegated_write',metadata:{closureId:id,fecha}});
