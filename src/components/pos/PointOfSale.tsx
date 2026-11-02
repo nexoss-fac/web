@@ -52,6 +52,7 @@ export interface CartItem {
 
 export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industryTemplate?: string }> = ({ onNavigateToLayaways, industryTemplate = 'other' }) => {
   const {
+    activeCompanyId,
     products,
     sales,
     exchangeRate,
@@ -149,7 +150,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       })
       .catch(() => { if (!cancelled) setInvoiceNumber(getNextInvoiceNumber()); });
     return () => { cancelled = true; };
-  }, []);
+  }, [activeCompanyId]);
 
   // Billing View Mode when cart has items: 'expanded' (wide principal workbench) | 'split' | 'fullscreen'
   const [billingViewMode, setBillingViewMode] = useState<'expanded' | 'split' | 'fullscreen'>('expanded');
