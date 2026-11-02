@@ -1,6 +1,6 @@
 import { ShoeProduct } from '../types';
 
-export type LabelFormat = 'thermal_40x25' | 'thermal_50x30' | 'hangtag' | 'box';
+export type LabelFormat = 'thermal_40x20' | 'thermal_40x25' | 'thermal_50x30' | 'hangtag' | 'box';
 
 export interface LabelOptions {
   format: LabelFormat;
@@ -168,7 +168,7 @@ export function renderLabelToCanvas(
 
   // Determine canvas pixel dimensions based on label format (scaled for crisp 300+ DPI print)
   let width = 480;
-  let height = 300; // 40x25mm (ratio 1.6 : 1, 480 x 300)
+  let height = options.format === 'thermal_40x20' ? 240 : 300; // 40x20mm or 40x25mm at 12 px/mm
 
   if (options.format === 'thermal_50x30') {
     width = 600;
@@ -192,8 +192,9 @@ export function renderLabelToCanvas(
   const showSizes = options.showAvailableSizes !== false && options.availableSizes && options.availableSizes.length > 0;
   const availableSizesList = options.availableSizes || (product.talla ? [product.talla] : []);
 
-  if (options.format === 'thermal_40x25') {
-    // 40x25 mm: precio arriba, talla y datos al centro, barras al pie.
+  if (options.format === 'thermal_40x20' || options.format === 'thermal_40x25') {
+    // Ambos formatos comparten el diseño; 40x20 comprime verticalmente el arte 20%.
+    if (options.format === 'thermal_40x20') ctx.scale(1, 0.8);
     const margin = 12;
 
     if (options.showPrice) {
@@ -429,7 +430,9 @@ export function downloadLabelImage(
       const mimeType = formatType === 'jpeg' ? 'image/jpeg' : 'image/png';
       const extension = formatType === 'jpeg' ? 'jpg' : 'png';
       const sizeLabel =
-        options.format === 'thermal_40x25'
+        options.format === 'thermal_40x20'
+          ? '40x20mm'
+          : options.format === 'thermal_40x25'
           ? '40x25mm'
           : options.format === 'thermal_50x30'
           ? '50x30mm'
