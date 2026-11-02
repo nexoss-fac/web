@@ -55,6 +55,7 @@ export interface ToastNotification {
 }
 
 interface StoreContextType {
+  activeCompanyId: string;
   products: ShoeProduct[];
   movements: StockMovement[];
   sales: Sale[];
@@ -2578,6 +2579,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <StoreContext.Provider
       value={{
+        activeCompanyId,
         products,
         movements,
         sales,
