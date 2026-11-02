@@ -422,92 +422,41 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
               {labelFormat === 'thermal_40x25' ? (
                 <div
                   id="printable-shoe-label"
-                  className="w-[340px] min-h-[212px] bg-white text-slate-900 p-3 shadow-xl rounded-xl relative select-none flex flex-col justify-between border-0"
+                  className="w-[340px] h-[212px] bg-white text-slate-900 px-2 py-1 shadow-xl rounded-xl relative select-none flex flex-col justify-between border-0 overflow-hidden"
                   style={{ boxSizing: 'border-box' }}
                 >
-                  {/* Top Section: Store Brand + Predominant TALLA */}
-                  <div className="flex items-start justify-between gap-2 pb-1.5 border-b border-slate-100">
-                    <div className="flex-1 min-w-0">
-                      <span className="font-black text-sm tracking-wider text-slate-900 block leading-tight">
-                        NEXOSS
-                      </span>
-                      {showStoreAddress && (
-                        <span className="text-[8px] text-slate-500 font-medium block tracking-tight">
-                          Ubicación no configurada • Cdad. Sede no configurada, Loc. 163
-                        </span>
+                  {showPrice && (
+                    <div className="text-center leading-none">
+                      <div className="font-mono font-black text-[39px] tracking-tight text-slate-950">
+                        ${product.precio.toFixed(2)}
+                      </div>
+                      {showBsPrice && (
+                        <div className="text-[9px] font-mono font-bold text-slate-600">
+                          {priceBs.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Bs
+                        </div>
                       )}
-                      <div className="font-black text-xs uppercase text-slate-900 truncate mt-1 leading-snug">
-                        {product.nombre}
-                      </div>
-                      <div className="text-[9px] text-slate-600 font-semibold truncate">
-                        {product.marca} • {product.tipo} | {product.color}
-                      </div>
-                    </div>
-
-                    {/* PREDOMINANT TALLA DISPLAY */}
-                    <div className="bg-slate-950 text-white px-3.5 py-1.5 rounded-xl flex flex-col items-center justify-center shrink-0 shadow-xs min-w-[70px]">
-                      <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest leading-none mb-0.5">
-                        TALLA
-                      </span>
-                      <span className="text-2xl font-black font-mono leading-none tracking-tight text-white">
-                        {product.talla}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Available Sizes for this Shoe Style */}
-                  {showAvailableSizes && availableSizes.length > 0 && (
-                    <div className="my-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                      <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                        <span>Tallas Disp. en este Estilo:</span>
-                        <span className="text-[7px] text-emerald-700 font-bold bg-emerald-50 px-1 rounded">
-                          {availableSizes.length} disp.
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {availableSizes.slice(0, 9).map((sz) => {
-                          const isCurrent = sz.trim() === product.talla.trim();
-                          return (
-                            <span
-                              key={sz}
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold leading-tight ${
-                                isCurrent
-                                  ? 'bg-slate-950 text-white shadow-2xs ring-1 ring-slate-950'
-                                  : 'bg-white text-slate-700 border border-slate-200'
-                              }`}
-                            >
-                              {sz}
-                            </span>
-                          );
-                        })}
-                      </div>
                     </div>
                   )}
 
-                  {/* Barcode & SKU */}
-                  <div className="text-center py-1 bg-slate-50/70 rounded-lg my-1">
-                    {showBarcode && (
-                      <div className="flex justify-center my-0.5">
-                        <BarcodeSvg value={product.sku} width={220} height={26} />
-                      </div>
-                    )}
-                    <div className="font-mono font-black text-[10px] tracking-wider text-slate-800">
-                      SKU: {product.sku}
+                  <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center leading-none">
+                    <div className="font-mono font-black text-[54px] text-slate-950">
+                      {product.talla}
+                    </div>
+                    <div className="max-w-full truncate font-black text-[11px] uppercase text-slate-900">
+                      {product.nombre}
+                    </div>
+                    <div className="max-w-full truncate text-[8px] font-semibold text-slate-600">
+                      {[product.marca, product.tipo, product.color, product.sku].filter(Boolean).join(' • ')}
                     </div>
                   </div>
 
-                  {/* Bottom Row: Cost and PREDOMINANT PRECIO */}
-                  <div className="pt-1.5 border-t border-slate-100 flex items-end justify-between">
-                    {showCost ? (
-                      <div className="text-left bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
-                        <div className="text-[7px] uppercase tracking-wider text-slate-500 font-bold leading-tight">
-                          Costo Compra
-                        </div>
-                        <div className="font-mono font-bold text-xs text-slate-800 leading-tight">
-                          ${product.costo.toFixed(2)}
-                        </div>
-                      </div>
-                    ) : (
+                  {showBarcode && (
+                    <div className="w-full flex justify-center overflow-hidden">
+                      <BarcodeSvg value={product.sku} width={316} height={47} />
+                    </div>
+                  )}
+                </div>
+              ) : (
                       <div />
                     )}
 
