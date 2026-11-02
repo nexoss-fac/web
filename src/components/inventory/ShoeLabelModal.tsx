@@ -427,55 +427,47 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                 >
                   {showPrice && (
                     <div className="text-center leading-none">
-                      <div className="font-mono font-black text-[39px] tracking-tight text-slate-950">
+                      <div className="font-mono font-black text-[36px] tracking-tight text-slate-950">
                         ${product.precio.toFixed(2)}
                       </div>
                       {showBsPrice && (
-                        <div className="text-[9px] font-mono font-bold text-slate-600">
+                        <div className="text-[8px] font-mono font-bold text-slate-600">
                           {priceBs.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Bs
                         </div>
                       )}
                     </div>
                   )}
-
-                  <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center leading-none">
-                    <div className="font-mono font-black text-[54px] text-slate-950">
-                      {product.talla}
-                    </div>
-                    <div className="max-w-full truncate font-black text-[11px] uppercase text-slate-900">
-                      {product.nombre}
-                    </div>
-                    <div className="max-w-full truncate text-[8px] font-semibold text-slate-600">
-                      {[product.marca, product.tipo, product.color, product.sku].filter(Boolean).join(' • ')}
-                    </div>
-                  </div>
-
-                  {showBarcode && (
-                    <div className="w-full flex justify-center overflow-hidden">
-                      <BarcodeSvg value={product.sku} width={316} height={47} />
+                  {showStoreAddress && (
+                    <div className="truncate text-center text-[7px] font-medium text-slate-500">
+                      Ubicación no configurada • Sede no configurada
                     </div>
                   )}
-                </div>
-              ) : (
-                      <div />
-                    )}
-
-                    {showPrice && (
-                      <div className="text-right">
-                        <div className="text-[8px] uppercase tracking-wider text-slate-500 font-black leading-tight">
-                          PVP VENTA
-                        </div>
-                        <div className="font-mono font-black text-2xl sm:text-3xl text-slate-950 leading-none">
-                          ${product.precio.toFixed(2)}
-                        </div>
-                        {showBsPrice && (
-                          <div className="text-[10px] font-mono text-slate-700 font-bold leading-tight mt-0.5">
-                            {priceBs.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Bs
-                          </div>
-                        )}
+                  {showCost && (
+                    <div className="text-center text-[7px] font-bold text-slate-600">
+                      Costo: ${product.costo.toFixed(2)}
+                    </div>
+                  )}
+                  <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center leading-none">
+                    <div className="font-mono font-black text-[49px] text-slate-950">
+                      {product.talla || '--'}
+                    </div>
+                    <div className="max-w-full truncate font-black text-[10px] uppercase text-slate-900">
+                      {product.nombre}
+                    </div>
+                    <div className="max-w-full truncate text-[7px] font-semibold text-slate-600">
+                      {[product.marca, product.tipo, product.color, product.sku].filter(Boolean).join(' • ')}
+                    </div>
+                    {showAvailableSizes && availableSizes.length > 0 && (
+                      <div className="max-w-full truncate text-[7px] font-bold text-slate-500">
+                        Tallas: {availableSizes.slice(0, 8).join(' · ')}
                       </div>
                     )}
                   </div>
+                  {showBarcode && (
+                    <div className="w-full flex justify-center overflow-hidden">
+                      <BarcodeSvg value={product.sku} width={316} height={34} />
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* Other Label Formats Preview (Clean, No Harsh Black Outlines) */
