@@ -272,7 +272,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       return;
     }
     const matches = products.filter((product) =>
-      product.activo && String(product.codigo_barras || '').replace(/\\s+/g, '') === code
+      product.activo && String(product.codigo_barras || '').replace(/\s+/g, '') === code
     );
     if (matches.length === 0) {
       setBarcodeNotice(`No hay un producto registrado con el código ${code}. Asígnalo desde Inventario.`);
