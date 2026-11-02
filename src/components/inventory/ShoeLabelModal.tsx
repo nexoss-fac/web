@@ -39,7 +39,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
   const [showBarcode, setShowBarcode] = useState<boolean>(true);
   const [showStoreAddress, setShowStoreAddress] = useState<boolean>(true);
   const [showAvailableSizes, setShowAvailableSizes] = useState<boolean>(true);
-  const [labelFormat, setLabelFormat] = useState<LabelFormat>('thermal_40x25');
+  const [labelFormat, setLabelFormat] = useState<LabelFormat>('thermal_40x20');
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
@@ -115,7 +115,9 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
     setIsDownloading(false);
     if (success) {
       const sizeLabel =
-        labelFormat === 'thermal_40x25'
+        labelFormat === 'thermal_40x20'
+          ? '40×20mm'
+          : labelFormat === 'thermal_40x25'
           ? '40×25mm'
           : labelFormat === 'thermal_50x30'
           ? '50×30mm'
@@ -140,7 +142,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-base text-white">
-                  Etiqueta para Calzado (Térmica 40×25mm)
+                  Etiqueta para Calzado (Térmica 40×20 / 40×25mm)
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   Sin Bordes Negros • Talla y Precio Predominantes
@@ -183,6 +185,19 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                 <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
+                    onClick={() => setLabelFormat('thermal_40x20')}
+                    className={`py-2 px-2.5 rounded-lg font-bold text-[11px] border transition cursor-pointer flex flex-col items-center justify-center text-center ${
+                      labelFormat === 'thermal_40x20'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>Térmica 40×20mm</span>
+                    <span className="text-[9px] text-slate-400">MXW01 • Rollo actual</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setLabelFormat('thermal_40x25')}
                     className={`py-2 px-2.5 rounded-lg font-bold text-[11px] border transition cursor-pointer flex flex-col items-center justify-center text-center ${
                       labelFormat === 'thermal_40x25'
@@ -191,14 +206,8 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                     }`}
                   >
                     <span>Térmica 40×25mm</span>
-                    <span
-                      className={`text-[9px] ${
-                        labelFormat === 'thermal_40x25'
-                          ? 'text-indigo-200 font-semibold'
-                          : 'text-emerald-600 font-bold'
-                      }`}
-                    >
-                      ★ Estándar Solicitado
+                    <span className={`text-[9px] ${labelFormat === 'thermal_40x25' ? 'text-indigo-200 font-semibold' : 'text-slate-400'}`}>
+                      Formato alternativo
                     </span>
                   </button>
 
@@ -384,7 +393,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
               <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                 <span>
-                  Vista Previa {labelFormat === 'thermal_40x25' ? '40×25mm (Medida Exacta)' : 'de la Etiqueta'}
+                  Vista Previa {labelFormat === 'thermal_40x20' ? '40×20mm (Medida Exacta)' : labelFormat === 'thermal_40x25' ? '40×25mm (Medida Exacta)' : 'de la Etiqueta'}
                 </span>
                 <span className="text-[10px] text-slate-400 font-normal">
                   (Sin bordes negros alrededor)
@@ -419,10 +428,10 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
             <div className="bg-slate-100/90 p-5 sm:p-7 rounded-2xl flex flex-col items-center justify-center border border-slate-200 overflow-x-auto">
               
               {/* 40x25mm Label Card Preview: NO BLACK BORDER AROUND, PREDOMINANT TALLA & PRECIO */}
-              {labelFormat === 'thermal_40x25' ? (
+              {labelFormat === 'thermal_40x20' || labelFormat === 'thermal_40x25' ? (
                 <div
                   id="printable-shoe-label"
-                  className="w-[340px] h-[212px] bg-white text-slate-900 px-2 py-1 shadow-xl rounded-xl relative select-none flex flex-col justify-between border-0 overflow-hidden"
+                  className={`w-[340px] ${labelFormat === 'thermal_40x20' ? 'h-[170px]' : 'h-[212px]'} bg-white text-slate-900 px-2 py-1 shadow-xl rounded-xl relative select-none flex flex-col justify-between border-0 overflow-hidden`}
                   style={{ boxSizing: 'border-box' }}
                 >
                   {showPrice && (
@@ -465,7 +474,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                   </div>
                   {showBarcode && (
                     <div className="w-full flex justify-center overflow-hidden">
-                      <BarcodeSvg value={product.sku} width={316} height={34} />
+                      <BarcodeSvg value={product.sku} width={316} height={labelFormat === 'thermal_40x20' ? 26 : 34} />
                     </div>
                   )}
                 </div>
@@ -598,7 +607,9 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
               <div className="mt-3 text-[10px] text-slate-600 font-medium flex items-center gap-1.5 bg-white/90 px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
                 <FileCheck className="w-3.5 h-3.5 text-indigo-600" />
                 <span>
-                  {labelFormat === 'thermal_40x25'
+                  {labelFormat === 'thermal_40x20'
+                    ? 'Medida exacta: 40mm ancho × 20mm alto'
+                    : labelFormat === 'thermal_40x25'
                     ? 'Medida exacta: 40mm ancho × 25mm alto (ideal para rollos térmicos de calzado y cajas)'
                     : labelFormat === 'thermal_50x30'
                     ? 'Medida: 50mm × 30mm'
@@ -630,23 +641,30 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                   margin: 0 !important;
                 }
                 ${
-                  labelFormat === 'thermal_40x25'
+                  labelFormat === 'thermal_40x20' || labelFormat === 'thermal_40x25'
                     ? `
                     @page {
-                      size: 40mm 25mm;
+                      size: 40mm ${labelFormat === 'thermal_40x20' ? '20mm' : '25mm'};
                       margin: 0;
                     }
                     .shoe-tag-item {
                       width: 40mm !important;
-                      height: 25mm !important;
+                      height: ${labelFormat === 'thermal_40x20' ? '20mm' : '25mm'} !important;
                       max-width: 40mm !important;
-                      max-height: 25mm !important;
+                      max-height: ${labelFormat === 'thermal_40x20' ? '20mm' : '25mm'} !important;
                       page-break-inside: avoid;
                       break-inside: avoid;
                       padding: 1.2mm !important;
                       box-sizing: border-box !important;
                       overflow: hidden !important;
                       border: none !important;
+                    }
+                    .thermal-label-40x20 {
+                      padding: 0.6mm !important;
+                    }
+                    .thermal-label-40x20 > div {
+                      transform: scaleY(0.82);
+                      transform-origin: center;
                     }
                     `
                     : `
@@ -666,7 +684,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                 <div
                   key={idx}
                   className={`shoe-tag-item p-2 bg-white text-black font-sans flex flex-col justify-between border-0 ${
-                    labelFormat === 'thermal_40x25' ? 'w-[40mm] h-[25mm]' : 'w-72 min-h-44'
+                    labelFormat === 'thermal_40x20' ? 'thermal-label-40x20 w-[40mm] h-[20mm]' : labelFormat === 'thermal_40x25' ? 'w-[40mm] h-[25mm]' : 'w-72 min-h-44'
                   }`}
                   style={{ boxSizing: 'border-box' }}
                 >
@@ -705,8 +723,8 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                       <div className="flex justify-center my-0.2">
                         <BarcodeSvg
                           value={product.sku}
-                          width={labelFormat === 'thermal_40x25' ? 140 : 190}
-                          height={labelFormat === 'thermal_40x25' ? 18 : 30}
+                          width={(labelFormat === 'thermal_40x20' || labelFormat === 'thermal_40x25') ? 140 : 190}
+                          height={labelFormat === 'thermal_40x20' ? 14 : labelFormat === 'thermal_40x25' ? 18 : 30}
                         />
                       </div>
                     )}
@@ -764,7 +782,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
             >
               <Download className="w-4 h-4" />
               <span>
-                {isDownloading ? 'Generando imagen...' : 'Descargar Imagen (40×25mm)'}
+                {isDownloading ? 'Generando imagen...' : `Descargar Imagen (${labelFormat === 'thermal_40x20' ? '40×20mm' : labelFormat === 'thermal_40x25' ? '40×25mm' : 'etiqueta'})`}
               </span>
             </button>
 
