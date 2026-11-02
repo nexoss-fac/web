@@ -1730,12 +1730,12 @@ async function startServer() {
             INSERT INTO shoe_products (
               id, nombre, marca, modelo, color, genero, categoria,
               talla, sku, precio, costo, stock, stock_minimo, stock_maximo,
-              imagen_url, ubicacion, descripcion
+              imagen_url, ubicacion, descripcion, codigo_barras
             ) VALUES (
               ${p.id}, ${p.nombre}, ${p.marca}, ${p.modelo || ''}, ${p.color || ''},
               ${p.genero || 'Unisex'}, ${p.categoria || 'Casual'}, ${p.talla}, ${p.sku},
               ${p.precio}, ${p.costo}, ${p.stock}, ${p.stock_minimo || 3}, ${p.stock_maximo || 30},
-              ${p.imagen_url || null}, ${p.ubicacion || 'Almacén'}, ${p.descripcion || ''}
+              ${p.imagen_url || p.imagen || null}, ${p.ubicacion || 'Almacén'}, ${p.descripcion || ''}, ${p.codigo_barras || null}
             )
             ON CONFLICT (id) DO UPDATE SET
               stock = EXCLUDED.stock,
@@ -2140,19 +2140,20 @@ async function startServer() {
             INSERT INTO shoe_products (
               id, nombre, marca, modelo, color, genero, categoria, clasificacion_inventario,
               talla, sku, precio, costo, stock, stock_minimo, stock_maximo,
-              imagen_url, ubicacion, descripcion
+              imagen_url, ubicacion, descripcion, codigo_barras
             ) VALUES (
               ${p.id}, ${p.nombre}, ${p.marca}, ${p.modelo || ''}, ${p.color || ''},
               ${p.genero || 'Unisex'}, ${p.categoria || 'Casual'}, ${p.clasificacion_inventario || 'Mercancía'}, ${p.talla}, ${p.sku},
               ${p.precio}, ${p.costo}, ${p.stock}, ${p.stock_minimo || 3}, ${p.stock_maximo || 30},
-              ${p.imagen_url || p.imagen || null}, ${p.ubicacion || 'Almacén'}, ${p.descripcion || ''}
+              ${p.imagen_url || p.imagen || null}, ${p.ubicacion || 'Almacén'}, ${p.descripcion || ''}, ${p.codigo_barras || null}
             )
             ON CONFLICT (id) DO UPDATE SET
               stock = EXCLUDED.stock,
               precio = EXCLUDED.precio,
               costo = EXCLUDED.costo,
               clasificacion_inventario = EXCLUDED.clasificacion_inventario,
-              nombre = EXCLUDED.nombre;
+              nombre = EXCLUDED.nombre,
+              codigo_barras = EXCLUDED.codigo_barras;
           `);
         }
         if (statements.length) await sql.transaction(statements);
