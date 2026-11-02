@@ -443,4 +443,87 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
     }
   });
 
+  // Conciliación bancaria delegada. Revalida grant y scope en cada operación.
+  app.post('/api/accounting-firm/clients/:clientCompanyId/reconciliations', async (req, res) => {
+    const actor = identity(req);
+    const firmId = String(req.query.firmCompanyId || req.body?.firmCompanyId || '');
+    const clientId = String(req.params.clientCompanyId || '');
+    if (!actor || !firmId || !clientId || firmId === clientId) return res.status(400).json({ success: false, error: 'Solicitud de conciliación inválida.' });
+    const db = getControlPlane(); const client = await db.connect();
+    try {
+      const row = await findDelegatedBooksAccess(client, actor.uid, firmId, clientId);
+      if (!row) return res.status(403).json({ success: false, error: 'No existe una autorización vigente.' });
+      if (row.member_role === 'auditor' || !Array.isArray(row.scopes) || !row.scopes.includes('reconciliation_write')) return res.status(403).json({ success: false, error: 'La autorización no permite modificar conciliaciones.' });
+      const b = req.body || {};
+      const id = typeof b.id === 'string' ? b.id.trim() : '';
+      const fecha = typeof b.fecha === 'string' ? b.fecha.trim() : '';
+      const banco = typeof b.banco === 'string' ? b.banco.trim().slice(0,100) : '';
+      const tipo = typeof b.tipo === 'string' ? b.tipo.trim().slice(0,30) : '';
+      const referencia = typeof b.referencia === 'string' ? b.referencia.trim().slice(0,60) : '';
+      const descripcion = typeof b.descripcion === 'string' ? b.descripcion.trim().slice(0,2000) : '';
+      const montoBs = Number(b.monto_bs);
+      const montoUsd = b.monto_usd == null || b.monto_usd === '' ? null : Number(b.monto_usd);
+      const estados = ['pendiente','conciliado','diferencia','observado'];
+      const estado = estados.includes(b.estado_conciliacion) ? b.estado_conciliacion : 'pendiente';
+      if (!/^[A-Za-z0-9._:-]{1,64}$/.test(id) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !banco || !tipo || !referencia || !descripcion || !Number.isFinite(montoBs) || montoBs < 0 || (montoUsd !== null && (!Number.isFinite(montoUsd) || montoUsd < 0))) return res.status(400).json({ success: false, error: 'Datos del movimiento inválidos.' });
+      const connectionString = await resolveConnectionString(row.secret_reference || null, row.encrypted_connection_secret || null);
+      const workspace = row.client_workspace && typeof row.client_workspace === 'object' ? row.client_workspace : {};
+      const context = { companyId: clientId, uid: actor.uid, role: 'accountant' as const, industryTemplate: resolveIndustryTemplate(workspace.industryTemplate), connectionString };
+      const sql = await tenantStorageContext.run(context, async () => tenantSql());
+      if (!sql) throw new Error('No se pudo abrir la base de datos autorizada.');
+      const saved = await sql`
+        INSERT INTO bank_reconciliations
+          (id,fecha,banco,tipo,referencia,descripcion,monto_bs,monto_usd,estado_conciliacion,vinculado_tipo,vinculado_id,notas,updated_at)
+        VALUES (${id},${fecha},${banco},${tipo},${referencia},${descripcion},${montoBs},${montoUsd},${estado},${b.vinculado_tipo || null},${b.vinculado_id || null},${typeof b.notas === 'string' ? b.notas.slice(0,2000) : ''},NOW())
+        ON CONFLICT (id) DO UPDATE SET estado_conciliacion=EXCLUDED.estado_conciliacion,vinculado_tipo=EXCLUDED.vinculado_tipo,vinculado_id=EXCLUDED.vinculado_id,notas=EXCLUDED.notas,updated_at=NOW()
+        RETURNING id
+      `;
+      await audit(client,{grantId:row.grant_id,firmId,clientId,userId:row.user_id,action:'reconciliation.delegated_write',metadata:{movementId:id,status:estado}});
+      return res.json({success:true,id:saved[0]?.id || id});
+    } catch(error) {
+      logger.error('[Accounting firm reconciliation] Error:',{firmId,clientId,actorUid:actor.uid,error});
+      return res.status(503).json({success:false,error:'No se pudo guardar la conciliación en la empresa autorizada.'});
+    } finally { client.release(); }
+  });
+
+  // Los cierres delegados son de solo creación: nunca se reemplaza un cierre existente.
+  app.post('/api/accounting-firm/clients/:clientCompanyId/closures', async (req, res) => {
+    const actor = identity(req);
+    const firmId = String(req.query.firmCompanyId || req.body?.firmCompanyId || '');
+    const clientId = String(req.params.clientCompanyId || '');
+    if (!actor || !firmId || !clientId || firmId === clientId) return res.status(400).json({success:false,error:'Solicitud de cierre inválida.'});
+    const db = getControlPlane(); const client = await db.connect();
+    try {
+      const row = await findDelegatedBooksAccess(client,actor.uid,firmId,clientId);
+      if (!row) return res.status(403).json({success:false,error:'No existe una autorización vigente.'});
+      if (row.member_role === 'auditor' || !Array.isArray(row.scopes) || !row.scopes.includes('closures_write')) return res.status(403).json({success:false,error:'La autorización no permite registrar cierres.'});
+      const b = req.body || {};
+      const id = typeof b.id === 'string' ? b.id.trim() : '';
+      const fecha = typeof b.fecha === 'string' ? b.fecha.trim() : '';
+      const fields = ['monto_apertura_usd','monto_apertura_bs','total_ventas_usd','total_ventas_bs','monto_declarado_usd','monto_declarado_bs','diferencia_usd','diferencia_bs','tasa_bcv'];
+      const amounts: Record<string,number> = {};
+      for (const field of fields) amounts[field] = Number(b[field] ?? 0);
+      if (!/^[A-Za-z0-9._:-]{1,64}$/.test(id) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || Object.values(amounts).some(v=>!Number.isFinite(v)||v<0) || !b.totales_por_cuenta || typeof b.totales_por_cuenta!=='object' || Array.isArray(b.totales_por_cuenta)) return res.status(400).json({success:false,error:'Datos del cierre inválidos.'});
+      const connectionString = await resolveConnectionString(row.secret_reference || null,row.encrypted_connection_secret || null);
+      const workspace = row.client_workspace && typeof row.client_workspace==='object' ? row.client_workspace : {};
+      const context = {companyId:clientId,uid:actor.uid,role:'accountant' as const,industryTemplate:resolveIndustryTemplate(workspace.industryTemplate),connectionString};
+      const sql = await tenantStorageContext.run(context,async()=>tenantSql());
+      if (!sql) throw new Error('No se pudo abrir la base de datos autorizada.');
+      const closure = {...b,id,fecha,...amounts,usuario:typeof b.usuario==='string'?b.usuario.slice(0,100):'Firma contable'};
+      const inserted = await sql`
+        INSERT INTO cash_closures
+          (id,fecha,data,monto_apertura_usd,monto_apertura_bs,total_ventas_usd,total_ventas_bs,totales_por_cuenta,monto_declarado_usd,monto_declarado_bs,diferencia_usd,diferencia_bs,tasa_bcv,usuario,observaciones,estado)
+        VALUES
+          (${id},${fecha},${JSON.stringify(closure)}::jsonb,${amounts.monto_apertura_usd},${amounts.monto_apertura_bs},${amounts.total_ventas_usd},${amounts.total_ventas_bs},${JSON.stringify(b.totales_por_cuenta)}::jsonb,${amounts.monto_declarado_usd},${amounts.monto_declarado_bs},${amounts.diferencia_usd},${amounts.diferencia_bs},${amounts.tasa_bcv},${closure.usuario},${typeof b.observaciones==='string'?b.observaciones.slice(0,2000):''},'cerrado')
+        ON CONFLICT (id) DO NOTHING RETURNING id
+      `;
+      if (!inserted.length) return res.status(409).json({success:false,error:'Ya existe un cierre con ese identificador; no se modificó.'});
+      await audit(client,{grantId:row.grant_id,firmId,clientId,userId:row.user_id,action:'closure.delegated_write',metadata:{closureId:id,fecha}});
+      return res.status(201).json({success:true,id});
+    } catch(error) {
+      logger.error('[Accounting firm closure] Error:',{firmId,clientId,actorUid:actor.uid,error});
+      return res.status(503).json({success:false,error:'No se pudo registrar el cierre en la empresa autorizada.'});
+    } finally { client.release(); }
+  });
+
 }
