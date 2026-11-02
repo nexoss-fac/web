@@ -125,7 +125,11 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
         controlPlane: () => pool!,
         getConnectionString: async () => 'postgres://tenant-b.invalid/db',
         readWorkspaceState: async () => {
-          assert.equal(tenantStorageContext.getStore()?.companyId, clientBId);
+          const tenant = tenantStorageContext.getStore();
+          observedTenantCompany = tenant?.companyId;
+          observedConnection = tenant?.connectionString;
+          assert.equal(tenant?.companyId, clientBId);
+          assert.equal(tenant?.role, 'auditor');
           return tenantState;
         },
         getTenantSql: () => fakeTenantSql,
