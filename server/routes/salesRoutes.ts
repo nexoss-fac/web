@@ -73,6 +73,16 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
     const sql = getNeonSql();
     if (sql) {
       try {
+        const invoiceNumber = String(s.numero_factura || '').trim();
+        if (!invoiceNumber) return res.status(400).json({ saved: false, error: 'La factura debe tener un número de control.' });
+        const duplicateInvoice = await sql`
+          SELECT id FROM sales_transactions
+          WHERE numero_factura = ${invoiceNumber} AND id <> ${String(s.id)}
+          LIMIT 1
+        `;
+        if (duplicateInvoice.length) {
+          return res.status(409).json({ saved: false, error: 'Ese número de factura ya está registrado en esta empresa.' });
+        }
         // El cliente reintenta hasta 3 veces si recibe un error. Por eso el stock de Neon
         // se descuenta según si la venta ya existe EN NEON (no en el JSON local), y la
         // venta + el stock se guardan en una sola transacción: o entra todo o no entra nada.
