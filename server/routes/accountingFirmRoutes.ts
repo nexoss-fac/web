@@ -512,27 +512,45 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
       const b = req.body || {};
       const id = typeof b.id === 'string' ? b.id.trim() : '';
       const fecha = typeof b.fecha === 'string' ? b.fecha.trim() : '';
-      const fields = ['monto_apertura_usd','monto_apertura_bs','total_ventas_usd','total_ventas_bs','monto_declarado_usd','monto_declarado_bs','diferencia_usd','diferencia_bs','tasa_bcv'];
-      const amounts: Record<string,number> = {};
-      for (const field of fields) amounts[field] = Number(b[field] ?? 0);
-      if (!/^[A-Za-z0-9._:-]{1,64}$/.test(id) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || fields.filter(field=>!['diferencia_usd','diferencia_bs'].includes(field)).some(field=>!Number.isFinite(amounts[field])||amounts[field]<0) || !Number.isFinite(amounts.diferencia_usd) || !Number.isFinite(amounts.diferencia_bs) || !b.totales_por_cuenta || typeof b.totales_por_cuenta!=='object' || Array.isArray(b.totales_por_cuenta) || Object.values(b.totales_por_cuenta).some(value=>!Number.isFinite(Number(value)) || Number(value)<0)) return res.status(400).json({success:false,error:'Datos del cierre inválidos.'});
+      const totalUsd = Number(b.total_ventas_usd);
+      const totalBs = Number(b.total_ventas_bs);
+      const cantidad = Number(b.cantidad_transacciones ?? 0);
+      const unidades = Number(b.pares_vendidos ?? 0);
+      const breakdown = Array.isArray(b.desglose_cuentas) ? b.desglose_cuentas : [];
+      if (!/^[A-Za-z0-9._:-]{1,64}$/.test(id) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(fecha)
+        || !Number.isFinite(totalUsd) || totalUsd < 0 || !Number.isFinite(totalBs) || totalBs < 0
+        || !Number.isInteger(cantidad) || cantidad < 0 || !Number.isFinite(unidades) || unidades < 0
+        || breakdown.some((item: any) => !item || typeof item.cuenta !== 'string'
+          || !['USD','Bs'].includes(String(item.moneda)) || !Number.isFinite(Number(item.monto)) || Number(item.monto) < 0
+          || !Number.isFinite(Number(item.monto_usd)) || Number(item.monto_usd) < 0)) {
+        return res.status(400).json({success:false,error:'Los datos del cierre de caja son inválidos.'});
+      }
       const connectionString = await resolveConnectionString(row.secret_reference || null,row.encrypted_connection_secret || null);
       const workspace = row.client_workspace && typeof row.client_workspace==='object' ? row.client_workspace : {};
       const context = {companyId:clientId,uid:actor.uid,role:'accountant' as const,industryTemplate:resolveIndustryTemplate(workspace.industryTemplate),connectionString};
-      const closure = {...b,id,fecha,...amounts,usuario:typeof b.usuario==='string'?b.usuario.slice(0,100):'Firma contable'};
+      const closure = {
+        id, fecha,
+        usuario: typeof b.usuario === 'string' ? b.usuario.slice(0,100) : 'Firma contable',
+        total_ventas_usd: totalUsd, total_ventas_bs: totalBs,
+        cantidad_transacciones: cantidad, pares_vendidos: unidades,
+        desglose_cuentas: breakdown,
+        cerrado_at: typeof b.cerrado_at === 'string' ? b.cerrado_at : new Date().toISOString(),
+        notas: typeof b.notas === 'string' ? b.notas.slice(0,2000) : '',
+      };
       const inserted = await tenantStorageContext.run(context, () => {
         const sql = tenantSql();
         if (!sql) throw new Error('No se pudo abrir la base de datos autorizada.');
         return sql`
-        INSERT INTO cash_closures
-          (id,fecha,data,monto_apertura_usd,monto_apertura_bs,total_ventas_usd,total_ventas_bs,totales_por_cuenta,monto_declarado_usd,monto_declarado_bs,diferencia_usd,diferencia_bs,tasa_bcv,usuario,observaciones,estado)
-        VALUES
-          (${id},${fecha},${JSON.stringify(closure)}::jsonb,${amounts.monto_apertura_usd},${amounts.monto_apertura_bs},${amounts.total_ventas_usd},${amounts.total_ventas_bs},${JSON.stringify(b.totales_por_cuenta)}::jsonb,${amounts.monto_declarado_usd},${amounts.monto_declarado_bs},${amounts.diferencia_usd},${amounts.diferencia_bs},${amounts.tasa_bcv},${closure.usuario},${typeof b.observaciones==='string'?b.observaciones.slice(0,2000):''},'cerrado')
-        ON CONFLICT (id) DO NOTHING RETURNING id
+          INSERT INTO cash_closures
+            (id,fecha,data,total_ventas_usd,total_ventas_bs,usuario,observaciones,estado)
+          VALUES
+            (${id},${fecha},${JSON.stringify(closure)}::jsonb,${totalUsd},${totalBs},
+             ${closure.usuario},${closure.notas},'cerrado')
+          ON CONFLICT (id) DO NOTHING RETURNING id
         `;
       });
       if (!inserted.length) return res.status(409).json({success:false,error:'Ya existe un cierre con ese identificador; no se modificó.'});
-      await audit(client,{grantId:row.grant_id,firmId,clientId,userId:row.user_id,action:'closure.delegated_write',metadata:{closureId:id,fecha}});
+      await audit(client,{grantId:row.grant_id,firmId,clientId,userId:row.user_id,action:'closure.delegated_write',metadata:{closureId:id,fecha,totalUsd,totalBs}});
       return res.status(201).json({success:true,id});
     } catch(error) {
       logger.error('[Accounting firm closure] Error:',{firmId,clientId,actorUid:actor.uid,error});
