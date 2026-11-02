@@ -399,6 +399,7 @@ export async function initDatabaseSchema() {
     await sql`ALTER TABLE shoe_products ADD COLUMN IF NOT EXISTS clasificacion_inventario VARCHAR(100) NOT NULL DEFAULT 'Mercancía'`;
     await sql`ALTER TABLE shoe_products ADD COLUMN IF NOT EXISTS es_original BOOLEAN DEFAULT true`;
     await sql`ALTER TABLE shoe_products ADD COLUMN IF NOT EXISTS codigo_barras VARCHAR(32)`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS shoe_products_codigo_barras_unique ON shoe_products (codigo_barras) WHERE codigo_barras IS NOT NULL AND codigo_barras <> ''`;
     // updated_at: para que la app pueda preguntar "¿cambió algo?" con una
     // consulta barata, en vez de tener que volver a descargar todos los
     // productos (con sus fotos) cada vez que revisa si hay novedades.
