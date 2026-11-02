@@ -107,9 +107,19 @@ export async function findDelegatedBooksAccess(client: any, actorUid: string, fi
          FROM platform_users u
          JOIN company_memberships m ON m.user_id=u.id AND m.status='active'
          JOIN platform_companies firm ON firm.id=m.company_id AND firm.status='active'
+         JOIN company_subscriptions firm_subscription
+           ON firm_subscription.company_id=firm.id
+          AND firm_subscription.status IN ('active','trialing')
+          AND firm_subscription.current_period_end>NOW()
+         JOIN platform_plans firm_plan ON firm_plan.id=firm_subscription.plan_id AND firm_plan.active=TRUE
          JOIN company_accounting_firm_grants g
            ON g.firm_company_id=firm.id AND g.client_company_id=$3 AND g.status='active'
          JOIN platform_companies c ON c.id=g.client_company_id AND c.status='active'
+         JOIN company_subscriptions client_subscription
+           ON client_subscription.company_id=c.id
+          AND client_subscription.status IN ('active','trialing')
+          AND client_subscription.current_period_end>NOW()
+         JOIN platform_plans client_plan ON client_plan.id=client_subscription.plan_id AND client_plan.active=TRUE
          JOIN tenant_database_connections t ON t.company_id=c.id AND t.status='ready'
          WHERE u.auth_provider='firebase' AND u.auth_subject=$1 AND u.status='active'
            AND firm.id=$2 AND firm.workspace->>'accountingFirmEnabled'='true'
