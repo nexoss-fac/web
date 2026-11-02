@@ -230,9 +230,9 @@ export const ShoeAiScannerModal: React.FC<ShoeAiScannerModalProps> = ({
       setIsCompressing(true);
       try {
         const compressed = await compressImageDataUrl(rawDataUrl, {
-          maxDimension: 1800,
-          quality: 0.9,
-          maxSizeBytes: 1024 * 1024,
+          maxDimension: 1600,
+          quality: 0.88,
+          maxSizeBytes: 500 * 1024,
         });
         setOriginalImage(compressed.dataUrl);
         setCapturedImage(compressed.dataUrl);
@@ -263,9 +263,9 @@ export const ShoeAiScannerModal: React.FC<ShoeAiScannerModalProps> = ({
     setIsCompressing(true);
     try {
       const compressed = await compressImageFile(file, {
-        maxDimension: 1800,
-        quality: 0.9,
-        maxSizeBytes: 1024 * 1024,
+        maxDimension: 1280,
+        quality: 0.82,
+        maxSizeBytes: 500 * 1024,
       });
       setOriginalImage(compressed.dataUrl);
       setCapturedImage(compressed.dataUrl);
