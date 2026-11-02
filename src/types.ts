@@ -50,6 +50,8 @@ export interface ShoeProduct {
   id: string;
   nombre: string;
   sku: string;
+  /** Código EAN/UPC leído por escáner (se conserva como texto para respetar ceros iniciales). */
+  codigo_barras?: string;
   categoria: string;
   clasificacion_inventario?: InventoryClassification;
   marca: string;
