@@ -165,6 +165,7 @@ export const InventoryManager: React.FC = () => {
 
       const nombre = (p.nombre || '').toLowerCase();
       const sku = (p.sku || '').toLowerCase();
+      const barcode = String(p.codigo_barras || '').toLowerCase();
       const color = (p.color || '').toLowerCase();
       const marca = (p.marca || '').toLowerCase();
       const clasificacionInventario = (p.clasificacion_inventario || 'Mercancía').toLowerCase();
@@ -174,6 +175,7 @@ export const InventoryManager: React.FC = () => {
         !query ||
         nombre.includes(query) ||
         sku.includes(query) ||
+        barcode.includes(query) ||
         color.includes(query) ||
         marca.includes(query) ||
         clasificacionInventario.includes(query) ||
@@ -471,7 +473,7 @@ export const InventoryManager: React.FC = () => {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar modelo, código SKU, color..."
+                  placeholder="Buscar modelo, SKU, EAN/UPC, color..."
                   className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
               </div>
