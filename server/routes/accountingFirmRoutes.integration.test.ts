@@ -43,6 +43,21 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
       [firmId, clientBId, clientCId],
     );
     await pool.query(
+      `INSERT INTO platform_plans (id,name,billing_interval,max_users,max_products,max_branches,modules,active)
+       VALUES ('test-plan','Plan de prueba','month',10,1000,10,'[]'::jsonb,TRUE)`,
+    );
+    await pool.query(
+      `INSERT INTO company_subscriptions (company_id,plan_id,status,current_period_start,current_period_end)
+       VALUES ($1,'test-plan','active',NOW()-INTERVAL '1 day',NOW()+INTERVAL '30 days'),
+              ($2,'test-plan','trialing',NOW()-INTERVAL '1 day',NOW()+INTERVAL '30 days')`,
+      [firmId, clientBId],
+    );
+    await pool.query(
+      `INSERT INTO company_subscriptions (company_id,plan_id,status,current_period_start,current_period_end)
+       VALUES ($1,'test-plan','active',NOW()-INTERVAL '1 day',NOW()+INTERVAL '30 days')`,
+      [clientCId],
+    );
+    await pool.query(
       `INSERT INTO platform_users (id,auth_provider,auth_subject,email,status)
        VALUES ($1,'firebase',$2,'firm@example.invalid','active')`,
       [firmUserId, firmUid],
@@ -205,6 +220,11 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
       } finally {
         await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
       }
+
+      // Una suscripción vencida o en mora también bloquea el acceso delegado.
+      await db.query(`UPDATE company_subscriptions SET status='past_due' WHERE company_id=$1`, [clientBId]);
+      assert.equal(await findDelegatedBooksAccess(db, firmUid, firmId, clientBId), null);
+      await db.query(`UPDATE company_subscriptions SET status='active' WHERE company_id=$1`, [clientBId]);
 
       // Otra empresa con autorización vencida nunca debe resolverse.
       assert.equal(await findDelegatedBooksAccess(db, firmUid, firmId, clientCId), null);
