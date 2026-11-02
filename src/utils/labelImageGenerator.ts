@@ -206,35 +206,56 @@ export function renderLabelToCanvas(
 
       if (options.showBsPrice) {
         ctx.fillStyle = '#334155';
-        ctx.font = 'bold 18px monospace';
+        ctx.font = 'bold 16px monospace';
         ctx.fillText(
           `${priceBs.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Bs`,
           width / 2,
-          78
+          67
         );
       }
+    }
+
+    if (options.showStoreAddress) {
+      ctx.fillStyle = '#64748b';
+      ctx.font = '11px sans-serif';
+      ctx.fillText('Ubicación no configurada • Sede no configurada', width / 2, 91);
+    }
+    if (options.showCost) {
+      ctx.fillStyle = '#64748b';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(`Costo: ${product.costo.toFixed(2)}`, width / 2, 106);
     }
 
     // Talla predominante en el centro; marca y modelo debajo.
     ctx.fillStyle = '#090d16';
     ctx.textAlign = 'center';
-    ctx.font = '900 76px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
-    ctx.fillText(fitText(ctx, product.talla || '--', width - margin * 2), width / 2, 151);
+    ctx.font = '900 70px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
+    ctx.fillText(fitText(ctx, product.talla || '--', width - margin * 2), width / 2, 153);
 
     ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 21px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText(fitText(ctx, product.nombre.toUpperCase(), width - margin * 2), width / 2, 204);
+    ctx.font = 'bold 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(fitText(ctx, product.nombre.toUpperCase(), width - margin * 2), width / 2, 199);
 
     ctx.fillStyle = '#475569';
-    ctx.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     const details = [product.marca, product.tipo, product.color, product.sku]
       .filter(Boolean)
       .join(' • ');
-    ctx.fillText(fitText(ctx, details, width - margin * 2), width / 2, 228);
+    ctx.fillText(fitText(ctx, details, width - margin * 2), width / 2, 221);
+
+    if (showSizes) {
+      ctx.fillStyle = '#475569';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(
+        fitText(ctx, `Tallas: ${availableSizesList.slice(0, 8).join(' · ')}`, width - margin * 2),
+        width / 2,
+        239
+      );
+    }
 
     // Solo barras: sin SKU impreso, sin dígitos ni leyenda.
     if (options.showBarcode) {
-      drawBarcode(ctx, product.sku, width / 2, 246, width - margin * 2, 48);
+      drawBarcode(ctx, product.sku, width / 2, 258, width - margin * 2, 34);
     }
   } else {
     // -------------------------------------------------------------
