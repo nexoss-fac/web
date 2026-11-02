@@ -68,6 +68,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [barcodeNotice, setBarcodeNotice] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [selectedBrand, setSelectedBrand] = useState('Todas');
   const [selectedType, setSelectedType] = useState('Todos');
@@ -195,6 +197,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
 
       const nombre = (p.nombre || '').toLowerCase();
       const sku = (p.sku || '').toLowerCase();
+      const barcode = String(p.codigo_barras || '').toLowerCase();
       const color = (p.color || '').toLowerCase();
       const marca = (p.marca || '').toLowerCase();
       const talla = String(p.talla || '');
@@ -203,6 +206,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
         !query ||
         nombre.includes(query) ||
         sku.includes(query) ||
+        barcode.includes(query) ||
         color.includes(query) ||
         marca.includes(query) ||
         talla.toLowerCase().includes(query);
@@ -260,6 +264,35 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   const totalCartQuantity = useMemo(() => cart.reduce((sum, item) => sum + item.quantity, 0), [cart]);
 
   // Add to Cart
+
+  const handleBarcodeScan = (rawCode: string) => {
+    const code = String(rawCode || '').replace(/[^0-9]/g, '').trim();
+    if (![8, 12, 13, 14].includes(code.length)) {
+      setBarcodeNotice('Código no válido. Se admiten EAN-8, UPC-A, EAN-13 y GTIN-14.');
+      return;
+    }
+    const matches = products.filter((product) =>
+      product.activo && String(product.codigo_barras || '').replace(/\\s+/g, '') === code
+    );
+    if (matches.length === 0) {
+      setBarcodeNotice(`No hay un producto registrado con el código ${code}. Asígnalo desde Inventario.`);
+      setSearchQuery(code);
+      return;
+    }
+    if (matches.length > 1) {
+      setBarcodeNotice('Este código está asignado a más de un producto. Corrige los códigos duplicados en Inventario.');
+      return;
+    }
+    const product = matches[0];
+    if (product.stock <= 0) {
+      setBarcodeNotice(`${product.nombre} está sin existencias.`);
+      return;
+    }
+    handleAddToCart(product);
+    setBarcodeNotice(`Agregado: ${product.nombre} · Talla ${product.talla}`);
+    setSearchQuery('');
+  };
+
   const handleAddToCart = (product: ShoeProduct) => {
     if (product.stock <= 0) return;
 
@@ -693,8 +726,29 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
               ))}
             </div>
 
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  id="pos-barcode-scan"
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 14))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleBarcodeScan(barcodeInput);
+                      setBarcodeInput('');
+                    }
+                  }}
+                  placeholder="Escanear EAN / UPC (clic aquí)"
+                  aria-label="Escanear código de barras EAN o UPC"
+                  className="w-full px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-slate-900 font-mono placeholder-emerald-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+                {barcodeNotice && <p role="status" aria-live="polite" className="text-[11px] mt-1 text-slate-600">{barcodeNotice}</p>}
+              </div>
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
                 type="text"
                 id="pos-search-input"
@@ -711,6 +765,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                   Limpiar
                 </button>
               )}
+              </div>
             </div>
 
             {/* Quick Filters */}
