@@ -93,11 +93,17 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
         observedTenantCompany = tenant?.companyId;
         observedConnection = tenant?.connectionString;
         assert.equal(tenant?.companyId, clientBId);
-        assert.equal(tenant?.role, 'auditor');
+        assert.ok(['auditor', 'accountant'].includes(tenant?.role || ''));
         assert.equal(tenant?.uid, firmUid);
         assert.equal(tenant?.connectionString, 'postgres://tenant-b.invalid/db');
-        if (/accounting_entries/.test(strings.join(' '))) return [{ id: 'entry-client-b', numero_asiento: 'A-001' }];
-        if (/bank_reconciliations|cash_closures/.test(strings.join(' '))) return [{ id: 'delegated-record' }];
+        if (/accounting_entries/.test(strings.join(' '))) {
+          assert.equal(tenant?.role, 'auditor');
+          return [{ id: 'entry-client-b', numero_asiento: 'A-001' }];
+        }
+        if (/bank_reconciliations|cash_closures/.test(strings.join(' '))) {
+          assert.equal(tenant?.role, 'accountant');
+          return [{ id: 'delegated-record' }];
+        }
         throw new Error('Consulta tenant no esperada en prueba');
       }) as any;
       registerAccountingFirmRoutes(app, {
