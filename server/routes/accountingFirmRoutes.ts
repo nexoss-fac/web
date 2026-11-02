@@ -473,9 +473,9 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
       const descripcion = typeof b.descripcion === 'string' ? b.descripcion.trim().slice(0,2000) : '';
       const montoBs = Number(b.monto_bs);
       const montoUsd = b.monto_usd == null || b.monto_usd === '' ? null : Number(b.monto_usd);
-      const estados = ['pendiente','conciliado','diferencia','observado'];
+      const estados = ['pendiente','conciliado','discrepancia'];
       const estado = estados.includes(b.estado_conciliacion) ? b.estado_conciliacion : 'pendiente';
-      if (!/^[A-Za-z0-9._:-]{1,64}$/.test(id) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !banco || !tipo || !referencia || !descripcion || !Number.isFinite(montoBs) || montoBs < 0 || (montoUsd !== null && (!Number.isFinite(montoUsd) || montoUsd < 0))) return res.status(400).json({ success: false, error: 'Datos del movimiento inválidos.' });
+      if (!/^[A-Za-z0-9._:-]{1,64}$/.test(id) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !banco || !['credito_ingreso','debito_egreso'].includes(tipo) || !referencia || !descripcion || !Number.isFinite(montoBs) || montoBs < 0 || (montoUsd !== null && (!Number.isFinite(montoUsd) || montoUsd < 0))) return res.status(400).json({ success: false, error: 'Datos del movimiento inválidos.' });
       const connectionString = await resolveConnectionString(row.secret_reference || null, row.encrypted_connection_secret || null);
       const workspace = row.client_workspace && typeof row.client_workspace === 'object' ? row.client_workspace : {};
       const context = { companyId: clientId, uid: actor.uid, role: 'accountant' as const, industryTemplate: resolveIndustryTemplate(workspace.industryTemplate), connectionString };
