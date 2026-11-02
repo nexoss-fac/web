@@ -91,6 +91,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
       // Recorrido HTTP real: middleware de identidad de prueba, autorización SQL real,
       // contexto tenant aislado, respuesta de libros y auditoría persistida en PostgreSQL.
       const app = express();
+      app.use(express.json());
       app.use((req, _res, next) => {
         (req as typeof req & { firebaseIdentity?: { uid: string } }).firebaseIdentity = { uid: firmUid };
         next();
