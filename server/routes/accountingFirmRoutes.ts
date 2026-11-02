@@ -469,15 +469,15 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
       const connectionString = await resolveConnectionString(row.secret_reference || null, row.encrypted_connection_secret || null);
       const workspace = row.client_workspace && typeof row.client_workspace === 'object' ? row.client_workspace : {};
       const context = { companyId: clientId, uid: actor.uid, role: 'accountant' as const, industryTemplate: resolveIndustryTemplate(workspace.industryTemplate), connectionString };
-      const sql = await tenantStorageContext.run(context, async () => tenantSql());
+      const sql = tenantSql();
       if (!sql) throw new Error('No se pudo abrir la base de datos autorizada.');
-      const saved = await sql`
+      const saved = await tenantStorageContext.run(context, () => sql`
         INSERT INTO bank_reconciliations
           (id,fecha,banco,tipo,referencia,descripcion,monto_bs,monto_usd,estado_conciliacion,vinculado_tipo,vinculado_id,notas,updated_at)
         VALUES (${id},${fecha},${banco},${tipo},${referencia},${descripcion},${montoBs},${montoUsd},${estado},${b.vinculado_tipo || null},${b.vinculado_id || null},${typeof b.notas === 'string' ? b.notas.slice(0,2000) : ''},NOW())
         ON CONFLICT (id) DO UPDATE SET estado_conciliacion=EXCLUDED.estado_conciliacion,vinculado_tipo=EXCLUDED.vinculado_tipo,vinculado_id=EXCLUDED.vinculado_id,notas=EXCLUDED.notas,updated_at=NOW()
         RETURNING id
-      `;
+      `);
       await audit(client,{grantId:row.grant_id,firmId,clientId,userId:row.user_id,action:'reconciliation.delegated_write',metadata:{movementId:id,status:estado}});
       return res.json({success:true,id:saved[0]?.id || id});
     } catch(error) {
@@ -507,16 +507,16 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
       const connectionString = await resolveConnectionString(row.secret_reference || null,row.encrypted_connection_secret || null);
       const workspace = row.client_workspace && typeof row.client_workspace==='object' ? row.client_workspace : {};
       const context = {companyId:clientId,uid:actor.uid,role:'accountant' as const,industryTemplate:resolveIndustryTemplate(workspace.industryTemplate),connectionString};
-      const sql = await tenantStorageContext.run(context,async()=>tenantSql());
+      const sql = tenantSql();
       if (!sql) throw new Error('No se pudo abrir la base de datos autorizada.');
       const closure = {...b,id,fecha,...amounts,usuario:typeof b.usuario==='string'?b.usuario.slice(0,100):'Firma contable'};
-      const inserted = await sql`
+      const inserted = await tenantStorageContext.run(context, () => sql`
         INSERT INTO cash_closures
           (id,fecha,data,monto_apertura_usd,monto_apertura_bs,total_ventas_usd,total_ventas_bs,totales_por_cuenta,monto_declarado_usd,monto_declarado_bs,diferencia_usd,diferencia_bs,tasa_bcv,usuario,observaciones,estado)
         VALUES
           (${id},${fecha},${JSON.stringify(closure)}::jsonb,${amounts.monto_apertura_usd},${amounts.monto_apertura_bs},${amounts.total_ventas_usd},${amounts.total_ventas_bs},${JSON.stringify(b.totales_por_cuenta)}::jsonb,${amounts.monto_declarado_usd},${amounts.monto_declarado_bs},${amounts.diferencia_usd},${amounts.diferencia_bs},${amounts.tasa_bcv},${closure.usuario},${typeof b.observaciones==='string'?b.observaciones.slice(0,2000):''},'cerrado')
         ON CONFLICT (id) DO NOTHING RETURNING id
-      `;
+      `);
       if (!inserted.length) return res.status(409).json({success:false,error:'Ya existe un cierre con ese identificador; no se modificó.'});
       await audit(client,{grantId:row.grant_id,firmId,clientId,userId:row.user_id,action:'closure.delegated_write',metadata:{closureId:id,fecha}});
       return res.status(201).json({success:true,id});
