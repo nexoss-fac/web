@@ -88,18 +88,26 @@ export async function analyzeShoeWithAi(
 
   for (const endpoint of endpoints) {
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          imageBase64: optimizedImage,
-          userHint: userHint?.trim() || undefined,
-          industry,
-        }),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            imageBase64: optimizedImage,
+            userHint: userHint?.trim() || undefined,
+            industry,
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!response.ok) {
         let errorDetail = `Error del servidor (${response.status})`;
@@ -138,7 +146,9 @@ export async function analyzeShoeWithAi(
         lastErrorMsg = data.error;
       }
     } catch (err: any) {
-      lastErrorMsg = err?.message || String(err);
+      lastErrorMsg = err?.name === 'AbortError'
+        ? 'Gemini tardó más de 30 segundos. La foto original está conservada; puedes reintentar o completar los datos manualmente.'
+        : err?.message || String(err);
       console.warn(`[ShoeAiService] Network error on ${endpoint}:`, lastErrorMsg);
     }
   }
