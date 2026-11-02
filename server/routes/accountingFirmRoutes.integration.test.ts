@@ -61,7 +61,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
     await pool.query(
       `INSERT INTO company_accounting_firm_grants
        (id,firm_company_id,client_company_id,scopes,status,requested_by_user_id,expires_at)
-       VALUES ($1,$2,$3,ARRAY['journal_read','reports_read','journal_write'],'active',$4,NOW()+INTERVAL '1 day'),
+       VALUES ($1,$2,$3,ARRAY['journal_read','reports_read','journal_write','reconciliation_write','closures_write'],'active',$4,NOW()+INTERVAL '1 day'),
               ($5,$2,$6,ARRAY['journal_read'],'active',$4,NOW()-INTERVAL '1 minute')`,
       [grantBId, firmId, clientBId, firmUserId, grantCId, clientCId],
     );
@@ -71,7 +71,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
       const allowed = await findDelegatedBooksAccess(db, firmUid, firmId, clientBId);
       assert.equal(allowed?.client_company_id, clientBId);
       assert.equal(allowed?.secret_reference, 'local-env:CLIENT_B_DATABASE_URL');
-      assert.deepEqual(allowed?.scopes, ['journal_read', 'reports_read', 'journal_write']);
+      assert.deepEqual(allowed?.scopes, ['journal_read', 'reports_read', 'journal_write', 'reconciliation_write', 'closures_write']);
 
       // Recorrido HTTP real: middleware de identidad de prueba, autorización SQL real,
       // contexto tenant aislado, respuesta de libros y auditoría persistida en PostgreSQL.
@@ -96,8 +96,9 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
         assert.equal(tenant?.role, 'auditor');
         assert.equal(tenant?.uid, firmUid);
         assert.equal(tenant?.connectionString, 'postgres://tenant-b.invalid/db');
-        assert.match(strings.join(' '), /accounting_entries/);
-        return [{ id: 'entry-client-b', numero_asiento: 'A-001' }];
+        if (/accounting_entries/.test(strings.join(' '))) return [{ id: 'entry-client-b', numero_asiento: 'A-001' }];
+        if (/bank_reconciliations|cash_closures/.test(strings.join(' '))) return [{ id: 'delegated-record' }];
+        throw new Error('Consulta tenant no esperada en prueba');
       }) as any;
       registerAccountingFirmRoutes(app, {
         controlPlane: () => pool!,
@@ -115,6 +116,7 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
           const tenant = tenantStorageContext.getStore();
           assert.equal(tenant?.companyId, clientBId);
           assert.equal(tenant?.role, 'accountant');
+          if (delegatedEntry?.id === entry.id) return { id: entry.id, totalDebe: 100, totalHaber: 100, alreadySaved: true };
           delegatedEntry = entry;
           return { id: entry.id, totalDebe: 100, totalHaber: 100 };
         },
@@ -154,14 +156,43 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
         assert.equal(writePayload.success, true);
         assert.equal(delegatedEntry.origen, 'accounting_firm_delegated');
         assert.equal(delegatedEntry.lineas.length, 2);
+        const retryWrite = await fetch(
+          `http://127.0.0.1:${address.port}/api/accounting-firm/clients/${clientBId}/journal?firmCompanyId=${firmId}`,
+          { method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ idempotencyKey: 'integration-test-entry-001', fecha: '2026-10-30T12:00:00.000Z',
+              sujeto: 'Asiento de prueba', lineas: [{ cuenta: 'Caja', debe: 100, haber: 0 }, { cuenta: 'Ingresos', debe: 0, haber: 100 }] }) },
+        );
+        assert.equal(retryWrite.status, 200);
+        assert.equal((await retryWrite.json() as any).alreadySaved, true);
+
+        const reconciliationResponse = await fetch(
+          `http://127.0.0.1:${address.port}/api/accounting-firm/clients/${clientBId}/reconciliations?firmCompanyId=${firmId}`,
+          { method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: 'bank-move-001', fecha: '2026-10-30', banco: 'BDV', tipo: 'deposito',
+              referencia: 'REF-001', descripcion: 'Depósito de prueba', monto_bs: 400, monto_usd: 10,
+              estado_conciliacion: 'conciliado' }) },
+        );
+        assert.equal(reconciliationResponse.status, 200);
+        assert.equal((await reconciliationResponse.json() as any).success, true);
+
+        const closureResponse = await fetch(
+          `http://127.0.0.1:${address.port}/api/accounting-firm/clients/${clientBId}/closures?firmCompanyId=${firmId}`,
+          { method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: 'cash-close-001', fecha: '2026-10-30', monto_apertura_usd: 10,
+              monto_apertura_bs: 0, total_ventas_usd: 100, total_ventas_bs: 4000,
+              monto_declarado_usd: 108, monto_declarado_bs: 0, diferencia_usd: -2, diferencia_bs: 0,
+              tasa_bcv: 40, totales_por_cuenta: { Zelle: 100 } }) },
+        );
+        assert.equal(closureResponse.status, 201);
+        assert.equal((await closureResponse.json() as any).success, true);
 
         const auditRows = await db.query(
           `SELECT action, grant_id, firm_company_id, client_company_id, actor_user_id, metadata
-           FROM accounting_firm_access_audit WHERE grant_id=$1 AND action IN ('books.read','journal.delegated_write')
+           FROM accounting_firm_access_audit WHERE grant_id=$1 AND action IN ('books.read','journal.delegated_write','reconciliation.delegated_write','closure.delegated_write')
            ORDER BY action`,
           [grantBId],
         );
-        assert.equal(auditRows.rows.length, 2);
+        assert.equal(auditRows.rows.length, 4);
         assert.ok(auditRows.rows.every((audit: any) => audit.firm_company_id === firmId));
         assert.ok(auditRows.rows.every((audit: any) => audit.client_company_id === clientBId));
         assert.ok(auditRows.rows.every((audit: any) => audit.actor_user_id === firmUserId));
