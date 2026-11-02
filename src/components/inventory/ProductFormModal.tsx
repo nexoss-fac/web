@@ -203,6 +203,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
   useEffect(() => {
     if (isOpen && !editingProduct) {
+      setCodigoBarras('');
       setCategoria(defaultProductCategory as ProductCategory);
       setClasificacionInventario(classificationForCategory(defaultProductCategory));
       setSingleStock('0');
@@ -1122,6 +1123,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                   inputMode="numeric"
                   value={codigoBarras}
                   onChange={(e) => setCodigoBarras(e.target.value.replace(/[^0-9]/g, '').slice(0, 14))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                   placeholder="Escanea o escribe el código (EAN-8, UPC-A, EAN-13)"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
                 />
