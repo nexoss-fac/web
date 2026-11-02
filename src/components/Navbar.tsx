@@ -31,14 +31,15 @@ import {
   ChevronDown,
   ChevronRight,
   HeartPulse,
-  Factory
+  Factory,
+  Building2
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { MakdLogo } from './common/MakdLogo';
 import { UserWindowModal } from './common/UserWindowModal';
 import { CompanyProfileId, CompanyProfileSelector } from './companies/CompanyProfileSelector';
 
-export type NavigationTab = 'pos' | 'health' | 'inventory' | 'layaways' | 'reports' | 'cash' | 'expenses' | 'conciliacion' | 'contabilidad' | 'inventoryReport' | 'fiscal' | 'production' | 'admin';
+export type NavigationTab = 'pos' | 'health' | 'inventory' | 'layaways' | 'reports' | 'cash' | 'expenses' | 'conciliacion' | 'contabilidad' | 'inventoryReport' | 'fiscal' | 'production' | 'admin' | 'firmaContable';
 
 interface NavbarProps {
   activeTab: NavigationTab;
@@ -219,6 +220,14 @@ export const Sidebar: React.FC<{
               <span>Manufactura y trazabilidad</span>
             </button>
           )}
+          {isCompanyAdmin && <button
+            id="sidebar-nav-firma-contable"
+            onClick={() => { setActiveTab('firmaContable'); setMobileOpen(false); }}
+            className={`w-full p-2.5 rounded-md flex items-center gap-3 text-xs font-medium cursor-pointer transition-colors ${activeTab === 'firmaContable' ? 'bg-slate-800 text-white font-semibold shadow-xs' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+          >
+            <Building2 className={`w-4 h-4 ${activeTab === 'firmaContable' ? 'text-indigo-400' : 'text-slate-400'}`} />
+            <span>Firma contable</span>
+          </button>}
           {userRole === 'admin' && <button
             id="sidebar-nav-contabilidad"
             onClick={() => {
@@ -364,6 +373,8 @@ export const Header: React.FC<{
         return 'Contabilidad';
       case 'admin':
         return 'Administrar empresa';
+      case 'firmaContable':
+        return 'Firma contable';
       default:
         return 'Gestion empresarial';
     }

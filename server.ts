@@ -6,6 +6,9 @@ import fs from 'fs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { addMoney, subtractMoney } from './server/money.ts';
 import { registerSalesRoutes } from './server/routes/salesRoutes.ts';
+import { registerPurchaseInvoiceRoutes } from './server/routes/purchaseInvoiceRoutes.ts';
+import { registerAccountingFirmRoutes } from './server/routes/accountingFirmRoutes.ts';
+import { registerSharedContactsRoutes } from './server/routes/sharedContactsRoutes.ts';
 import { registerHealthRoutes } from './server/routes/healthRoutes.ts';
 import { createServer as createViteServer } from 'vite';
 import { 
@@ -34,11 +37,13 @@ import {
   getSalesClosures,
   addSalesClosure,
   getAccountingLedger,
+  getNextInvoiceNumber,
   saveAccountingEntry,
   deleteAccountingEntry,
 } from './server/db.ts';
 import { verifyBdvPayment, getBdvApiConfig, getRecentVerifications } from './server/bdv.ts';
 import { analyzeShoeImage } from './server/shoeAi.ts';
+import { analyzeProductImage } from './server/productAi.ts';
 import { analyzeReceiptImage } from './server/receiptAi.ts';
 import { scanFiscalDocument } from './server/fiscalDocumentAi.ts';
 import { compressFiscalPdfDataUrl } from './server/fiscalPdfCompression.ts';
@@ -476,6 +481,7 @@ async function startServer() {
   // Salud permanece pública. Todas las rutas API operativas declaradas debajo
   // requieren un token Firebase verificado por el servidor.
   app.use('/api', requireFirebaseAuth);
+  registerAccountingFirmRoutes(app);
 
   // Onboarding y administración central necesitan identidad Firebase, pero
   // todavía no tienen un tenant seleccionado.
@@ -986,6 +992,7 @@ async function startServer() {
     : createCompanyAccessMiddleware(PLATFORM_STORE));
 
   const adminOnly = requireTenantRole('owner', 'admin');
+  registerSharedContactsRoutes(app);
   registerHealthRoutes(app, adminOnly);
 
   // Contactos de clientes privados por empresa: la conexión SQL se resuelve desde
@@ -1989,94 +1996,7 @@ async function startServer() {
     res.json({ success: true, data: current });
   });
 
-  // Directorio de clientes y proveedores aislado por empresa (la conexión SQL procede del tenant autenticado).
-  app.get('/api/contacts', async (req, res) => {
-    const sql = getNeonSql();
-    if (!sql) return res.status(503).json({ success: false, error: 'La base de datos de esta empresa no está disponible.' });
-    const tipo = String(req.query.tipo || '').trim();
-    const documento = String(req.query.documento || '').trim().toUpperCase();
-    const nombreQuery = String(req.query.nombre || '').trim().slice(0, 160);
-    if (tipo && !['cliente', 'proveedor'].includes(tipo)) return res.status(400).json({ success: false, error: 'Tipo de contacto inválido.' });
-    try {
-      await sql`
-        CREATE TABLE IF NOT EXISTS nexoss_contacts (
-          id TEXT PRIMARY KEY,
-          tipo TEXT NOT NULL CHECK (tipo IN ('cliente', 'proveedor')),
-          documento TEXT NOT NULL,
-          nombre TEXT NOT NULL,
-          apellido TEXT NOT NULL DEFAULT '',
-          telefono TEXT NOT NULL DEFAULT '',
-          correo TEXT NOT NULL DEFAULT '',
-          direccion TEXT NOT NULL DEFAULT '',
-          notas TEXT NOT NULL DEFAULT '',
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          UNIQUE (tipo, documento)
-        )
-      `;
-      if (documento) {
-        const rows = await sql`SELECT id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at FROM nexoss_contacts WHERE documento = ${documento} AND (${tipo} = '' OR tipo = ${tipo}) LIMIT 1`;
-        return res.json({ success: true, contact: rows[0] || null });
-      }
-      const search = (nombreQuery || String(req.query.q || '')).trim().slice(0, 80);
-      const rows = search
-        ? await sql`SELECT id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at FROM nexoss_contacts WHERE (${tipo} = '' OR tipo = ${tipo}) AND (documento ILIKE ${'%' + search + '%'} OR nombre ILIKE ${'%' + search + '%'} OR apellido ILIKE ${'%' + search + '%'}) ORDER BY nombre ASC LIMIT 50`
-        : await sql`SELECT id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at FROM nexoss_contacts WHERE (${tipo} = '' OR tipo = ${tipo}) ORDER BY nombre ASC LIMIT 50`;
-      return res.json({ success: true, contacts: rows });
-    } catch (error) {
-      logger.error('No se pudo consultar el directorio de contactos:', error);
-      return res.status(503).json({ success: false, error: 'No se pudo consultar la base de datos de clientes y proveedores.' });
-    }
-  });
-
-  app.post('/api/contacts', async (req, res) => {
-    const sql = getNeonSql();
-    if (!sql) return res.status(503).json({ success: false, error: 'La base de datos de esta empresa no está disponible.' });
-    const body = req.body || {};
-    const tipo = String(body.tipo || '').trim();
-    const documentoIngresado = String(body.documento || '').trim().toUpperCase().slice(0, 40);
-    const nombre = String(body.nombre || '').trim().slice(0, 160);
-    const documento = documentoIngresado || (tipo === 'proveedor' && nombre ? 'NOMBRE:' + nombre.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').slice(0, 100) : '');
-    const apellido = String(body.apellido || '').trim().slice(0, 160);
-    const telefono = String(body.telefono || '').trim().slice(0, 50);
-    const correo = String(body.correo || '').trim().slice(0, 180);
-    const direccion = String(body.direccion || '').trim().slice(0, 500);
-    const notas = String(body.notas || '').trim().slice(0, 1000);
-    if (!['cliente', 'proveedor'].includes(tipo)) return res.status(400).json({ success: false, error: 'Selecciona cliente o proveedor.' });
-    if ((!documentoIngresado && tipo !== 'proveedor') || !nombre || nombre.toLowerCase() === 'consumidor final') return res.status(400).json({ success: false, error: tipo === 'cliente' ? 'El documento y el nombre son obligatorios para guardar un cliente.' : 'El nombre del proveedor es obligatorio.' });
-    try {
-      await sql`
-        CREATE TABLE IF NOT EXISTS nexoss_contacts (
-          id TEXT PRIMARY KEY,
-          tipo TEXT NOT NULL CHECK (tipo IN ('cliente', 'proveedor')),
-          documento TEXT NOT NULL,
-          nombre TEXT NOT NULL,
-          apellido TEXT NOT NULL DEFAULT '',
-          telefono TEXT NOT NULL DEFAULT '',
-          correo TEXT NOT NULL DEFAULT '',
-          direccion TEXT NOT NULL DEFAULT '',
-          notas TEXT NOT NULL DEFAULT '',
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          UNIQUE (tipo, documento)
-        )
-      `;
-      const rows = await sql`
-        INSERT INTO nexoss_contacts (id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas)
-        VALUES (${randomUUID()}, ${tipo}, ${documento}, ${nombre}, ${apellido}, ${telefono}, ${correo}, ${direccion}, ${notas})
-        ON CONFLICT (tipo, documento) DO UPDATE SET
-          nombre = EXCLUDED.nombre, apellido = EXCLUDED.apellido, telefono = EXCLUDED.telefono,
-          correo = EXCLUDED.correo, direccion = EXCLUDED.direccion, notas = EXCLUDED.notas,
-          updated_at = NOW()
-        RETURNING id, tipo, documento, nombre, apellido, telefono, correo, direccion, notas, created_at, updated_at
-      `;
-      return res.json({ success: true, contact: rows[0] });
-    } catch (error) {
-      logger.error('No se pudo guardar el contacto:', error);
-      return res.status(503).json({ success: false, error: 'No se pudo guardar el cliente o proveedor en la base de datos.' });
-    }
-  });
-
+  // Directorio universal: identidad compartida y notas privadas por empresa.
   // Products API (Neon or Local JSON persistence)
   app.get('/api/products', async (req, res) => {
     const sql = getNeonSql();
@@ -2248,6 +2168,22 @@ async function startServer() {
 
   // 5. Sales API (Neon or Local JSON persistence)
   registerSalesRoutes(app, { readServerStore, writeServerStore, readLocalSales, getNeonSql, normalizeSales, updateSale, voidSale, onSaleRegistered: (sale) => notifyInBackground((company) => buildSaleNotice(sale, company)) });
+
+  // Reserva atómica del siguiente correlativo de factura en la base del tenant.
+  // La secuencia evita que dos terminales de la misma empresa reciban el mismo número.
+  app.post('/api/invoices/next', async (_req, res) => {
+    try {
+      const numero = await getNextInvoiceNumber();
+      if (!numero) return res.status(503).json({ error: 'No se pudo reservar el número de factura en la base de datos de esta empresa.' });
+      return res.json({ numero_factura: numero });
+    } catch (error) {
+      logger.error('Error reservando número de factura:', error);
+      return res.status(503).json({ error: 'No se pudo reservar el siguiente número de factura.' });
+    }
+  });
+
+  // Lector independiente de facturas de compra: solo devuelve borradores revisables.
+  registerPurchaseInvoiceRoutes(app, adminOnly);
 
   // Layaways API (Sistema de Apartados)
   app.get('/api/layaways', async (req, res) => {
@@ -2681,30 +2617,21 @@ async function startServer() {
     }
 
     try {
-      const { imageBase64, userHint } = req.body || {};
+      const { imageBase64, userHint, industry } = req.body || {};
       if (!imageBase64 || typeof imageBase64 !== 'string') {
         return res.status(400).json({
           success: false,
-          error: 'Se requiere una imagen en formato Base64 para analizar el calzado.',
+          error: 'Se requiere una imagen en formato Base64 para analizar el producto.',
         });
       }
 
-      const analysis = await analyzeShoeImage(imageBase64, userHint);
+      const analysis = await analyzeProductImage(imageBase64, userHint, typeof industry === 'string' ? industry.slice(0, 120) : 'comercio general');
 
-      // Return unified response compatible with both frontend interfaces
-      res.json({
-        ...analysis,
-        // Also provide keys from user's custom prompt format
-        marcaModelo: `${analysis.marca} ${analysis.modelo}`.trim(),
-        estiloCategoria: analysis.tipo,
-        colores: analysis.color,
-        materiales: analysis.material,
-        tituloComercial: analysis.nombre,
-        descripcionTienda: analysis.descripcion_comercial,
-      });
+      // Response universal para inventarios de cualquier industria.
+      res.json({ ...analysis, marcaModelo: [analysis.marca, analysis.modelo].filter(Boolean).join(' '), estiloCategoria: analysis.tipo, colores: analysis.color, materiales: analysis.material, tituloComercial: analysis.nombre, descripcionTienda: analysis.descripcion_comercial });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error('[API analyze-shoe error]:', msg);
+      logger.error('[API analyze-product error]:', msg);
       res.status(500).json({
         success: false,
         error: msg,
@@ -2713,6 +2640,8 @@ async function startServer() {
   };
 
   // Support multiple endpoint paths and any HTTP verb to ensure maximum compatibility
+  app.all('/api/ai/analyze-product', handleShoeAnalysis);
+  // Legacy aliases kept for older app versions; the analyzer is now universal.
   app.all('/api/ai/analyze-shoe', handleShoeAnalysis);
   app.all('/api/analyze-shoe', handleShoeAnalysis);
   app.all('/api/shoe-ai', handleShoeAnalysis);

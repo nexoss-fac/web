@@ -42,6 +42,23 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
       return res.status(400).json({ saved: false, error: 'Datos de venta inválidos' });
     }
 
+    const sql = getNeonSql();
+    if (sql) {
+      const invoiceNumber = String(s.numero_factura || '').trim();
+      if (!invoiceNumber) return res.status(400).json({ saved: false, error: 'La factura debe tener un número de control.' });
+      try {
+        const duplicateInvoice = await sql`
+          SELECT id FROM sales_transactions
+          WHERE numero_factura = ${invoiceNumber} AND id <> ${String(s.id)}
+          LIMIT 1
+        `;
+        if (duplicateInvoice.length) return res.status(409).json({ saved: false, error: 'Ese número de factura ya está registrado en esta empresa.' });
+      } catch (error) {
+        logger.error('No se pudo validar el número de factura en Neon:', error);
+        return res.status(502).json({ saved: false, error: 'No se pudo verificar la numeración de la factura. No se registró la venta.' });
+      }
+    }
+
     const store = await readServerStore();
 
     // Una venta nueva no puede traer totales inventados por el navegador. Con
@@ -70,7 +87,6 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
     await writeServerStore(store);
 
     let neonInserted = false;
-    const sql = getNeonSql();
     if (sql) {
       try {
         // El cliente reintenta hasta 3 veces si recibe un error. Por eso el stock de Neon
@@ -111,6 +127,27 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
               ${s.estado_cashea || 'sin_cashea'}
             )
           `];
+
+          // Mantiene el directorio operativo de clientes de esta empresa sincronizado
+          // con las facturas emitidas, sin mezclar datos entre empresas.
+          const customerTaxId = String(s.cliente_rif || '').trim().toUpperCase();
+          if (customerTaxId) {
+            const customerName = [s.cliente_nombre, s.cliente_apellido].filter(Boolean).join(' ').trim() || 'Cliente';
+            const customerContactId = `${String(s.id).slice(0, 48)}-cliente`;
+            statements.push(sql`
+              INSERT INTO business_contacts
+                (id, tipo, documento, nombre, apellido, telefono, correo, created_at, updated_at)
+              VALUES
+                (${customerContactId}, 'cliente', ${customerTaxId}, ${customerName},
+                 ${s.cliente_apellido || null}, ${s.cliente_telefono || null}, ${s.cliente_correo || null}, NOW(), NOW())
+              ON CONFLICT (tipo, documento) DO UPDATE SET
+                nombre = EXCLUDED.nombre,
+                apellido = COALESCE(EXCLUDED.apellido, business_contacts.apellido),
+                telefono = COALESCE(EXCLUDED.telefono, business_contacts.telefono),
+                correo = COALESCE(EXCLUDED.correo, business_contacts.correo),
+                updated_at = NOW()
+            `);
+          }
 
           if (Array.isArray(s.items)) {
             for (const item of s.items) {

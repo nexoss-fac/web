@@ -52,6 +52,7 @@ export interface CartItem {
 
 export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industryTemplate?: string }> = ({ onNavigateToLayaways, industryTemplate = 'other' }) => {
   const {
+    activeCompanyId,
     products,
     sales,
     exchangeRate,
@@ -149,7 +150,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       })
       .catch(() => { if (!cancelled) setInvoiceNumber(getNextInvoiceNumber()); });
     return () => { cancelled = true; };
-  }, [getNextInvoiceNumber]);
+  }, [activeCompanyId]);
 
   // Billing View Mode when cart has items: 'expanded' (wide principal workbench) | 'split' | 'fullscreen'
   const [billingViewMode, setBillingViewMode] = useState<'expanded' | 'split' | 'fullscreen'>('expanded');
@@ -457,7 +458,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       const response = await fetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'cliente', documento: document, nombre, apellido: customerLastName.trim(), telefono: customerPhone.trim() }),
+        body: JSON.stringify({ tipo: 'cliente', documento: document, nombre: name, apellido: customerLastName.trim(), telefono: customerPhone.trim() }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || result?.success !== true) {
@@ -581,7 +582,20 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     setInvoiceDate(getTodayVenezuela());
     setIsMixedPaymentOpen(false);
     setLastSale(newSale);
-    setInvoiceNumber(`MK-${String(Number((finalInvoiceNumber.match(/(\d+)$/) || [0, 0])[1]) + 1).padStart(6, '0')}`);
+    const localNextNumber = `MK-${String(Number((finalInvoiceNumber.match(/(\d+)$/) || [0, 0])[1]) + 1).padStart(6, '0')}`;
+    setInvoiceNumber(localNextNumber);
+    setReservedInvoiceNumber('');
+    // Reserva exactamente una vez el siguiente número después de emitir la factura.
+    void fetch('/api/invoices/next', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('No se pudo reservar el siguiente correlativo.');
+        const payload = await response.json();
+        if (typeof payload?.numero_factura === 'string' && payload.numero_factura) {
+          setInvoiceNumber(payload.numero_factura);
+          setReservedInvoiceNumber(payload.numero_factura);
+        }
+      })
+      .catch((error) => console.warn('No se pudo reservar el próximo número de factura:', error));
   };
 
   return (

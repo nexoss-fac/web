@@ -15,6 +15,7 @@ import { PushNotificationSettings } from './components/common/PushNotificationSe
 import { HealthWorkspace } from './components/health/HealthWorkspace';
 
 // Lazy load view components for maximum initial load performance and lightweight bundle
+const AccountingFirmDashboard = lazy(() => import('./components/accounting/AccountingFirmDashboard').then((m) => ({ default: m.AccountingFirmDashboard })));
 const PointOfSale = lazy(() => import('./components/pos/PointOfSale').then((m) => ({ default: m.PointOfSale })));
 const InventoryManager = lazy(() => import('./components/inventory/InventoryManager').then((m) => ({ default: m.InventoryManager })));
 const ProductionManager = lazy(() => import('./components/production/ProductionManager').then((m) => ({ default: m.ProductionManager })));
@@ -133,6 +134,7 @@ function AppContent() {
             {activeTab === 'conciliacion' && <BankReconciliationView />}
             {activeTab === 'contabilidad' && <AccountingManager />}
             {activeTab === 'admin' && isCompanyAdmin && <CompanyAdminPanel companyId={activeCompanyId} />}
+            {activeTab === 'firmaContable' && isCompanyAdmin && <AccountingFirmDashboard companyId={activeCompanyId} companyName={selectedCompanyName} onOpenBilling={() => setActiveTab('pos')} onOpenAccounting={() => setActiveTab('contabilidad')} />}
             {activeTab === 'fiscal' && <FiscalFolder key={activeCompanyId} companyId={activeCompanyId} companyName={selectedCompanyName} />}
             {activeTab === 'health' && companyIndustry === 'health' && isCompanyAdmin && <HealthWorkspace key={activeCompanyId} />}
           </Suspense>

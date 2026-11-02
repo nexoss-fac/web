@@ -69,6 +69,19 @@ test('el doble envío de la misma venta no descuenta el stock dos veces', async 
   assert.equal(getStore().sales.length, 1);
 });
 
+test('POST /api/sales rechaza un número de factura duplicado en la misma empresa', async () => {
+  const duplicateSql: any = async (strings: TemplateStringsArray) => {
+    if (/SELECT id FROM sales_transactions/.test(strings.join(' '))) return [{ id: 'otra-venta' }];
+    return [];
+  };
+  duplicateSql.transaction = async () => [];
+  const { routes, getStore } = setup({ getNeonSql: () => duplicateSql });
+  const response = await call(routes.get('POST /api/sales')!, { body: sale({ id: 'venta-duplicada', numero_factura: 'MK-000001' }) });
+  assert.equal(response.status, 409);
+  assert.equal(response.body.saved, false);
+  assert.equal(getStore().sales.length, 0);
+});
+
 test('si Neon falla responde 502 con saved:false en lugar de saved:true', async () => {
   const failingSql: any = async () => { throw new Error('Neon caído'); };
   failingSql.transaction = async () => { throw new Error('Neon caído'); };

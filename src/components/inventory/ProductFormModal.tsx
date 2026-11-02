@@ -546,7 +546,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     handleCleanBackground(targetImage);
 
     try {
-      const res = await analyzeShoeWithAi(targetImage);
+      const res = await analyzeShoeWithAi(targetImage, undefined, industryKey);
       setAiAnalysisSuccess(res);
 
       if (res.nombre) setNombre(res.nombre);
@@ -554,10 +554,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       if (res.color) setColor(res.color);
       if (res.tipo) setTipo(res.tipo as ShoeType);
       if (res.genero) setGenero(res.genero);
-      if (res.precio_sugerido_usd) {
-        setPrecio(res.precio_sugerido_usd.toString());
-        setCosto(Math.round(res.precio_sugerido_usd * 0.55).toString());
-      }
+      // No inventar precios ni costos: se completan manualmente con factura o lista de proveedor.
       if (res.descripcion_comercial) {
         const textoIA =
           res.descripcion_comercial + (res.detalles_estilo ? '\n\n💡 ' + res.detalles_estilo : '');
@@ -718,7 +715,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       // Analiza cada foto por separado y completa la ficha de ese producto.
       for (const item of results) {
         try {
-          const ai = await analyzeShoeWithAi(item.imagen, 'Analiza exclusivamente el producto visible en esta foto. Devuelve nombre comercial, marca, color, tipo, género y una descripción comercial objetiva basada solo en lo visible. No inventes SKU, talla, stock ni precio.');
+          const ai = await analyzeShoeWithAi(item.imagen, 'Analiza exclusivamente el artículo visible. Devuelve nombre, marca, color, tipo, material y descripción objetiva. No inventes SKU, talla, stock ni precio.', industryKey);
           const aiDescription = [ai.descripcion_comercial, ai.detalles_estilo ? `Detalles: ${ai.detalles_estilo}` : '', ai.material ? `Material aparente: ${ai.material}` : ''].filter(Boolean).join('\n\n');
           setColorImages((current) => current.map((x) => x.id !== item.id ? x : ({
             ...x,
@@ -1841,7 +1838,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         Marca: <strong>{aiAnalysisSuccess.marca}</strong> • Modelo: <strong>{aiAnalysisSuccess.modelo}</strong> • Tipo: <strong>{aiAnalysisSuccess.tipo}</strong>
                       </div>
                       <div className="text-[10px] text-emerald-600 mt-0.5">
-                        Campos de nombre, marca, color, precio sugerido (${aiAnalysisSuccess.precio_sugerido_usd}) y descripción completados.
+                        Campos de nombre, marca, color, material y descripción completados. Los precios deben confirmarse manualmente.
                       </div>
                     </div>
                   </div>

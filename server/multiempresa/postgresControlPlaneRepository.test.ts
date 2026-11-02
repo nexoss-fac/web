@@ -97,6 +97,7 @@ test('no permite invitar a un correo que ya pertenece activamente a la empresa',
   });
   const repository = new PostgresControlPlaneRepository(pool);
 
-  assert.equal(await repository.createInvitation('company-a', 'member@example.invalid', 'cashier', { uid: 'owner-uid' }), null);
+  const outcome = await repository.createInvitation('company-a', 'member@example.invalid', 'cashier', { uid: 'owner-uid' });
+  assert.deepEqual(outcome, { error: 'Ese correo ya pertenece a un miembro activo de esta empresa.' });
   assert.equal(pool.queries.some((query) => query.text.includes('INSERT INTO company_invitations')), false);
 });
