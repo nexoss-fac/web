@@ -2043,13 +2043,13 @@ async function startServer() {
           INSERT INTO shoe_products (
             id, nombre, marca, modelo, color, genero, categoria, clasificacion_inventario,
             talla, sku, precio, costo, stock, stock_minimo, stock_maximo,
-            imagen_url, ubicacion, descripcion, es_original
+            imagen_url, ubicacion, descripcion, es_original, codigo_barras
           ) VALUES (
             ${p.id}, ${p.nombre}, ${p.marca}, ${p.modelo || ''}, ${p.color || ''},
             ${p.genero || 'Unisex'}, ${p.categoria || 'Casual'}, ${p.clasificacion_inventario || 'Mercancía'}, ${p.talla}, ${p.sku},
             ${p.precio}, ${p.costo}, ${p.stock}, ${p.stock_minimo || 3}, ${p.stock_maximo || 30},
             ${p.imagen_url || p.imagen || null}, ${p.ubicacion || 'Almacén'}, ${p.descripcion || ''},
-            ${p.es_original !== false}
+            ${p.es_original !== false}, ${p.codigo_barras || null}
           )
           ON CONFLICT (id) DO UPDATE SET
             nombre = EXCLUDED.nombre,
@@ -2069,7 +2069,8 @@ async function startServer() {
             imagen_url = EXCLUDED.imagen_url,
             ubicacion = EXCLUDED.ubicacion,
             descripcion = EXCLUDED.descripcion,
-            es_original = EXCLUDED.es_original;
+            es_original = EXCLUDED.es_original,
+            codigo_barras = EXCLUDED.codigo_barras;
         `;
       } catch (err: unknown) {
         // Antes este error solo se registraba en el log del servidor y se le
