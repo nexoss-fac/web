@@ -122,9 +122,9 @@ test('la firma solo resuelve libros del cliente con grant activo, usuario vigent
           const tenant = tenantStorageContext.getStore();
           assert.equal(tenant?.companyId, clientBId);
           assert.equal(tenant?.role, 'accountant');
-          if (delegatedEntry?.id === entry.id) return { id: entry.id, totalDebe: 100, totalHaber: 100, alreadySaved: true };
+          if (delegatedEntry?.id === entry.id) return { id: entry.id, numeroAsiento: 'A-002', totalDebe: 100, totalHaber: 100, alreadySaved: true };
           delegatedEntry = entry;
-          return { id: entry.id, totalDebe: 100, totalHaber: 100 };
+          return { id: entry.id, numeroAsiento: 'A-002', totalDebe: 100, totalHaber: 100, alreadySaved: false };
         },
       });
       const server = createServer(app);
