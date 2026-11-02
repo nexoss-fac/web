@@ -431,7 +431,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
               {labelFormat === 'thermal_40x20' || labelFormat === 'thermal_40x25' ? (
                 <div
                   id="printable-shoe-label"
-                  className={`w-[340px] ${labelFormat === 'thermal_40x20' ? 'h-[170px]' : 'h-[212px]'} bg-white text-slate-900 px-2 py-1 shadow-xl rounded-xl relative select-none flex flex-col justify-between border-0 overflow-hidden"
+                  className={`w-[340px] ${labelFormat === 'thermal_40x20' ? 'h-[170px]' : 'h-[212px]'} bg-white text-slate-900 px-2 py-1 shadow-xl rounded-xl relative select-none flex flex-col justify-between border-0 overflow-hidden`}
                   style={{ boxSizing: 'border-box' }}
                 >
                   {showPrice && (
