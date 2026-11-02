@@ -103,6 +103,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   // Basic Info
   const [nombre, setNombre] = useState(editingProduct?.nombre || '');
   const [sku, setSku] = useState(editingProduct?.sku || '');
+  const [codigoBarras, setCodigoBarras] = useState(editingProduct?.codigo_barras || '');
   const [marca, setMarca] = useState(editingProduct?.marca || (isFootwear ? 'Nike' : ''));
   const [tipo, setTipo] = useState<ShoeType>(editingProduct?.tipo || (isFootwear ? 'Botines Fútbol Campo' : 'Otros'));
   const [color, setColor] = useState(editingProduct?.color || '');
@@ -183,6 +184,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     setClasificacionInventario(editingProduct.clasificacion_inventario || 'Mercancía');
     setNombre(editingProduct.nombre || '');
     setSku(editingProduct.sku || '');
+    setCodigoBarras(editingProduct.codigo_barras || '');
     setMarca(editingProduct.marca || (isFootwear ? 'Nike' : ''));
     setTipo(editingProduct.tipo || (isFootwear ? 'Botines Fútbol Campo' : 'Otros'));
     setColor(editingProduct.color || '');
@@ -827,6 +829,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       descripcion: descripcion.trim() || undefined,
       genero: genero.trim() || undefined,
       es_original: esOriginal,
+      codigo_barras: codigoBarras.replace(/\s+/g, '').trim() || undefined,
       imagen:
         finalImagen ||
         (categoria === 'Gorras'
@@ -1110,6 +1113,23 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 {entryMode === 'multi' && isFootwear ? 'Se anexará -TALLA a cada variante (ej. NK-AF1-38)' : 'Código único del artículo'}
               </span>
             </div>
+
+            {(editingProduct || entryMode === 'single') ? (
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Código de barras EAN / UPC</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={codigoBarras}
+                  onChange={(e) => setCodigoBarras(e.target.value.replace(/[^0-9]/g, '').slice(0, 14))}
+                  placeholder="Escanea o escribe el código (EAN-8, UPC-A, EAN-13)"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">Conecta el lector, haz clic aquí y escanea la etiqueta. Se guardará como texto para conservar ceros iniciales.</span>
+              </div>
+            ) : (
+              <p className="text-[10px] text-slate-500">Para asignar un código distinto por talla, guarda primero el modelo y luego edita cada variante.</p>
+            )}
 
             <div>
               <label className="block text-slate-700 font-bold mb-1">
