@@ -517,7 +517,7 @@ export function registerAccountingFirmRoutes(app: Express, dependencies: Account
       const cantidad = Number(b.cantidad_transacciones ?? 0);
       const unidades = Number(b.pares_vendidos ?? 0);
       const breakdown = Array.isArray(b.desglose_cuentas) ? b.desglose_cuentas : [];
-      if (!/^[A-Za-z0-9._:-]{1,64}$/.test(id) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(fecha)
+      if (!/^[A-Za-z0-9._:-]{1,64}$/.test(id) || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)
         || !Number.isFinite(totalUsd) || totalUsd < 0 || !Number.isFinite(totalBs) || totalBs < 0
         || !Number.isInteger(cantidad) || cantidad < 0 || !Number.isFinite(unidades) || unidades < 0
         || breakdown.some((item: any) => !item || typeof item.cuenta !== 'string'
