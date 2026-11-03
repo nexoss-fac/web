@@ -12,11 +12,13 @@ type BleCharacteristic = {
 type BleDevice = {
   name?: string;
   gatt?: {
-    connect: () => Promise<{ getPrimaryService: (uuid: string) => Promise<{ getCharacteristic: (uuid: string) => Promise<BleCharacteristic> }> }>;
+    connected?: boolean;
+    connect: () => Promise<{ connected?: boolean; getPrimaryService: (uuid: string) => Promise<{ getCharacteristic: (uuid: string) => Promise<BleCharacteristic> }> }>;
   };
 };
 type BluetoothApi = {
   requestDevice: (options: unknown) => Promise<BleDevice>;
+  getDevices?: () => Promise<BleDevice[]>;
 };
 
 const SERVICE = '0000ae30-0000-1000-8000-00805f9b34fb';
@@ -25,6 +27,31 @@ const NOTIFY = '0000ae02-0000-1000-8000-00805f9b34fb';
 const DATA = '0000ae03-0000-1000-8000-00805f9b34fb';
 const PRINT_WIDTH = 384;
 const CHUNK_SIZE = 180;
+let rememberedDevice: BleDevice | null = null;
+
+async function getMxw01Device(bluetooth: BluetoothApi): Promise<BleDevice> {
+  // Reutiliza primero el dispositivo autorizado durante esta sesión.
+  if (rememberedDevice?.gatt) return rememberedDevice;
+
+  // Chromium permite recuperar dispositivos previamente autorizados sin abrir
+  // el selector Bluetooth en cada impresión.
+  if (bluetooth.getDevices) {
+    const devices = await bluetooth.getDevices();
+    const remembered = devices.find((device) => device.name?.startsWith('MXW01'));
+    if (remembered) {
+      rememberedDevice = remembered;
+      return remembered;
+    }
+  }
+
+  // Solo la primera vez (o si se revocó el permiso) se solicita selección manual.
+  const selected = await bluetooth.requestDevice({
+    filters: [{ namePrefix: 'MXW01' }],
+    optionalServices: [SERVICE],
+  });
+  rememberedDevice = selected;
+  return selected;
+}
 
 function crc8(bytes: Uint8Array): number {
   let crc = 0;
@@ -94,10 +121,7 @@ export async function printCanvasToMxw01(canvas: HTMLCanvasElement, copies = 1):
   if (!bluetooth) throw new Error('Este navegador no ofrece Web Bluetooth. Usa Edge o Chrome actualizado.');
   if (!canvas || canvas.width < 1 || canvas.height < 1) throw new Error('La etiqueta está vacía.');
 
-  const device = await bluetooth.requestDevice({
-    filters: [{ namePrefix: 'MXW01' }],
-    optionalServices: [SERVICE],
-  });
+  const device = await getMxw01Device(bluetooth);
   if (!device.gatt) throw new Error('No se pudo abrir la conexión Bluetooth de la MXW01.');
 
   const server = await device.gatt.connect();
