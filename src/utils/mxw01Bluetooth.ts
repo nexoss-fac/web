@@ -71,7 +71,7 @@ function toPrinterRaster(source: HTMLCanvasElement): { bytes: Uint8Array; lines:
   ctx.drawImage(source, Math.floor((PRINT_WIDTH - imageWidth) / 2), 0, imageWidth, imageHeight);
 
   const pixels = ctx.getImageData(0, 0, PRINT_WIDTH, imageHeight).data;
-  const bytes = new Uint8Array(Math.ceil(imageHeight / 8) * (PRINT_WIDTH / 8));
+  const bytes = new Uint8Array(imageHeight * (PRINT_WIDTH / 8));
   const rowBytes = PRINT_WIDTH / 8;
   for (let y = 0; y < imageHeight; y += 1) {
     for (let x = 0; x < PRINT_WIDTH; x += 1) {
@@ -88,7 +88,7 @@ function toPrinterRaster(source: HTMLCanvasElement): { bytes: Uint8Array; lines:
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-export async function printCanvasToMxw01(canvas: HTMLCanvasElement): Promise<void> {
+export async function printCanvasToMxw01(canvas: HTMLCanvasElement, copies = 1): Promise<void> {
   if (!window.isSecureContext) throw new Error('La impresión Bluetooth requiere abrir NEXOSS mediante HTTPS.');
   const bluetooth = (navigator as unknown as { bluetooth?: BluetoothApi }).bluetooth;
   if (!bluetooth) throw new Error('Este navegador no ofrece Web Bluetooth. Usa Edge o Chrome actualizado.');
@@ -108,25 +108,28 @@ export async function printCanvasToMxw01(canvas: HTMLCanvasElement): Promise<voi
   if (notify.startNotifications) await notify.startNotifications();
 
   const raster = toPrinterRaster(canvas);
+  const safeCopies = Math.max(1, Math.min(100, Math.floor(copies)));
   if (raster.lines > 0xffff) throw new Error('La etiqueta supera la longitud admitida por la impresora.');
 
-  // Estado e intensidad de impresión. La respuesta de estado es informativa;
-  // los códigos de error de firmware no están estandarizados oficialmente.
-  await writeBle(control, controlFrame(0xa2, new Uint8Array([0x5d])));
-  await writeBle(control, controlFrame(0xa1, new Uint8Array([0x00])));
-  await wait(250);
+  try {
+    // Estado e intensidad de impresión. El firmware no documenta oficialmente los ACK.
+    await writeBle(control, controlFrame(0xa2, new Uint8Array([0x5d])));
+    await writeBle(control, controlFrame(0xa1, new Uint8Array([0x00])));
+    await wait(250);
 
-  const startPayload = new Uint8Array([raster.lines & 0xff, (raster.lines >> 8) & 0xff, 0x30, 0x00]);
-  await writeBle(control, controlFrame(0xa9, startPayload));
-  await wait(250);
-
-  for (let offset = 0; offset < raster.bytes.length; offset += CHUNK_SIZE) {
-    const chunk = raster.bytes.slice(offset, Math.min(offset + CHUNK_SIZE, raster.bytes.length));
-    await writeBle(data, chunk);
-    // Aproxima el ritmo nativo de consumo de papel para evitar saturar el buffer.
-    await wait(Math.max(12, Math.ceil((chunk.length / 48) * 12)));
+    const startPayload = new Uint8Array([raster.lines & 0xff, (raster.lines >> 8) & 0xff, 0x30, 0x00]);
+    for (let copy = 0; copy < safeCopies; copy += 1) {
+      await writeBle(control, controlFrame(0xa9, startPayload));
+      await wait(250);
+      for (let offset = 0; offset < raster.bytes.length; offset += CHUNK_SIZE) {
+        const chunk = raster.bytes.slice(offset, Math.min(offset + CHUNK_SIZE, raster.bytes.length));
+        await writeBle(data, chunk);
+        await wait(Math.max(12, Math.ceil((chunk.length / 48) * 12)));
+      }
+      await writeBle(control, controlFrame(0xad, new Uint8Array([0x00])));
+      await wait(700);
+    }
+  } finally {
+    if (server.connected) server.disconnect();
   }
-
-  await writeBle(control, controlFrame(0xad, new Uint8Array([0x00])));
-  await wait(500);
 }
