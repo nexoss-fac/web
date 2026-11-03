@@ -143,185 +143,182 @@ export function renderLabelToCanvas(
   ctx.fillRect(0, 0, width, height);
 
   const priceBs = product.precio * options.exchangeRate;
+  // Prioriza el EAN/UPC escaneado y guardado; usa SKU solo como respaldo temporal.
+  const barcodeValue = (product.codigo_barras || product.sku || '').trim();
   const showSizes = options.showAvailableSizes !== false && options.availableSizes && options.availableSizes.length > 0;
   const availableSizesList = options.availableSizes || (product.talla ? [product.talla] : []);
 
-  if (options.format === 'thermal_40x20' || options.format === 'thermal_40x25') {
-    // Ambos formatos comparten el diseño; 40x20 comprime verticalmente el arte 20%.
-    if (options.format === 'thermal_40x20') ctx.scale(1, 0.8);
-    const margin = 12;
+  const isCompactFormat =
+    options.format === 'thermal_40x20' ||
+    options.format === 'thermal_40x25' ||
+    options.format === 'custom' &&
+      (options.customWidthMm || 40) <= 50 &&
+      (options.customHeightMm || 25) <= 30;
+
+  if (isCompactFormat) {
+    // Diseño adaptable para etiquetas pequeñas. La composición se dibuja en
+    // una retícula lógica 480×300 (40×25 mm a 12 px/mm) y se escala sin deformar.
+    const scale = Math.min(width / 480, height / 300);
+    ctx.save();
+    ctx.scale(scale, scale);
+    const logicalWidth = width / scale;
+    const logicalHeight = height / scale;
+    const margin = 16;
+    const centerX = logicalWidth / 2;
+
+    ctx.fillStyle = '#0f172a';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.font = '900 22px sans-serif';
+    ctx.fillText('NEXOSS', margin, 20);
+
+    if (product.talla) {
+      const badgeWidth = 82;
+      const badgeX = logicalWidth - margin - badgeWidth;
+      ctx.fillStyle = '#090d16';
+      ctx.beginPath();
+      drawRoundedRect(ctx, badgeX, 7, badgeWidth, 28, 5);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText('TALLA', badgeX + badgeWidth / 2, 14);
+      ctx.font = '900 17px monospace';
+      ctx.fillText(fitText(ctx, product.talla, badgeWidth - 8), badgeX + badgeWidth / 2, 26);
+    }
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 17px sans-serif';
+    ctx.fillText(fitText(ctx, product.nombre.toUpperCase(), logicalWidth - margin * 2), margin, 49);
+
+    ctx.fillStyle = '#475569';
+    ctx.font = '11px sans-serif';
+    const details = [product.marca, product.tipo, product.color]
+      .filter(Boolean)
+      .join(' • ');
+    if (details) {
+      ctx.fillText(fitText(ctx, details, logicalWidth - margin * 2), margin, 67);
+    }
+
+    if (options.showBarcode && barcodeValue) {
+      const barcodeY = 88;
+      const barcodeHeight = Math.min(54, Math.max(34, logicalHeight * 0.18));
+      drawBarcode(ctx, barcodeValue, centerX, barcodeY, logicalWidth - margin * 2, barcodeHeight);
+      ctx.fillStyle = '#0f172a';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 12px monospace';
+      ctx.fillText(fitText(ctx, barcodeValue, logicalWidth - margin * 2), centerX, barcodeY + barcodeHeight + 13);
+    } else {
+      ctx.fillStyle = '#334155';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 13px monospace';
+      ctx.fillText(fitText(ctx, product.sku, logicalWidth - margin * 2), centerX, 116);
+    }
+
+    const bottomY = logicalHeight - 45;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(margin, bottomY - 12);
+    ctx.lineTo(logicalWidth - margin, bottomY - 12);
+    ctx.stroke();
+
+    if (options.showCost) {
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10px sans-serif';
+      ctx.fillText('COSTO', margin, bottomY);
+      ctx.fillStyle = '#334155';
+      ctx.font = 'bold 13px monospace';
+      ctx.fillText('$' + product.costo.toFixed(2), margin, bottomY + 17);
+    }
 
     if (options.showPrice) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#64748b';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText('PRECIO', logicalWidth - margin, bottomY);
       ctx.fillStyle = '#090d16';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '900 62px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
-      const priceText = `$${product.precio.toFixed(2)}`;
-      ctx.fillText(fitText(ctx, priceText, width - margin * 2), width / 2, 43);
-
+      ctx.font = '900 27px monospace';
+      ctx.fillText('$' + product.precio.toFixed(2), logicalWidth - margin, bottomY + 19);
       if (options.showBsPrice) {
         ctx.fillStyle = '#334155';
-        ctx.font = 'bold 16px monospace';
+        ctx.font = 'bold 10px monospace';
         ctx.fillText(
-          `${priceBs.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Bs`,
-          width / 2,
-          67
+          priceBs.toLocaleString('es-VE', { maximumFractionDigits: 0 }) + ' Bs',
+          logicalWidth - margin,
+          bottomY + 34
         );
       }
     }
-
-    if (options.showStoreAddress) {
-      ctx.fillStyle = '#64748b';
-      ctx.font = '11px sans-serif';
-      ctx.fillText('Ubicación no configurada • Sede no configurada', width / 2, 91);
-    }
-    if (options.showCost) {
-      ctx.fillStyle = '#64748b';
-      ctx.font = 'bold 11px monospace';
-      ctx.fillText(`Costo: ${product.costo.toFixed(2)}`, width / 2, 106);
-    }
-
-    // Talla predominante en el centro; marca y modelo debajo.
-    ctx.fillStyle = '#090d16';
-    ctx.textAlign = 'center';
-    ctx.font = '900 70px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace';
-    ctx.fillText(fitText(ctx, product.talla || '--', width - margin * 2), width / 2, 153);
-
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText(fitText(ctx, product.nombre.toUpperCase(), width - margin * 2), width / 2, 199);
-
-    ctx.fillStyle = '#475569';
-    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    const details = [product.marca, product.tipo, product.color, product.sku]
-      .filter(Boolean)
-      .join(' • ');
-    ctx.fillText(fitText(ctx, details, width - margin * 2), width / 2, 221);
-
-    if (showSizes) {
-      ctx.fillStyle = '#475569';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText(
-        fitText(ctx, `Tallas: ${availableSizesList.slice(0, 8).join(' · ')}`, width - margin * 2),
-        width / 2,
-        239
-      );
-    }
-
-    // Solo barras: sin SKU impreso, sin dígitos ni leyenda.
-    if (options.showBarcode) {
-      drawBarcode(ctx, product.sku, width / 2, 258, width - margin * 2, 34);
-    }
+    ctx.restore();
   } else {
-    // -------------------------------------------------------------
-    // GENERAL / STANDARD LAYOUT (50x30mm, HangTag, Box)
-    // Also no outer black border; Predominant Talla and Price; Tallas disp.
-    // -------------------------------------------------------------
+    // Formatos grandes (hangtag y caja): composición amplia.
     ctx.fillStyle = '#0f172a';
-    ctx.font = '900 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.font = '900 24px sans-serif';
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
     ctx.fillText('NEXOSS', 18, 16);
 
     if (options.showStoreAddress) {
       ctx.fillStyle = '#64748b';
-      ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.fillText('Ubicación no configurada • Cdad. Sede no configurada, Sede no configurada', 18, 44);
+      ctx.font = '11px sans-serif';
+      ctx.fillText('Ubicación no configurada • Sede no configurada', 18, 44);
     }
 
-    // PREDOMINANT TALLA
     const tallaVal = product.talla || '--';
     const tallaBoxWidth = 150;
     const tallaBoxHeight = 56;
     const tallaBoxX = width - 18 - tallaBoxWidth;
     const tallaBoxY = 14;
-
     ctx.fillStyle = '#090d16';
     ctx.beginPath();
     drawRoundedRect(ctx, tallaBoxX, tallaBoxY, tallaBoxWidth, tallaBoxHeight, 8);
     ctx.fill();
-
     ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('TALLA', tallaBoxX + tallaBoxWidth / 2, tallaBoxY + 6);
-
     ctx.fillStyle = '#FFFFFF';
     ctx.font = '900 32px monospace';
     ctx.fillText(tallaVal, tallaBoxX + tallaBoxWidth / 2, tallaBoxY + 20);
 
-    // Shoe title & details
     ctx.fillStyle = '#0f172a';
-    ctx.font = '800 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.font = '800 20px sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(fitText(ctx, product.nombre.toUpperCase(), tallaBoxX - 25), 18, 70);
 
     ctx.fillStyle = '#334155';
-    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    const details = `${product.marca || ''} • ${product.tipo || ''} | ${product.color || ''}`.trim();
+    ctx.font = '600 13px sans-serif';
+    const details = [product.marca, product.tipo, product.color].filter(Boolean).join(' • ');
     ctx.fillText(fitText(ctx, details, width - 36), 18, 98);
 
-    // Available Sizes Row
     let curY = 126;
     if (showSizes) {
       ctx.fillStyle = '#475569';
-      ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = 'bold 11px sans-serif';
       ctx.fillText('TALLAS DISP. EN ESTE ESTILO:', 18, curY);
-
-      let chipX = 18;
-      const chipY = curY + 16;
-      const chipHeight = 24;
-
-      availableSizesList.slice(0, 10).forEach((sz) => {
-        ctx.font = 'bold 13px monospace';
-        const txtW = ctx.measureText(sz).width;
-        const chipW = Math.max(28, txtW + 12);
-        if (chipX + chipW > width - 18) return;
-
-        const isCurrent = sz.trim() === product.talla.trim();
-        if (isCurrent) {
-          ctx.fillStyle = '#090d16';
-          ctx.beginPath();
-          drawRoundedRect(ctx, chipX, chipY, chipW, chipHeight, 5);
-          ctx.fill();
-          ctx.fillStyle = '#FFFFFF';
-          ctx.textAlign = 'center';
-          ctx.fillText(sz, chipX + chipW / 2, chipY + 4);
-        } else {
-          ctx.fillStyle = '#f8fafc';
-          ctx.beginPath();
-          drawRoundedRect(ctx, chipX, chipY, chipW, chipHeight, 5);
-          ctx.fill();
-          ctx.strokeStyle = '#cbd5e1';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.fillStyle = '#334155';
-          ctx.textAlign = 'center';
-          ctx.fillText(sz, chipX + chipW / 2, chipY + 4);
-        }
-        chipX += chipW + 6;
-      });
-
-      curY = chipY + chipHeight + 14;
+      curY += 18;
+      ctx.font = 'bold 13px monospace';
+      ctx.fillText(fitText(ctx, availableSizesList.slice(0, 10).join(' · '), width - 36), 18, curY);
+      curY += 28;
     }
 
-    // Barcode Section
     if (options.showBarcode) {
-      drawBarcode(ctx, product.sku, width / 2, curY, width - 80, 48);
+      drawBarcode(ctx, barcodeValue, width / 2, curY, width - 80, 48);
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 15px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`SKU: ${product.sku}`, width / 2, curY + 54);
+      ctx.fillText(fitText(ctx, barcodeValue, width - 36), width / 2, curY + 54);
     } else {
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 22px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`SKU: ${product.sku}`, width / 2, curY + 20);
+      ctx.fillText(fitText(ctx, 'SKU: ' + product.sku, width - 36), width / 2, curY + 20);
     }
 
-    // Bottom Section: Cost & Giant Price
     const bottomY = height - 80;
-
     ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -331,38 +328,25 @@ export function renderLabelToCanvas(
 
     if (options.showCost) {
       ctx.fillStyle = '#64748b';
-      ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = 'bold 11px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText('COSTO COMPRA', 18, bottomY + 2);
-
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 20px monospace';
-      ctx.fillText(`$${product.costo.toFixed(2)}`, 18, bottomY + 20);
-
-      const costBs = product.costo * options.exchangeRate;
-      ctx.fillStyle = '#64748b';
-      ctx.font = '11px monospace';
-      ctx.fillText(`≈ ${costBs.toFixed(0)} Bs`, 18, bottomY + 46);
+      ctx.fillText('$' + product.costo.toFixed(2), 18, bottomY + 20);
     }
-
     if (options.showPrice) {
       ctx.textAlign = 'right';
       ctx.fillStyle = '#64748b';
-      ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = 'bold 12px sans-serif';
       ctx.fillText('PVP VENTA', width - 18, bottomY + 2);
-
       ctx.fillStyle = '#090d16';
       ctx.font = '900 40px monospace';
-      ctx.fillText(`$${product.precio.toFixed(2)}`, width - 18, bottomY + 18);
-
+      ctx.fillText('$' + product.precio.toFixed(2), width - 18, bottomY + 18);
       if (options.showBsPrice) {
         ctx.fillStyle = '#1e293b';
         ctx.font = 'bold 16px monospace';
-        ctx.fillText(
-          `${priceBs.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Bs`,
-          width - 18,
-          bottomY + 54
-        );
+        ctx.fillText(priceBs.toLocaleString('es-VE', { maximumFractionDigits: 0 }) + ' Bs', width - 18, bottomY + 54);
       }
     }
   }
