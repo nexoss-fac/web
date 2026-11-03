@@ -89,13 +89,56 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
     });
   }, [product, allProducts]);
 
+  const previewDataUrl = useMemo(() => {
+    if (!product) return '';
+    return renderLabelToCanvas(product, {
+      format: labelFormat, showCost, showPrice, showBsPrice, showBarcode,
+      showStoreAddress, exchangeRate, availableSizes, showAvailableSizes,
+      customWidthMm, customHeightMm,
+    }).toDataURL('image/png');
+  }, [product, labelFormat, showCost, showPrice, showBsPrice, showBarcode, showStoreAddress, exchangeRate, availableSizes, showAvailableSizes, customWidthMm, customHeightMm]);
+
   if (!isOpen || !product) return null;
 
   const priceBs = product.precio * exchangeRate;
   const costBs = product.costo * exchangeRate;
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    if (!product || isPrinting) return;
+    setIsPrinting(true);
+    try {
+      const canvas = renderLabelToCanvas(product, {
+        format: labelFormat, showCost, showPrice, showBsPrice, showBarcode,
+        showStoreAddress, exchangeRate, availableSizes, showAvailableSizes,
+        customWidthMm, customHeightMm,
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const dimensions: Record<LabelFormat, [number, number]> = {
+        thermal_40x20: [40, 20], thermal_40x25: [40, 25], thermal_50x15: [50, 15],
+        thermal_50x30: [50, 30], thermal_50x70: [50, 70],
+        custom: [customWidthMm, customHeightMm], hangtag: [40, 58], box: [55, 38],
+      };
+      const [widthMm, heightMm] = dimensions[labelFormat];
+      const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+      if (!printWindow) throw new Error('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para NEXOSS.');
+      const labels = Array.from({ length: Math.min(100, Math.max(1, copies)) }, () =>
+        `<img class="label" src="${dataUrl}" alt="Etiqueta ${product.sku}" />`
+      ).join('');
+      printWindow.document.open();
+      printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas NEXOSS</title><style>
+        @page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; width: ${widthMm}mm; background: #fff; }
+        .label { display: block; width: ${widthMm}mm; height: ${heightMm}mm; object-fit: fill; page-break-after: always; break-after: page; }
+        .label:last-child { page-break-after: auto; break-after: auto; }
+        @media screen { body { padding: 12px; } .label { margin: 0 auto 12px; outline: 1px solid #ddd; } }
+      </style></head><body>${labels}<script>window.onload = () => { window.focus(); window.print(); }; window.onafterprint = () => window.close();</script></body></html>`);
+      printWindow.document.close();
+    } catch (error) {
+      setPrintMessage(error instanceof Error ? error.message : 'No se pudo preparar la impresión.');
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const handleBluetoothPrint = async () => {
@@ -358,7 +401,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                     onChange={(e) => setShowBarcode(e.target.checked)}
                     className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
                   />
-                  <span className="text-slate-700">Código de barras interno (Code 39)</span>
+                  <span className="text-slate-700">Código de barras interno (Code 128)</span>
                 </label>
 
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -393,16 +436,6 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={handleBluetoothPrint}
-                  disabled={isPrinting || isDownloading}
-                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                  title="Conectar por Bluetooth e imprimir en MXW01"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>{isPrinting ? 'Enviando…' : 'Imprimir MXW01'}</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => handleDownload('png')}
                   disabled={isDownloading}
                   className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
@@ -426,181 +459,16 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
             {/* Label Visual Canvas Container (Clean sticker mockup on soft backdrop) */}
             <div className="bg-slate-100/90 p-5 sm:p-7 rounded-2xl flex flex-col items-center justify-center border border-slate-200 overflow-x-auto">
               
-              {/* 40x25mm Label Card Preview: NO BLACK BORDER AROUND, PREDOMINANT TALLA & PRECIO */}
-              {['thermal_40x20', 'thermal_40x25', 'thermal_50x15', 'thermal_50x30', 'thermal_50x70', 'custom'].includes(labelFormat) ? (
-                <div
-                  id="printable-shoe-label"
-                  className="bg-white text-slate-900 px-2 py-1 shadow-xl rounded-xl relative select-none flex flex-col justify-between border-0 overflow-hidden"
-                  style={{ boxSizing: 'border-box', width: `${(labelFormat === 'thermal_40x20' || labelFormat === 'thermal_40x25' ? 40 : labelFormat === 'thermal_50x15' || labelFormat === 'thermal_50x30' || labelFormat === 'thermal_50x70' ? 50 : customWidthMm) * 8.5}px`, height: `${(labelFormat === 'thermal_40x20' ? 20 : labelFormat === 'thermal_40x25' ? 25 : labelFormat === 'thermal_50x15' ? 15 : labelFormat === 'thermal_50x30' ? 30 : labelFormat === 'thermal_50x70' ? 70 : customHeightMm) * 8.5}px` }}
-                >
-                  {showPrice && (
-                    <div className="text-center leading-none">
-                      <div className="font-mono font-black text-[36px] tracking-tight text-slate-950">
-                        ${product.precio.toFixed(2)}
-                      </div>
-                      {showBsPrice && (
-                        <div className="text-[8px] font-mono font-bold text-slate-600">
-                          {priceBs.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Bs
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {showStoreAddress && (
-                    <div className="truncate text-center text-[7px] font-medium text-slate-500">
-                      Ubicación no configurada • Sede no configurada
-                    </div>
-                  )}
-                  {showCost && (
-                    <div className="text-center text-[7px] font-bold text-slate-600">
-                      Costo: ${product.costo.toFixed(2)}
-                    </div>
-                  )}
-                  <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center leading-none">
-                    <div className="font-mono font-black text-[49px] text-slate-950">
-                      {product.talla || '--'}
-                    </div>
-                    <div className="max-w-full truncate font-black text-[10px] uppercase text-slate-900">
-                      {product.nombre}
-                    </div>
-                    <div className="max-w-full truncate text-[7px] font-semibold text-slate-600">
-                      {[product.marca, product.tipo, product.color, product.sku].filter(Boolean).join(' • ')}
-                    </div>
-                    {showAvailableSizes && availableSizes.length > 0 && (
-                      <div className="max-w-full truncate text-[7px] font-bold text-slate-500">
-                        Tallas: {availableSizes.slice(0, 8).join(' · ')}
-                      </div>
-                    )}
-                  </div>
-                  {showBarcode && (
-                    <div className="w-full flex justify-center overflow-hidden">
-                      <BarcodeSvg value={product.sku} width={316} height={labelFormat === 'thermal_40x20' ? 26 : 34} />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* Other Label Formats Preview (Clean, No Harsh Black Outlines) */
-                <div
-                  id="printable-shoe-label"
-                  className={`bg-white text-slate-900 p-4 shadow-xl flex flex-col justify-between transition-all border-0 rounded-xl relative ${
-                    labelFormat === 'thermal_50x30'
-                      ? 'w-76 min-h-48'
-                      : labelFormat === 'hangtag'
-                      ? 'w-64 min-h-60 rounded-2xl relative'
-                      : 'w-84 min-h-52'
-                  }`}
-                >
-                  {/* Hangtag punch hole */}
-                  {labelFormat === 'hangtag' && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-slate-200 border-2 border-slate-400 flex items-center justify-center">
-                      <div className="w-2.5 h-2.5 rounded-full bg-white" />
-                    </div>
-                  )}
-
-                  {/* Brand & Predominant Size Header */}
-                  <div className="flex items-start justify-between border-b border-slate-100 pb-2 mb-1.5">
-                    <div>
-                      <span className="font-black text-sm tracking-wider text-slate-900 block">
-                        NEXOSS
-                      </span>
-                      {showStoreAddress && (
-                        <div className="text-[8px] text-slate-500 font-medium tracking-tight">
-                          Ubicación no configurada • Cdad. Sede no configurada, Sede no configurada
-                        </div>
-                      )}
-                    </div>
-                    <div className="bg-slate-950 text-white px-3.5 py-1.5 rounded-xl flex flex-col items-center justify-center shadow-xs">
-                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                        TALLA
-                      </span>
-                      <span className="text-xl font-black font-mono leading-tight">{product.talla}</span>
-                    </div>
-                  </div>
-
-                  {/* Product Description */}
-                  <div className="space-y-0.5 my-1">
-                    <div className="font-black text-xs leading-tight text-slate-900 uppercase">
-                      {product.nombre}
-                    </div>
-                    <div className="text-[10px] text-slate-600 flex items-center justify-between">
-                      <span className="font-semibold">{product.marca} • {product.tipo}</span>
-                      <span className="text-slate-500 font-mono">{product.color}</span>
-                    </div>
-                  </div>
-
-                  {/* Available Sizes for this Shoe Style */}
-                  {showAvailableSizes && availableSizes.length > 0 && (
-                    <div className="my-1.5 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                      <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                        <span>Tallas Disp. en este Estilo:</span>
-                        <span className="text-[7px] text-emerald-700 font-bold bg-emerald-50 px-1 rounded">
-                          {availableSizes.length} disp.
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1">
-                        {availableSizes.slice(0, 10).map((sz) => {
-                          const isCurrent = sz.trim() === product.talla.trim();
-                          return (
-                            <span
-                              key={sz}
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold leading-tight ${
-                                isCurrent
-                                  ? 'bg-slate-950 text-white'
-                                  : 'bg-white text-slate-700 border border-slate-200'
-                              }`}
-                            >
-                              {sz}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SKU and Barcode Section */}
-                  <div className="my-1 text-center py-1 bg-slate-50/80 rounded-lg">
-                    {showBarcode && (
-                      <div className="flex justify-center my-0.5">
-                        <BarcodeSvg value={product.sku} width={200} height={32} />
-                      </div>
-                    )}
-                    <div className="font-mono font-black text-xs tracking-widest text-slate-900">
-                      SKU: {product.sku}
-                    </div>
-                  </div>
-
-                  {/* Cost and PREDOMINANT PRECIO */}
-                  <div className="pt-2 border-t border-slate-100 mt-auto flex items-end justify-between">
-                    {showCost ? (
-                      <div className="bg-slate-50 px-2 py-1 rounded-lg text-left border border-slate-100">
-                        <div className="text-[8px] uppercase tracking-wider text-slate-500 font-bold">
-                          Costo Compra
-                        </div>
-                        <div className="font-mono font-bold text-xs text-slate-900">
-                          ${product.costo.toFixed(2)}
-                        </div>
-                      </div>
-                    ) : (
-                      <div />
-                    )}
-
-                    {showPrice && (
-                      <div className="text-right">
-                        <div className="text-[8px] uppercase tracking-wider text-slate-500 font-bold">
-                          PVP Venta
-                        </div>
-                        <div className="font-mono font-black text-2xl text-slate-950 leading-none">
-                          ${product.precio.toFixed(2)}
-                        </div>
-                        {showBsPrice && (
-                          <div className="text-[10px] font-mono text-slate-600 font-bold mt-0.5">
-                            {priceBs.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} Bs
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+              <div className="flex flex-col items-center gap-3">
+                <img
+                  id="label-preview-image"
+                  src={previewDataUrl}
+                  alt={`Vista previa de etiqueta ${product.sku}`}
+                  className="max-w-full h-auto bg-white shadow-xl rounded-lg"
+                  style={{ width: `${(labelFormat === 'thermal_40x20' || labelFormat === 'thermal_40x25' ? 40 : labelFormat === 'thermal_50x15' || labelFormat === 'thermal_50x30' || labelFormat === 'thermal_50x70' ? 50 : customWidthMm) * 8}px`, maxHeight: '420px', objectFit: 'contain' }}
+                />
+                <p className="text-[10px] text-slate-500">La misma imagen se utilizará para descargar, imprimir y enviar a MXW01.</p>
+              </div>
 
               {/* Dimension tag helper */}
               <div className="mt-3 text-[10px] text-slate-600 font-medium flex items-center gap-1.5 bg-white/90 px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
@@ -618,94 +486,6 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                 </span>
               </div>
 
-            </div>
-          </div>
-
-          {/* Hidden Print Container with repeat copies for thermal printer */}
-          <div className="hidden print:block print:w-full" id="print-label-batch">
-            <style>{'@media print { body * { visibility: hidden !important; } #print-label-batch, #print-label-batch * { visibility: visible !important; } #print-label-batch { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; padding: 0 !important; margin: 0 !important; } .shoe-tag-item { page-break-inside: avoid; break-inside: avoid; border: none !important; } }'}</style>
-            
-            <div className="flex flex-wrap gap-2 p-1">
-              {Array.from({ length: copies }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className={`shoe-tag-item p-2 bg-white text-black font-sans flex flex-col justify-between border-0 ${
-                    labelFormat === 'thermal_40x20' ? 'thermal-label-40x20 w-[40mm] h-[20mm]' : labelFormat === 'thermal_40x25' ? 'w-[40mm] h-[25mm]' : 'w-72 min-h-44'
-                  }`}
-                  style={{ boxSizing: 'border-box' }}
-                >
-                  {/* Top Bar with Predominant Size */}
-                  <div className="flex justify-between items-start pb-0.5 mb-0.5">
-                    <div>
-                      <strong className="text-[10px] font-black leading-tight block">NEXOSS</strong>
-                      <div className="text-[8px] font-black uppercase truncate max-w-[24mm] leading-tight">
-                        {product.nombre}
-                      </div>
-                    </div>
-                    <div className="bg-black text-white px-1.5 py-0.5 rounded text-center shrink-0">
-                      <div className="text-[6px] font-bold uppercase leading-none">TALLA</div>
-                      <div className="text-[12px] font-black font-mono leading-none">{product.talla}</div>
-                    </div>
-                  </div>
-
-                  {/* Available Sizes for this style (Print) */}
-                  {showAvailableSizes && availableSizes.length > 0 && (
-                    <div className="text-[6px] font-bold text-gray-800 leading-tight my-0.2">
-                      <span>Tallas: </span>
-                      {availableSizes.map((sz, sIdx) => (
-                        <span
-                          key={sIdx}
-                          className={sz.trim() === product.talla.trim() ? 'font-black underline mr-1' : 'mr-1'}
-                        >
-                          {sz}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Barcode & SKU */}
-                  <div className="text-center my-0.2">
-                    {showBarcode && (
-                      <div className="flex justify-center my-0.2">
-                        <BarcodeSvg
-                          value={product.sku}
-                          width={(labelFormat === 'thermal_40x20' || labelFormat === 'thermal_40x25') ? 140 : 190}
-                          height={labelFormat === 'thermal_40x20' ? 14 : labelFormat === 'thermal_40x25' ? 18 : 30}
-                        />
-                      </div>
-                    )}
-                    <div className="font-mono font-black text-[8px] tracking-wider leading-none">
-                      SKU: {product.sku}
-                    </div>
-                  </div>
-
-                  {/* Bottom Row with Predominant Price */}
-                  <div className="flex justify-between items-end pt-0.5 border-t border-gray-200">
-                    {showCost ? (
-                      <div className="text-left">
-                        <div className="text-[5px] uppercase font-bold text-gray-600">Costo</div>
-                        <div className="font-mono font-bold text-[8px]">${product.costo.toFixed(2)}</div>
-                      </div>
-                    ) : (
-                      <div />
-                    )}
-
-                    {showPrice && (
-                      <div className="text-right">
-                        <div className="text-[5px] uppercase font-bold text-gray-600">PVP Venta</div>
-                        <div className="font-mono font-black text-[13px] leading-tight text-black">
-                          ${product.precio.toFixed(2)}
-                        </div>
-                        {showBsPrice && (
-                          <div className="text-[7px] font-mono font-bold leading-tight">
-                            {priceBs.toFixed(0)} Bs
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 
@@ -730,6 +510,17 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
               <span>
                 {isDownloading ? 'Generando imagen...' : `Descargar Imagen (${labelFormat === 'thermal_40x20' ? '40×20mm' : labelFormat === 'thermal_40x25' ? '40×25mm' : 'etiqueta'})`}
               </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleBluetoothPrint}
+              disabled={isPrinting || isDownloading}
+              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-50"
+              title="Conectar por Bluetooth e imprimir directamente en la MXW01"
+            >
+              <Printer className="w-4 h-4" />
+              <span>{isPrinting ? 'Conectando / enviando…' : 'Imprimir MXW01'}</span>
             </button>
 
             {/* Print Button */}
