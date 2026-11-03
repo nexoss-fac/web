@@ -14,8 +14,10 @@ import { ShoeProduct } from '../../types';
 import { BarcodeSvg } from '../common/BarcodeSvg';
 import {
   LabelFormat,
-  downloadLabelImage
+  downloadLabelImage,
+  renderLabelToCanvas
 } from '../../utils/labelImageGenerator';
+import { printCanvasToMxw01 } from '../../utils/mxw01Bluetooth';
 
 interface ShoeLabelModalProps {
   isOpen: boolean;
@@ -44,6 +46,8 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
   const [customHeightMm, setCustomHeightMm] = useState(20);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [isPrinting, setIsPrinting] = useState<boolean>(false);
+  const [printMessage, setPrintMessage] = useState<string | null>(null);
 
   // Calculate available sizes for this shoe style in inventory
   const availableSizes = useMemo(() => {
@@ -92,6 +96,33 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleBluetoothPrint = async () => {
+    if (!product || isPrinting) return;
+    setIsPrinting(true);
+    setPrintMessage('Selecciona la impresora MXW01 en la ventana Bluetooth del navegador…');
+    try {
+      const canvas = renderLabelToCanvas(product, {
+        format: labelFormat,
+        showCost,
+        showPrice,
+        showBsPrice,
+        showBarcode,
+        showStoreAddress,
+        exchangeRate,
+        availableSizes,
+        showAvailableSizes,
+        customWidthMm,
+        customHeightMm,
+      });
+      await printCanvasToMxw01(canvas, copies);
+      setPrintMessage('Trabajo enviado a la MXW01. Verifica la etiqueta impresa.');
+    } catch (error) {
+      setPrintMessage(error instanceof Error ? error.message : 'No se pudo enviar la etiqueta a la impresora.');
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const handleDownload = async (format: 'png' | 'jpeg' = 'png') => {
@@ -357,8 +388,19 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                 </span>
               </span>
 
+              {printMessage && <div role="status" className="w-full text-[10px] text-indigo-700 font-semibold">{printMessage}</div>}
               {/* Quick Image Download Badges */}
               <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleBluetoothPrint}
+                  disabled={isPrinting || isDownloading}
+                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[11px] flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                  title="Conectar por Bluetooth e imprimir en MXW01"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>{isPrinting ? 'Enviando…' : 'Imprimir MXW01'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => handleDownload('png')}
