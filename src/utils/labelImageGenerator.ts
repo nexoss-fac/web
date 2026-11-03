@@ -50,7 +50,7 @@ function drawRoundedRect(
  */
 function drawBarcode(ctx: CanvasRenderingContext2D, text: string, centerX: number, y: number, targetWidth: number, barHeight: number) {
   const value = text.trim();
-  if (!value || !/^[\\x20-\\x7E]+$/.test(value)) {
+  if (!value || !/^[\x20-\x7E]+$/.test(value)) {
     console.warn('SKU omitido: Code 128-B solo admite ASCII imprimible.', text);
     return;
   }
