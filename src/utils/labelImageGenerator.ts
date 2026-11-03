@@ -1,4 +1,5 @@
 import { ShoeProduct } from '../types';
+import JsBarcode from 'jsbarcode';
 
 export type LabelFormat = 'thermal_40x20' | 'thermal_40x25' | 'thermal_50x15' | 'thermal_50x30' | 'thermal_50x70' | 'custom' | 'hangtag' | 'box';
 
@@ -15,54 +16,6 @@ export interface LabelOptions {
   customWidthMm?: number;
   customHeightMm?: number;
 }
-
-// Code 39 barcode patterns
-const CODE39_PATTERNS: Record<string, string> = {
-  '0': '000110100',
-  '1': '100100001',
-  '2': '001100001',
-  '3': '101100000',
-  '4': '000110001',
-  '5': '100110000',
-  '6': '001110000',
-  '7': '000100101',
-  '8': '100100100',
-  '9': '001100100',
-  'A': '100001001',
-  'B': '001001001',
-  'C': '101001000',
-  'D': '000011001',
-  'E': '100011000',
-  'F': '001011000',
-  'G': '000001101',
-  'H': '100001100',
-  'I': '001001100',
-  'J': '000011100',
-  'K': '100000011',
-  'L': '001000011',
-  'M': '101000010',
-  'N': '000010011',
-  'O': '100010010',
-  'P': '001010010',
-  'Q': '000000111',
-  'R': '100000110',
-  'S': '001000110',
-  'T': '000010110',
-  'U': '110000001',
-  'V': '011000001',
-  'W': '111000000',
-  'X': '010010001',
-  'Y': '110010000',
-  'Z': '011010000',
-  '-': '010000101',
-  '.': '110000100',
-  ' ': '011000100',
-  '$': '010101000',
-  '/': '010100010',
-  '+': '010001010',
-  '%': '000101010',
-  '*': '010010100',
-};
 
 /**
  * Helper to draw rounded rectangle safely on any HTML5 canvas.
@@ -92,53 +45,39 @@ function drawRoundedRect(
 }
 
 /**
- * Draws a Code 39 barcode onto a 2D canvas context.
+ * Dibuja SKU en Code 128-B. JsBarcode genera start/stop y checksum.
+ * El dato se conserva exactamente; no se reemplazan caracteres por guiones.
  */
-function drawBarcode(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  centerX: number,
-  y: number,
-  targetWidth: number,
-  barHeight: number
-) {
-  const sanitized = `*${text.toUpperCase().replace(/[^0-9A-Z\-\. \$\/\+\%]/g, '-') || 'SKU'}*`;
-
-  // Measure total pattern units
-  let totalUnits = 0;
-  for (let i = 0; i < sanitized.length; i++) {
-    const char = sanitized[i];
-    const pattern = CODE39_PATTERNS[char] || CODE39_PATTERNS['-'];
-    for (let p = 0; p < 9; p++) {
-      totalUnits += pattern[p] === '1' ? 2.5 : 1.0;
-    }
-    if (i < sanitized.length - 1) {
-      totalUnits += 1.0; // inter-char gap
-    }
+function drawBarcode(ctx: CanvasRenderingContext2D, text: string, centerX: number, y: number, targetWidth: number, barHeight: number) {
+  const value = text.trim();
+  if (!value || !/^[\\x20-\\x7E]+$/.test(value)) {
+    console.warn('SKU omitido: Code 128-B solo admite ASCII imprimible.', text);
+    return;
   }
-
-  // Calculate unit width so it fits within targetWidth
-  const unitWidth = targetWidth / totalUnits;
-  const actualBarcodeWidth = totalUnits * unitWidth;
-  let startX = centerX - actualBarcodeWidth / 2;
-
-  ctx.fillStyle = '#000000';
-
-  for (let i = 0; i < sanitized.length; i++) {
-    const char = sanitized[i];
-    const pattern = CODE39_PATTERNS[char] || CODE39_PATTERNS['-'];
-    for (let p = 0; p < 9; p++) {
-      const isBar = p % 2 === 0;
-      const w = (pattern[p] === '1' ? 2.5 : 1.0) * unitWidth;
-      if (isBar) {
-        ctx.fillRect(Math.round(startX), Math.round(y), Math.max(1, Math.round(w)), Math.round(barHeight));
-      }
-      startX += w;
-    }
-    if (i < sanitized.length - 1) {
-      startX += 1.0 * unitWidth;
-    }
+  const barcodeCanvas = document.createElement('canvas');
+  try {
+    JsBarcode(barcodeCanvas, value, {
+      format: 'CODE128',
+      displayValue: false,
+      width: 2,
+      height: Math.max(24, Math.round(barHeight)),
+      margin: 10,
+      marginTop: 0,
+      marginBottom: 0,
+      marginLeft: 10,
+      marginRight: 10,
+      lineColor: '#000000',
+      background: '#ffffff',
+    });
+  } catch (error) {
+    console.error('SKU no válido para Code 128:', error);
+    return;
   }
+  const scale = Math.min(1, targetWidth / barcodeCanvas.width);
+  const drawWidth = barcodeCanvas.width * scale;
+  const drawHeight = Math.min(barHeight, barcodeCanvas.height * scale);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(barcodeCanvas, centerX - drawWidth / 2, y, drawWidth, drawHeight);
 }
 
 /**
