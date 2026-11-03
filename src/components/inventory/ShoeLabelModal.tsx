@@ -41,9 +41,9 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
   const [showBarcode, setShowBarcode] = useState<boolean>(true);
   const [showStoreAddress, setShowStoreAddress] = useState<boolean>(true);
   const [showAvailableSizes, setShowAvailableSizes] = useState<boolean>(true);
-  const [labelFormat, setLabelFormat] = useState<LabelFormat>('thermal_40x20');
+  const [labelFormat, setLabelFormat] = useState<LabelFormat>('thermal_40x25');
   const [customWidthMm, setCustomWidthMm] = useState(40);
-  const [customHeightMm, setCustomHeightMm] = useState(20);
+  const [customHeightMm, setCustomHeightMm] = useState(25);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
@@ -220,7 +220,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-base text-white">
-                  Etiqueta para Calzado (Térmica 40×20 / 40×25mm)
+                  Etiqueta de Inventario (Térmica 40×25mm)
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                   Sin Bordes Negros • Talla y Precio Predominantes
