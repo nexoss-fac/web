@@ -327,7 +327,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                     onChange={(e) => setShowBarcode(e.target.checked)}
                     className="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
                   />
-                  <span className="text-slate-700">Código de Barras Escaneable (Code 39)</span>
+                  <span className="text-slate-700">Código de barras interno (Code 39)</span>
                 </label>
 
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -350,7 +350,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
               <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                 <span>
-                  Vista Previa {labelFormat === 'thermal_40x20' ? '40×20mm (Medida Exacta)' : labelFormat === 'thermal_40x25' ? '40×25mm (Medida Exacta)' : 'de la Etiqueta'}
+                  Vista Previa {labelFormat === 'custom' ? `${customWidthMm}×${customHeightMm}mm` : labelFormat.replace('thermal_', '').replace('x', '×') + 'mm'}
                 </span>
                 <span className="text-[10px] text-slate-400 font-normal">
                   (Sin bordes negros alrededor)
@@ -385,11 +385,11 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
             <div className="bg-slate-100/90 p-5 sm:p-7 rounded-2xl flex flex-col items-center justify-center border border-slate-200 overflow-x-auto">
               
               {/* 40x25mm Label Card Preview: NO BLACK BORDER AROUND, PREDOMINANT TALLA & PRECIO */}
-              {labelFormat === 'thermal_40x20' || labelFormat === 'thermal_40x25' ? (
+              {['thermal_40x20', 'thermal_40x25', 'thermal_50x15', 'thermal_50x30', 'thermal_50x70', 'custom'].includes(labelFormat) ? (
                 <div
                   id="printable-shoe-label"
-                  className={`w-[340px] ${labelFormat === 'thermal_40x20' ? 'h-[170px]' : 'h-[212px]'} bg-white text-slate-900 px-2 py-1 shadow-xl rounded-xl relative select-none flex flex-col justify-between border-0 overflow-hidden`}
-                  style={{ boxSizing: 'border-box' }}
+                  className="bg-white text-slate-900 px-2 py-1 shadow-xl rounded-xl relative select-none flex flex-col justify-between border-0 overflow-hidden"
+                  style={{ boxSizing: 'border-box', width: `${(labelFormat === 'thermal_40x20' || labelFormat === 'thermal_40x25' ? 40 : labelFormat === 'thermal_50x15' || labelFormat === 'thermal_50x30' || labelFormat === 'thermal_50x70' ? 50 : customWidthMm) * 8.5}px`, height: `${(labelFormat === 'thermal_40x20' ? 20 : labelFormat === 'thermal_40x25' ? 25 : labelFormat === 'thermal_50x15' ? 15 : labelFormat === 'thermal_50x30' ? 30 : labelFormat === 'thermal_50x70' ? 70 : customHeightMm) * 8.5}px` }}
                 >
                   {showPrice && (
                     <div className="text-center leading-none">
