@@ -119,7 +119,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
         custom: [customWidthMm, customHeightMm], hangtag: [40, 58], box: [55, 38],
       };
       const [widthMm, heightMm] = dimensions[labelFormat];
-      const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+      const printWindow = window.open('', '_blank');
       if (!printWindow) throw new Error('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para NEXOSS.');
       const labels = Array.from({ length: Math.min(100, Math.max(1, copies)) }, () =>
         `<img class="label" src="${dataUrl}" alt="Etiqueta ${product.sku}" />`
