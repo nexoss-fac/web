@@ -1,6 +1,7 @@
 import { ShoeProduct } from '../types';
+import JsBarcode from 'jsbarcode';
 
-export type LabelFormat = 'thermal_40x20' | 'thermal_40x25' | 'thermal_50x30' | 'hangtag' | 'box';
+export type LabelFormat = 'thermal_40x20' | 'thermal_40x25' | 'thermal_50x15' | 'thermal_50x30' | 'thermal_50x70' | 'custom' | 'hangtag' | 'box';
 
 export interface LabelOptions {
   format: LabelFormat;
@@ -12,55 +13,9 @@ export interface LabelOptions {
   exchangeRate: number;
   availableSizes?: string[];
   showAvailableSizes?: boolean;
+  customWidthMm?: number;
+  customHeightMm?: number;
 }
-
-// Code 39 barcode patterns
-const CODE39_PATTERNS: Record<string, string> = {
-  '0': '000110100',
-  '1': '100100001',
-  '2': '001100001',
-  '3': '101100000',
-  '4': '000110001',
-  '5': '100110000',
-  '6': '001110000',
-  '7': '000100101',
-  '8': '100100100',
-  '9': '001100100',
-  'A': '100001001',
-  'B': '001001001',
-  'C': '101001000',
-  'D': '000011001',
-  'E': '100011000',
-  'F': '001011000',
-  'G': '000001101',
-  'H': '100001100',
-  'I': '001001100',
-  'J': '000011100',
-  'K': '100000011',
-  'L': '001000011',
-  'M': '101000010',
-  'N': '000010011',
-  'O': '100010010',
-  'P': '001010010',
-  'Q': '000000111',
-  'R': '100000110',
-  'S': '001000110',
-  'T': '000010110',
-  'U': '110000001',
-  'V': '011000001',
-  'W': '111000000',
-  'X': '010010001',
-  'Y': '110010000',
-  'Z': '011010000',
-  '-': '010000101',
-  '.': '110000100',
-  ' ': '011000100',
-  '$': '010101000',
-  '/': '010100010',
-  '+': '010001010',
-  '%': '000101010',
-  '*': '010010100',
-};
 
 /**
  * Helper to draw rounded rectangle safely on any HTML5 canvas.
@@ -90,53 +45,39 @@ function drawRoundedRect(
 }
 
 /**
- * Draws a Code 39 barcode onto a 2D canvas context.
+ * Dibuja SKU en Code 128-B. JsBarcode genera start/stop y checksum.
+ * El dato se conserva exactamente; no se reemplazan caracteres por guiones.
  */
-function drawBarcode(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  centerX: number,
-  y: number,
-  targetWidth: number,
-  barHeight: number
-) {
-  const sanitized = `*${text.toUpperCase().replace(/[^0-9A-Z\-\. \$\/\+\%]/g, '-') || 'SKU'}*`;
-
-  // Measure total pattern units
-  let totalUnits = 0;
-  for (let i = 0; i < sanitized.length; i++) {
-    const char = sanitized[i];
-    const pattern = CODE39_PATTERNS[char] || CODE39_PATTERNS['-'];
-    for (let p = 0; p < 9; p++) {
-      totalUnits += pattern[p] === '1' ? 2.5 : 1.0;
-    }
-    if (i < sanitized.length - 1) {
-      totalUnits += 1.0; // inter-char gap
-    }
+function drawBarcode(ctx: CanvasRenderingContext2D, text: string, centerX: number, y: number, targetWidth: number, barHeight: number) {
+  const value = text.trim();
+  if (!value || !/^[\x20-\x7E]+$/.test(value)) {
+    console.warn('SKU omitido: Code 128-B solo admite ASCII imprimible.', text);
+    return;
   }
-
-  // Calculate unit width so it fits within targetWidth
-  const unitWidth = targetWidth / totalUnits;
-  const actualBarcodeWidth = totalUnits * unitWidth;
-  let startX = centerX - actualBarcodeWidth / 2;
-
-  ctx.fillStyle = '#000000';
-
-  for (let i = 0; i < sanitized.length; i++) {
-    const char = sanitized[i];
-    const pattern = CODE39_PATTERNS[char] || CODE39_PATTERNS['-'];
-    for (let p = 0; p < 9; p++) {
-      const isBar = p % 2 === 0;
-      const w = (pattern[p] === '1' ? 2.5 : 1.0) * unitWidth;
-      if (isBar) {
-        ctx.fillRect(Math.round(startX), Math.round(y), Math.max(1, Math.round(w)), Math.round(barHeight));
-      }
-      startX += w;
-    }
-    if (i < sanitized.length - 1) {
-      startX += 1.0 * unitWidth;
-    }
+  const barcodeCanvas = document.createElement('canvas');
+  try {
+    JsBarcode(barcodeCanvas, value, {
+      format: 'CODE128',
+      displayValue: false,
+      width: 2,
+      height: Math.max(24, Math.round(barHeight)),
+      margin: 10,
+      marginTop: 0,
+      marginBottom: 0,
+      marginLeft: 10,
+      marginRight: 10,
+      lineColor: '#000000',
+      background: '#ffffff',
+    });
+  } catch (error) {
+    console.error('SKU no válido para Code 128:', error);
+    return;
   }
+  const scale = Math.min(1, targetWidth / barcodeCanvas.width);
+  const drawWidth = barcodeCanvas.width * scale;
+  const drawHeight = Math.min(barHeight, barcodeCanvas.height * scale);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(barcodeCanvas, centerX - drawWidth / 2, y, drawWidth, drawHeight);
 }
 
 /**
@@ -167,18 +108,31 @@ export function renderLabelToCanvas(
   if (!ctx) return canvas;
 
   // Determine canvas pixel dimensions based on label format (scaled for crisp 300+ DPI print)
+  // Raster de 12 px/mm para conservar proporción y resolución en impresión.
+  const fixedDimensions: Partial<Record<LabelFormat, [number, number]>> = {
+    thermal_40x20: [40, 20],
+    thermal_40x25: [40, 25],
+    thermal_50x15: [50, 15],
+    thermal_50x30: [50, 30],
+    thermal_50x70: [50, 70],
+  };
   let width = 480;
-  let height = options.format === 'thermal_40x20' ? 240 : 300; // 40x20mm or 40x25mm at 12 px/mm
-
-  if (options.format === 'thermal_50x30') {
-    width = 600;
-    height = 360; // 50x30mm (ratio 1.67 : 1)
+  let height = 240;
+  const fixed = fixedDimensions[options.format];
+  if (fixed) {
+    width = Math.round(fixed[0] * 12);
+    height = Math.round(fixed[1] * 12);
+  } else if (options.format === 'custom') {
+    const w = Math.min(100, Math.max(20, options.customWidthMm || 40));
+    const h = Math.min(150, Math.max(10, options.customHeightMm || 20));
+    width = Math.round(w * 12);
+    height = Math.round(h * 12);
   } else if (options.format === 'hangtag') {
     width = 480;
-    height = 700; // Hang tag (vertical)
+    height = 700;
   } else if (options.format === 'box') {
     width = 650;
-    height = 450; // Box label
+    height = 450;
   }
 
   canvas.width = width;
@@ -434,8 +388,14 @@ export function downloadLabelImage(
           ? '40x20mm'
           : options.format === 'thermal_40x25'
           ? '40x25mm'
+          : options.format === 'thermal_50x15'
+          ? '50x15mm'
           : options.format === 'thermal_50x30'
           ? '50x30mm'
+          : options.format === 'thermal_50x70'
+          ? '50x70mm'
+          : options.format === 'custom'
+          ? `${options.customWidthMm || 40}x${options.customHeightMm || 20}mm`
           : options.format;
 
       const dataUrl = canvas.toDataURL(mimeType, 0.98);
