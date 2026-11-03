@@ -281,7 +281,6 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                     <label>Alto (mm)<input type="number" min="10" max="150" value={customHeightMm} onChange={(e) => setCustomHeightMm(Math.min(150, Math.max(10, Number(e.target.value) || 10)))} className="mt-1 w-full rounded border p-2" /></label>
                   </div>
                 )}</div>
-              </div>
 
               {/* Number of Copies */}
               <div>
