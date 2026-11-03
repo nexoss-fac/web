@@ -623,60 +623,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
 
           {/* Hidden Print Container with repeat copies for thermal printer */}
           <div className="hidden print:block print:w-full" id="print-label-batch">
-            <style>{`
-              @media print {
-                body * {
-                  visibility: hidden !important;
-                }
-                #print-label-batch, #print-label-batch * {
-                  visibility: visible !important;
-                }
-                #print-label-batch {
-                  position: absolute !important;
-                  left: 0 !important;
-                  top: 0 !important;
-                  width: 100% !important;
-                  padding: 0 !important;
-                  margin: 0 !important;
-                }
-                ${
-                  labelFormat === 'thermal_40x20' || labelFormat === 'thermal_40x25'
-                    ? `
-                    @page {
-                      size: 40mm ${labelFormat === 'thermal_40x20' ? '20mm' : '25mm'};
-                      margin: 0;
-                    }
-                    .shoe-tag-item {
-                      width: 40mm !important;
-                      height: ${labelFormat === 'thermal_40x20' ? '20mm' : '25mm'} !important;
-                      max-width: 40mm !important;
-                      max-height: ${labelFormat === 'thermal_40x20' ? '20mm' : '25mm'} !important;
-                      page-break-inside: avoid;
-                      break-inside: avoid;
-                      padding: 1.2mm !important;
-                      box-sizing: border-box !important;
-                      overflow: hidden !important;
-                      border: none !important;
-                    }
-                    .thermal-label-40x20 {
-                      padding: 0.6mm !important;
-                    }
-                    .thermal-label-40x20 > div {
-                      transform: scaleY(0.82);
-                      transform-origin: center;
-                    }
-                    `
-                    : `
-                    .shoe-tag-item {
-                      page-break-inside: avoid;
-                      break-inside: avoid;
-                      margin-bottom: 8mm;
-                      border: none !important;
-                    }
-                    `
-                }
-              }
-            `}</style>
+            <style>{'@media print { body * { visibility: hidden !important; } #print-label-batch, #print-label-batch * { visibility: visible !important; } #print-label-batch { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; padding: 0 !important; margin: 0 !important; } .shoe-tag-item { page-break-inside: avoid; break-inside: avoid; border: none !important; } }'}</style>
             
             <div className="flex flex-wrap gap-2 p-1">
               {Array.from({ length: copies }).map((_, idx) => (
