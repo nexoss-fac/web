@@ -40,6 +40,8 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
   const [showStoreAddress, setShowStoreAddress] = useState<boolean>(true);
   const [showAvailableSizes, setShowAvailableSizes] = useState<boolean>(true);
   const [labelFormat, setLabelFormat] = useState<LabelFormat>('thermal_40x20');
+  const [customWidthMm, setCustomWidthMm] = useState(40);
+  const [customHeightMm, setCustomHeightMm] = useState(20);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
@@ -108,6 +110,8 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
         exchangeRate,
         availableSizes,
         showAvailableSizes,
+        customWidthMm,
+        customHeightMm,
       },
       format
     );
@@ -182,74 +186,27 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                   <Sliders className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Tamaño y Formato de Etiqueta</span>
                 </label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setLabelFormat('thermal_40x20')}
-                    className={`py-2 px-2.5 rounded-lg font-bold text-[11px] border transition cursor-pointer flex flex-col items-center justify-center text-center ${
-                      labelFormat === 'thermal_40x20'
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span>Térmica 40×20mm</span>
-                    <span className="text-[9px] text-slate-400">MXW01 • Rollo actual</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setLabelFormat('thermal_40x25')}
-                    className={`py-2 px-2.5 rounded-lg font-bold text-[11px] border transition cursor-pointer flex flex-col items-center justify-center text-center ${
-                      labelFormat === 'thermal_40x25'
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span>Térmica 40×25mm</span>
-                    <span className={`text-[9px] ${labelFormat === 'thermal_40x25' ? 'text-indigo-200 font-semibold' : 'text-slate-400'}`}>
-                      Formato alternativo
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setLabelFormat('thermal_50x30')}
-                    className={`py-2 px-2.5 rounded-lg font-bold text-[11px] border transition cursor-pointer flex flex-col items-center justify-center text-center ${
-                      labelFormat === 'thermal_50x30'
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span>Térmica 50×30mm</span>
-                    <span className="text-[9px] text-slate-400">Rollo mediano</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setLabelFormat('hangtag')}
-                    className={`py-2 px-2.5 rounded-lg font-bold text-[11px] border transition cursor-pointer flex flex-col items-center justify-center text-center ${
-                      labelFormat === 'hangtag'
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span>Colgante (HangTag)</span>
-                    <span className="text-[9px] text-slate-400">Con perforación</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setLabelFormat('box')}
-                    className={`py-2 px-2.5 rounded-lg font-bold text-[11px] border transition cursor-pointer flex flex-col items-center justify-center text-center ${
-                      labelFormat === 'box'
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                    }`}
-                  >
-                    <span>Caja Calzado</span>
-                    <span className="text-[9px] text-slate-400">70×50mm</span>
-                  </button>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    ['thermal_40x20', '40 × 20 mm'],
+                    ['thermal_40x25', '40 × 25 mm'],
+                    ['thermal_50x15', '50 × 15 mm'],
+                    ['thermal_50x30', '50 × 30 mm'],
+                    ['thermal_50x70', '50 × 70 mm'],
+                    ['custom', 'Personalizado'],
+                  ].map(([format, title]) => (
+                    <button key={format} type="button" onClick={() => setLabelFormat(format as LabelFormat)}
+                      className={`min-h-[54px] rounded-xl border px-2 py-2 text-[11px] font-bold ${labelFormat === format ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300 bg-white text-slate-700'}`}>
+                      {title}
+                    </button>
+                  ))}
                 </div>
+                {labelFormat === 'custom' && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border bg-indigo-50 p-3">
+                    <label>Ancho (mm)<input type="number" min="20" max="100" value={customWidthMm} onChange={(e) => setCustomWidthMm(Math.min(100, Math.max(20, Number(e.target.value) || 20)))} className="mt-1 w-full rounded border p-2" /></label>
+                    <label>Alto (mm)<input type="number" min="10" max="150" value={customHeightMm} onChange={(e) => setCustomHeightMm(Math.min(150, Math.max(10, Number(e.target.value) || 10)))} className="mt-1 w-full rounded border p-2" /></label>
+                  </div>
+                )}</div>
               </div>
 
               {/* Number of Copies */}
