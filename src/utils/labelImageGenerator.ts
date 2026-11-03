@@ -1,6 +1,6 @@
 import { ShoeProduct } from '../types';
 
-export type LabelFormat = 'thermal_40x20' | 'thermal_40x25' | 'thermal_50x30' | 'hangtag' | 'box';
+export type LabelFormat = 'thermal_40x20' | 'thermal_40x25' | 'thermal_50x15' | 'thermal_50x30' | 'thermal_50x70' | 'custom' | 'hangtag' | 'box';
 
 export interface LabelOptions {
   format: LabelFormat;
@@ -12,6 +12,8 @@ export interface LabelOptions {
   exchangeRate: number;
   availableSizes?: string[];
   showAvailableSizes?: boolean;
+  customWidthMm?: number;
+  customHeightMm?: number;
 }
 
 // Code 39 barcode patterns
@@ -167,18 +169,31 @@ export function renderLabelToCanvas(
   if (!ctx) return canvas;
 
   // Determine canvas pixel dimensions based on label format (scaled for crisp 300+ DPI print)
+  // Raster de 12 px/mm para conservar proporción y resolución en impresión.
+  const fixedDimensions: Partial<Record<LabelFormat, [number, number]>> = {
+    thermal_40x20: [40, 20],
+    thermal_40x25: [40, 25],
+    thermal_50x15: [50, 15],
+    thermal_50x30: [50, 30],
+    thermal_50x70: [50, 70],
+  };
   let width = 480;
-  let height = options.format === 'thermal_40x20' ? 240 : 300; // 40x20mm or 40x25mm at 12 px/mm
-
-  if (options.format === 'thermal_50x30') {
-    width = 600;
-    height = 360; // 50x30mm (ratio 1.67 : 1)
+  let height = 240;
+  const fixed = fixedDimensions[options.format];
+  if (fixed) {
+    width = Math.round(fixed[0] * 12);
+    height = Math.round(fixed[1] * 12);
+  } else if (options.format === 'custom') {
+    const w = Math.min(100, Math.max(20, options.customWidthMm || 40));
+    const h = Math.min(150, Math.max(10, options.customHeightMm || 20));
+    width = Math.round(w * 12);
+    height = Math.round(h * 12);
   } else if (options.format === 'hangtag') {
     width = 480;
-    height = 700; // Hang tag (vertical)
+    height = 700;
   } else if (options.format === 'box') {
     width = 650;
-    height = 450; // Box label
+    height = 450;
   }
 
   canvas.width = width;
@@ -434,8 +449,14 @@ export function downloadLabelImage(
           ? '40x20mm'
           : options.format === 'thermal_40x25'
           ? '40x25mm'
+          : options.format === 'thermal_50x15'
+          ? '50x15mm'
           : options.format === 'thermal_50x30'
           ? '50x30mm'
+          : options.format === 'thermal_50x70'
+          ? '50x70mm'
+          : options.format === 'custom'
+          ? `${options.customWidthMm || 40}x${options.customHeightMm || 20}mm`
           : options.format;
 
       const dataUrl = canvas.toDataURL(mimeType, 0.98);
