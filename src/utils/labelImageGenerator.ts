@@ -143,6 +143,8 @@ export function renderLabelToCanvas(
   ctx.fillRect(0, 0, width, height);
 
   const priceBs = product.precio * options.exchangeRate;
+  // Prioriza el EAN/UPC escaneado y guardado; usa SKU solo como respaldo temporal.
+  const barcodeValue = (product.codigo_barras || product.sku || '').trim();
   const showSizes = options.showAvailableSizes !== false && options.availableSizes && options.availableSizes.length > 0;
   const availableSizesList = options.availableSizes || (product.talla ? [product.talla] : []);
 
@@ -210,7 +212,7 @@ export function renderLabelToCanvas(
 
     // Solo barras: sin SKU impreso, sin dígitos ni leyenda.
     if (options.showBarcode) {
-      drawBarcode(ctx, product.sku, width / 2, 258, width - margin * 2, 34);
+      drawBarcode(ctx, barcodeValue, width / 2, 258, width - margin * 2, 34);
     }
   } else {
     // -------------------------------------------------------------
@@ -307,11 +309,11 @@ export function renderLabelToCanvas(
 
     // Barcode Section
     if (options.showBarcode) {
-      drawBarcode(ctx, product.sku, width / 2, curY, width - 80, 48);
+      drawBarcode(ctx, barcodeValue, width / 2, curY, width - 80, 48);
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 15px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`SKU: ${product.sku}`, width / 2, curY + 54);
+      ctx.fillText(`Código: ${barcodeValue}`, width / 2, curY + 54);
     } else {
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 22px monospace';
