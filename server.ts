@@ -2168,6 +2168,57 @@ async function startServer() {
     res.json({ success: true, count: products.length, total: finalProducts.length });
   });
 
+  // Asignación masiva de códigos internos Code 128 para productos sin EAN/UPC.
+  // La operación se ejecuta dentro de la conexión del tenant ya autenticado,
+  // requiere rol propietario/administrador y conserva todos los códigos existentes.
+  app.post('/api/products/generate-internal-barcodes', adminOnly, async (_req, res) => {
+    const sql = getNeonSql();
+    if (!sql) return res.status(503).json({ success: false, error: 'No hay una base de datos operativa para esta empresa.' });
+
+    try {
+      await initDatabaseSchema();
+      const rows = await sql`
+        WITH lock AS MATERIALIZED (
+          SELECT pg_advisory_xact_lock(hashtext('nexoss:inventory:code128'))
+        ),
+        max_existing AS (
+          SELECT COALESCE(MAX(SUBSTRING(codigo_barras FROM 3)::BIGINT), 0) AS last_value
+          FROM shoe_products, lock
+          WHERE codigo_barras ~ '^NX[0-9]{9,}$'
+        ),
+        pending AS (
+          SELECT id, ROW_NUMBER() OVER (ORDER BY created_at NULLS FIRST, id) AS row_num
+          FROM shoe_products, lock
+          WHERE COALESCE(BTRIM(codigo_barras), '') = ''
+        ),
+        assigned AS (
+          UPDATE shoe_products AS product
+          SET codigo_barras = 'NX' || LPAD((max_existing.last_value + pending.row_num)::TEXT, 9, '0')
+          FROM pending CROSS JOIN max_existing
+          WHERE product.id = pending.id
+          RETURNING product.id, product.codigo_barras
+        )
+        SELECT COUNT(*)::INTEGER AS assigned_count FROM assigned
+      `;
+      const assigned = Number(rows[0]?.assigned_count || 0);
+      const remaining = await sql`
+        SELECT COUNT(*)::INTEGER AS count
+        FROM shoe_products
+        WHERE COALESCE(BTRIM(codigo_barras), '') = ''
+      `;
+      return res.json({
+        success: true,
+        assigned,
+        remaining: Number(remaining[0]?.count || 0),
+        format: 'CODE128',
+        prefix: 'NX',
+      });
+    } catch (error) {
+      logger.error('No se pudieron generar los códigos internos del inventario:', error);
+      return res.status(503).json({ success: false, error: 'No se pudieron asignar los códigos. No se confirmó ningún cambio.' });
+    }
+  });
+
   // 5. Sales API (Neon or Local JSON persistence)
   registerSalesRoutes(app, { readServerStore, writeServerStore, readLocalSales, getNeonSql, normalizeSales, updateSale, voidSale, onSaleRegistered: (sale) => notifyInBackground((company) => buildSaleNotice(sale, company)) });
 
