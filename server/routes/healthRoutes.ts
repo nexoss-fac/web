@@ -140,7 +140,7 @@ export function registerHealthRoutes(app: Express, _ownerOnly?: unknown): void {
       sql`SELECT * FROM health_prescriptions WHERE patient_id = ${patientId} ORDER BY issued_at DESC LIMIT 200`,
       sql`SELECT * FROM health_exam_orders WHERE patient_id = ${patientId} ORDER BY ordered_at DESC LIMIT 200`,
       sql`SELECT * FROM health_patient_reports WHERE patient_id = ${patientId} ORDER BY issued_at DESC LIMIT 200`,
-      sql`SELECT * FROM health_payments WHERE patient_id = ${patientId} ORDER BY created_at DESC LIMIT 200`,
+      sql`SELECT p.*, COALESCE(json_agg(i ORDER BY i.created_at) FILTER (WHERE i.id IS NOT NULL), '[]'::json) AS installments FROM health_payments p LEFT JOIN health_payment_installments i ON i.payment_id = p.id WHERE p.patient_id = ${patientId} GROUP BY p.id ORDER BY p.created_at DESC LIMIT 200`,
       sql`SELECT * FROM health_aesthetic_histories WHERE patient_id = ${patientId} ORDER BY performed_at DESC LIMIT 200`,
     ]);
     return res.json({ patient: found[0], appointments, consultations, prescriptions, examOrders, reports, payments, aestheticHistories });
