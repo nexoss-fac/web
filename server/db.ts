@@ -683,6 +683,63 @@ export async function initDatabaseSchema() {
     }
 
 
+
+      // Extensión compatible y no destructiva del expediente Intermed.
+      const patientColumns = [
+        ['national_id','VARCHAR(40)'],['occupation','VARCHAR(180)'],['gender','VARCHAR(40)'],
+        ['blood_type','VARCHAR(12)'],['personal_history','TEXT'],['chronic_conditions','TEXT'],
+        ['surgical_history','TEXT'],['smoking_habits','TEXT'],['current_medications','TEXT'],
+        ['family_history','TEXT']
+      ] as const;
+      for (const [column, type] of patientColumns) {
+        await sql(`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS ${column} ${type}`);
+      }
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS health_patients_national_id_uidx ON health_patients (national_id) WHERE national_id IS NOT NULL AND national_id <> ''`;
+      await sql`CREATE TABLE IF NOT EXISTS health_providers (
+        id VARCHAR(64) PRIMARY KEY, user_id VARCHAR(128), full_name VARCHAR(180) NOT NULL,
+        role VARCHAR(40) NOT NULL CHECK (role IN ('doctor','aesthetician','nurse','staff')),
+        specialty VARCHAR(180), license_number VARCHAR(80), active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS health_providers_role_idx ON health_providers (role, active)`;
+      await sql`CREATE TABLE IF NOT EXISTS health_aesthetic_histories (
+        id VARCHAR(64) PRIMARY KEY, patient_id VARCHAR(64) NOT NULL REFERENCES health_patients(id) ON DELETE RESTRICT,
+        provider_id VARCHAR(64) REFERENCES health_providers(id) ON DELETE SET NULL,
+        performed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), treatment_type VARCHAR(180) NOT NULL,
+        other_treatment TEXT, skin_type VARCHAR(100), product_allergies TEXT, contraindications TEXT,
+        previous_treatments TEXT, treated_area TEXT, products_used TEXT, technique TEXT,
+        observations TEXT, aftercare_recommendations TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS health_aesthetic_patient_idx ON health_aesthetic_histories (patient_id, performed_at DESC)`;
+      await sql`CREATE TABLE IF NOT EXISTS health_appointment_requests (
+        id VARCHAR(64) PRIMARY KEY, patient_name VARCHAR(180) NOT NULL, phone VARCHAR(40) NOT NULL,
+        email VARCHAR(180), reason TEXT, preferred_at TIMESTAMPTZ, status VARCHAR(24) NOT NULL DEFAULT 'new'
+          CHECK (status IN ('new','contacted','scheduled','discarded')),
+        notes TEXT, source VARCHAR(80), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS health_appointment_requests_status_idx ON health_appointment_requests (status, created_at DESC)`;
+      await sql`CREATE TABLE IF NOT EXISTS health_blog_posts (
+        id VARCHAR(64) PRIMARY KEY, author_id VARCHAR(128), title VARCHAR(240) NOT NULL,
+        slug VARCHAR(260) NOT NULL UNIQUE, summary TEXT, content TEXT NOT NULL, cover_image TEXT,
+        images JSONB NOT NULL DEFAULT '[]'::jsonb, video_url TEXT, published BOOLEAN NOT NULL DEFAULT FALSE,
+        published_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS health_payment_installments (
+        id VARCHAR(64) PRIMARY KEY, payment_id VARCHAR(64) NOT NULL REFERENCES health_payments(id) ON DELETE RESTRICT,
+        amount NUMERIC(14,2) NOT NULL CHECK (amount > 0), method VARCHAR(80), paid_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        reference VARCHAR(120), notes TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_by VARCHAR(128) NOT NULL
+      )`;
+      await sql`ALTER TABLE health_payments ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(48)`;
+      await sql`ALTER TABLE health_payments ADD COLUMN IF NOT EXISTS subtotal NUMERIC(14,2) NOT NULL DEFAULT 0`;
+      await sql`ALTER TABLE health_payments ADD COLUMN IF NOT EXISTS discount NUMERIC(14,2) NOT NULL DEFAULT 0`;
+      await sql`ALTER TABLE health_payments ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(14,2) NOT NULL DEFAULT 0`;
+      await sql`ALTER TABLE health_payments ADD COLUMN IF NOT EXISTS exchange_rate NUMERIC(18,6)`;
+      await sql`ALTER TABLE health_payments ADD COLUMN IF NOT EXISTS line_items JSONB NOT NULL DEFAULT '[]'::jsonb`;
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS health_payments_invoice_uidx ON health_payments (invoice_number) WHERE invoice_number IS NOT NULL`;
     initializedTenantSchemas.add(schemaKey);
     logger.info('✅ Esquema Neon PostgreSQL verificado e inicializado correctamente.');
   } catch (error) {
