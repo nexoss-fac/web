@@ -119,7 +119,7 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
     if (amount>outstanding+0.005) return res.status(400).json({ error: 'El abono supera el saldo pendiente.' });
     const id=randomUUID();
     const rows=await sql`INSERT INTO health_payment_installments (id,payment_id,amount,method,reference,notes,created_by)
-      VALUES (${id},${amount},${text(req.body?.method,80)},${text(req.body?.reference,120)},${text(req.body?.notes,1000)},${identity(req)}) RETURNING *`;
+      VALUES (${id},${paymentId},${amount},${text(req.body?.method,80)},${text(req.body?.reference,120)},${text(req.body?.notes,1000)},${identity(req)}) RETURNING *`;
     return res.status(201).json({ installment: rows[0], balance: Math.max(0,outstanding-amount) });
   }));
 
