@@ -24,6 +24,7 @@ import {
   FileSpreadsheet,
   Sparkles,
   UploadCloud,
+  Barcode,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { ShoeProduct, ShoeType, MovementType, ProductCategory } from '../../types';
@@ -108,6 +109,37 @@ export const InventoryManager: React.FC = () => {
 
   // Batch White Studio Background Modal state
   const [isBatchWhiteBgOpen, setIsBatchWhiteBgOpen] = useState(false);
+  const [isGeneratingBarcodes, setIsGeneratingBarcodes] = useState(false);
+  const productsWithoutBarcode = useMemo(
+    () => products.filter((product) => product.activo && !String(product.codigo_barras || '').trim()).length,
+    [products]
+  );
+
+  const generateMissingInternalBarcodes = async () => {
+    if (isGeneratingBarcodes || productsWithoutBarcode === 0) return;
+    const confirmed = window.confirm(
+      'Se asignará un código interno Code 128 único a cada zapato que no tenga código de barras. Los códigos existentes se conservarán. ¿Deseas continuar?'
+    );
+    if (!confirmed) return;
+    setIsGeneratingBarcodes(true);
+    try {
+      const response = await fetch('/api/products/generate-internal-barcodes', { method: 'POST' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.success !== true) {
+        throw new Error(result.error || 'No se pudieron generar los códigos.');
+      }
+      await forceSync();
+      window.alert(
+        result.assigned > 0
+          ? 'Se asignaron ' + result.assigned + ' códigos Code 128. Los códigos anteriores se conservaron.'
+          : 'Todos los zapatos ya tenían un código de barras. No hubo cambios.'
+      );
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Ocurrió un error al generar los códigos.');
+    } finally {
+      setIsGeneratingBarcodes(false);
+    }
+  };
 
   const handleOpenLabelModal = (p: ShoeProduct) => {
     setLabelProduct(p);
@@ -287,6 +319,20 @@ export const InventoryManager: React.FC = () => {
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             <span>Exportar Inventario</span>
           </button>
+
+          {isFootwear && userRole === 'admin' && (
+            <button
+              id="generate-code128-btn"
+              type="button"
+              onClick={generateMissingInternalBarcodes}
+              disabled={isGeneratingBarcodes || productsWithoutBarcode === 0}
+              className="px-3 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+              title="Asignar códigos internos Code 128 a los zapatos que aún no tienen código"
+            >
+              <Barcode className="w-4 h-4" />
+              <span>{isGeneratingBarcodes ? 'Generando…' : 'Generar Code 128 (' + productsWithoutBarcode + ')'}</span>
+            </button>
+          )}
 
           <button
             id="import-excel-btn"
