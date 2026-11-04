@@ -127,13 +127,14 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
     const patientId = text(req.params.patientId, 64);
     const found = await sql`SELECT * FROM health_patients WHERE id = ${patientId} LIMIT 1`;
     if (!found[0]) return res.status(404).json({ error: 'No se encontró el paciente.' });
-    const [appointments, consultations, prescriptions, examOrders, reports, payments] = await Promise.all([
+    const [appointments, consultations, prescriptions, examOrders, reports, payments, aestheticHistories] = await Promise.all([
       sql`SELECT * FROM health_appointments WHERE patient_id = ${patientId} ORDER BY starts_at DESC LIMIT 200`,
       sql`SELECT * FROM health_consultations WHERE patient_id = ${patientId} ORDER BY consulted_at DESC LIMIT 200`,
       sql`SELECT * FROM health_prescriptions WHERE patient_id = ${patientId} ORDER BY issued_at DESC LIMIT 200`,
       sql`SELECT * FROM health_exam_orders WHERE patient_id = ${patientId} ORDER BY ordered_at DESC LIMIT 200`,
       sql`SELECT * FROM health_patient_reports WHERE patient_id = ${patientId} ORDER BY issued_at DESC LIMIT 200`,
       sql`SELECT * FROM health_payments WHERE patient_id = ${patientId} ORDER BY created_at DESC LIMIT 200`,
+      sql`SELECT * FROM health_aesthetic_histories WHERE patient_id = ${patientId} ORDER BY performed_at DESC LIMIT 200`,
     ]);
     return res.json({ patient: found[0], appointments, consultations, prescriptions, examOrders, reports, payments, aestheticHistories });
   }));
