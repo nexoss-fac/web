@@ -685,15 +685,16 @@ export async function initDatabaseSchema() {
 
 
       // Extensión compatible y no destructiva del expediente Intermed.
-      const patientColumns = [
-        ['national_id','VARCHAR(40)'],['occupation','VARCHAR(180)'],['gender','VARCHAR(40)'],
-        ['blood_type','VARCHAR(12)'],['personal_history','TEXT'],['chronic_conditions','TEXT'],
-        ['surgical_history','TEXT'],['smoking_habits','TEXT'],['current_medications','TEXT'],
-        ['family_history','TEXT']
-      ] as const;
-      for (const [column, type] of patientColumns) {
-        await sql(`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS ${column} ${type}`);
-      }
+      await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS national_id VARCHAR(40)`;
+      await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS occupation VARCHAR(180)`;
+      await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS gender VARCHAR(40)`;
+      await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS blood_type VARCHAR(12)`;
+      await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS personal_history TEXT`;
+      await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS chronic_conditions TEXT`;
+      await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS surgical_history TEXT`;
+      await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS smoking_habits TEXT`;
+      await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS current_medications TEXT`;
+      await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS family_history TEXT`;
       await sql`CREATE UNIQUE INDEX IF NOT EXISTS health_patients_national_id_uidx ON health_patients (national_id) WHERE national_id IS NOT NULL AND national_id <> ''`;
       await sql`CREATE TABLE IF NOT EXISTS health_providers (
         id VARCHAR(64) PRIMARY KEY, user_id VARCHAR(128), full_name VARCHAR(180) NOT NULL,
