@@ -9,12 +9,15 @@ type BleCharacteristic = {
   startNotifications?: () => Promise<BleCharacteristic>;
   addEventListener?: (type: string, listener: (event: { target?: { value?: DataView } }) => void) => void;
 };
+type BleGattServer = {
+  connected?: boolean;
+  connect?: () => Promise<BleGattServer>;
+  disconnect: () => void;
+  getPrimaryService: (uuid: string) => Promise<{ getCharacteristic: (uuid: string) => Promise<BleCharacteristic> }>;
+};
 type BleDevice = {
   name?: string;
-  gatt?: {
-    connected?: boolean;
-    connect: () => Promise<{ connected?: boolean; getPrimaryService: (uuid: string) => Promise<{ getCharacteristic: (uuid: string) => Promise<BleCharacteristic> }> }>;
-  };
+  gatt?: BleGattServer;
 };
 type BluetoothApi = {
   requestDevice: (options: unknown) => Promise<BleDevice>;
