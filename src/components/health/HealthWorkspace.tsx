@@ -3,11 +3,11 @@ import { CalendarDays, ClipboardPlus, FileText, FlaskConical, HeartPulse, Plus, 
 const InventoryManager = lazy(() => import('../inventory/InventoryManager').then((module) => ({ default: module.InventoryManager })));
 
 type Patient = { id: string; patient_number: string; first_name: string; last_name: string; birth_date?: string; phone?: string; email?: string };
-type Section = 'patients' | 'appointments' | 'payments' | 'inventory' | 'reports';
+type Section = 'patients' | 'appointments' | 'payments' | 'inventory' | 'reports' | 'providers' | 'requests' | 'blog';
 type RecordData = { patient: Record<string, any>; appointments: any[]; consultations: any[]; prescriptions: any[]; examOrders: any[]; reports: any[]; payments: any[]; aestheticHistories: any[] };
 type FormKind = 'patient' | 'appointment' | 'consultation' | 'prescription' | 'examOrder' | 'report' | 'payment' | 'aestheticHistory';
 
-const sectionLabels: Record<Section, string> = { patients: 'Pacientes', appointments: 'Citas', payments: 'Pagos', inventory: 'Inventario', reports: 'Reportes' };
+const sectionLabels: Record<Section, string> = { patients: 'Pacientes', appointments: 'Citas', payments: 'Pagos', inventory: 'Inventario', reports: 'Reportes', providers: 'Profesionales', requests: 'Solicitudes', blog: 'Blog clínico' };
 const formFields: Record<FormKind, Array<{ key: string; label: string; type?: string; required?: boolean; wide?: boolean }>> = {
   patient: [
     { key: 'firstName', label: 'Nombre', required: true }, { key: 'lastName', label: 'Apellido', required: true },
@@ -103,10 +103,53 @@ export const HealthWorkspace: React.FC = () => {
     {section === 'payments' && <RecordSection title="Pagos" records={record?.payments || []} empty="Selecciona un paciente en Pacientes para ver o registrar pagos." onAdd={() => record && openForm('payment')} />}
     {section === 'inventory' && <Suspense fallback={<p className="text-sm text-slate-500">Cargando inventario…</p>}><InventoryManager /></Suspense>}
     {section === 'reports' && <div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Informes clínicos</h2><p className="mt-2 text-sm text-slate-600">Los informes que redactes desde el expediente se conservan separados de las notas internas de consulta.</p></div>}
+    {(section === 'providers' || section === 'requests' || section === 'blog') && <HealthAdminSection section={section} headers={headers} />}
     {formKind && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/50 p-4"><form onSubmit={(event) => void saveForm(event)} className="my-auto w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl"><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-semibold">{formKind === 'patient' ? 'Nuevo paciente' : ({ appointment: 'Nueva cita', consultation: 'Nueva consulta', prescription: 'Nueva receta', examOrder: 'Orden de exámenes', report: 'Nuevo informe para el paciente', payment: 'Registrar pago', aestheticHistory: 'Nueva historia estética' } as const)[formKind]}</h2><button type="button" onClick={() => setFormKind(null)} aria-label="Cerrar"><X className="h-5 w-5" /></button></div><div className="grid gap-3 sm:grid-cols-2">{formFields[formKind].map((field) => <label key={field.key} className={`text-sm ${field.wide ? 'sm:col-span-2' : ''}`}><span className="mb-1 block text-slate-600">{field.label}</span>{field.wide ? <textarea required={field.required} rows={3} value={form[field.key] || ''} onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2" /> : <input required={field.required} type={field.type || 'text'} value={form[field.key] || ''} onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2" />}</label>)}</div><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setFormKind(null)} className="rounded-lg border border-slate-300 px-4 py-2">Cancelar</button><button disabled={saving} className="rounded-lg bg-[#102b4c] px-4 py-2 font-semibold text-white disabled:opacity-50">{saving ? 'Guardando…' : 'Guardar'}</button></div></form></div>}
   </div></div>;
 };
 
 function RecordSection({ title, records, empty, onAdd }: { title: string; records: any[]; empty: string; onAdd: () => void }) {
   return <section className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex items-center justify-between"><h2 className="font-semibold">{title}</h2><button onClick={onAdd} className="rounded-lg bg-[#102b4c] px-3 py-2 text-sm font-semibold text-white"><Plus className="mr-1 inline h-4 w-4" />Nuevo</button></div>{records.length ? records.map((item) => <p key={item.id} className="mt-3 rounded-lg bg-slate-50 p-3 text-sm">{item.concept || item.starts_at || 'Registro'} {item.amount ? `· ${item.amount} ${item.currency}` : ''}</p>) : <p className="mt-3 text-sm text-slate-500">{empty}</p>}</section>;
+}
+
+
+function HealthAdminSection({ section, headers }: { section: 'providers' | 'requests' | 'blog'; headers: () => Record<string, string> }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [showForm, setShowForm] = useState(false);
+  const config = {
+    providers: { title: 'Profesionales de salud', endpoint: '/api/health/providers', listKey: 'providers', fields: [['fullName','Nombre completo'],['role','Perfil (doctor, nurse, aesthetician, staff)'],['specialty','Especialidad'],['licenseNumber','N.º de registro profesional']] },
+    requests: { title: 'Solicitudes de citas', endpoint: '/api/health/appointment-requests', listKey: 'requests', fields: [['patientName','Nombre del paciente'],['phone','Teléfono'],['email','Correo'],['preferredAt','Fecha preferida (ISO o fecha/hora)'],['reason','Motivo']] },
+    blog: { title: 'Blog clínico', endpoint: '/api/health/blog', listKey: 'posts', fields: [['title','Título'],['slug','Slug URL'],['summary','Resumen'],['content','Contenido'],['coverImage','Imagen de portada (URL)'],['videoUrl','Video (URL)']] },
+  }[section];
+  const load = useCallback(async () => {
+    setBusy(true); setError('');
+    try { const response = await fetch(config.endpoint, { headers: headers() }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'No se pudo cargar.'); setItems(data[config.listKey] || []); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Error de carga.'); } finally { setBusy(false); }
+  }, [config.endpoint, config.listKey, headers]);
+  useEffect(() => { void load(); }, [load]);
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault(); setBusy(true); setError('');
+    try { const payload: Record<string, unknown> = { ...form }; if (section === 'blog') payload.published = form.published === 'true';
+      const response = await fetch(config.endpoint, { method: 'POST', headers: headers(), body: JSON.stringify(payload) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'No se pudo guardar.');
+      setShowForm(false); setForm({}); await load();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Error al guardar.'); } finally { setBusy(false); }
+  };
+  const updateRequest = async (id: string, status: string) => {
+    setBusy(true); setError('');
+    try { const response = await fetch(config.endpoint + '/' + encodeURIComponent(id), { method: 'PATCH', headers: headers(), body: JSON.stringify({ status }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'No se pudo actualizar.'); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Error al actualizar.'); } finally { setBusy(false); }
+  };
+  return <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{config.title}</h2><p className="text-sm text-slate-500">Información almacenada exclusivamente en la empresa activa.</p></div><div className="flex gap-2"><button onClick={() => void load()} className="rounded-lg border px-3 py-2 text-sm">Actualizar</button><button onClick={() => { setForm({}); setShowForm(true); }} className="rounded-lg bg-[#102b4c] px-3 py-2 text-sm font-semibold text-white">Nuevo registro</button></div></div>
+    {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+    {showForm && <form onSubmit={(e) => void save(e)} className="grid gap-3 rounded-lg border border-slate-200 p-4 sm:grid-cols-2">
+      {config.fields.map(([key,label]) => <label key={key} className="text-sm"><span className="mb-1 block text-slate-600">{label}</span>{key === 'content' || key === 'summary' || key === 'reason' ? <textarea required={key === 'content'} rows={3} value={form[key] || ''} onChange={e => setForm(v => ({...v,[key]:e.target.value}))} className="w-full rounded-lg border px-3 py-2"/> : <input required={['fullName','patientName','phone','title','slug'].includes(key)} value={form[key] || ''} onChange={e => setForm(v => ({...v,[key]:e.target.value}))} className="w-full rounded-lg border px-3 py-2"/>}</label>)}
+      {section === 'blog' && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.published === 'true'} onChange={e => setForm(v => ({...v,published:e.target.checked ? 'true':'false'}))}/> Publicar inmediatamente</label>}
+      <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" onClick={() => setShowForm(false)} className="rounded-lg border px-3 py-2 text-sm">Cancelar</button><button disabled={busy} className="rounded-lg bg-[#102b4c] px-4 py-2 text-sm font-semibold text-white">Guardar</button></div>
+    </form>}
+    {busy && !items.length ? <p className="text-sm text-slate-500">Cargando…</p> : !items.length ? <p className="text-sm text-slate-500">No hay registros todavía.</p> : <div className="space-y-2">{items.map(item => <article key={item.id} className="rounded-lg border border-slate-200 p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><strong className="text-sm">{item.full_name || item.patient_name || item.title}</strong><p className="mt-1 text-xs text-slate-500">{item.specialty || item.role || item.phone || item.slug || item.status || ''}</p>{item.content && <p className="mt-2 line-clamp-3 text-sm text-slate-600">{item.summary || item.content}</p>}</div>{section === 'requests' && <select aria-label="Estado de solicitud" value={item.status || 'new'} onChange={e => void updateRequest(item.id,e.target.value)} className="rounded border px-2 py-1 text-sm"><option value="new">Nueva</option><option value="contacted">Contactada</option><option value="scheduled">Agendada</option><option value="discarded">Descartada</option></select>}</div></article>)}</div>}
+  </section>;
 }
