@@ -597,6 +597,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             id: p.id,
             nombre: p.nombre,
             sku: p.sku || `SKU-${p.id}`,
+            codigo_barras: String(p.codigo_barras || ''),
             categoria: p.categoria || 'Calzado',
             clasificacion_inventario: p.clasificacion_inventario || 'Mercancía',
             marca: p.marca || 'Genérica',
