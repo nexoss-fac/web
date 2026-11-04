@@ -100,7 +100,7 @@ export const HealthWorkspace: React.FC = () => {
       </div>}</main>
     </div>}
     {section === 'appointments' && <RecordSection title="Citas" records={record?.appointments || []} empty="Selecciona un paciente en Pacientes para ver o registrar citas." onAdd={() => record && openForm('appointment')} />}
-    {section === 'payments' && <RecordSection title="Pagos" records={record?.payments || []} empty="Selecciona un paciente en Pacientes para ver o registrar pagos." onAdd={() => record && openForm('payment')} />}
+    {section === 'payments' && <PaymentsSection records={record?.payments || []} empty="Selecciona un paciente en Pacientes para ver o registrar pagos." onAdd={() => record && openForm('payment')} headers={headers} onSaved={() => selectedId && void loadRecord(selectedId)} />} 
     {section === 'inventory' && <Suspense fallback={<p className="text-sm text-slate-500">Cargando inventario…</p>}><InventoryManager /></Suspense>}
     {section === 'reports' && <div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Informes clínicos</h2><p className="mt-2 text-sm text-slate-600">Los informes que redactes desde el expediente se conservan separados de las notas internas de consulta.</p></div>}
     {(section === 'providers' || section === 'requests' || section === 'blog') && <HealthAdminSection section={section} headers={headers} />}
@@ -151,5 +151,30 @@ function HealthAdminSection({ section, headers }: { section: 'providers' | 'requ
       <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" onClick={() => setShowForm(false)} className="rounded-lg border px-3 py-2 text-sm">Cancelar</button><button disabled={busy} className="rounded-lg bg-[#102b4c] px-4 py-2 text-sm font-semibold text-white">Guardar</button></div>
     </form>}
     {busy && !items.length ? <p className="text-sm text-slate-500">Cargando…</p> : !items.length ? <p className="text-sm text-slate-500">No hay registros todavía.</p> : <div className="space-y-2">{items.map(item => <article key={item.id} className="rounded-lg border border-slate-200 p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><strong className="text-sm">{item.full_name || item.patient_name || item.title}</strong><p className="mt-1 text-xs text-slate-500">{item.specialty || item.role || item.phone || item.slug || item.status || ''}</p>{item.content && <p className="mt-2 line-clamp-3 text-sm text-slate-600">{item.summary || item.content}</p>}</div>{section === 'requests' && <select aria-label="Estado de solicitud" value={item.status || 'new'} onChange={e => void updateRequest(item.id,e.target.value)} className="rounded border px-2 py-1 text-sm"><option value="new">Nueva</option><option value="contacted">Contactada</option><option value="scheduled">Agendada</option><option value="discarded">Descartada</option></select>}</div></article>)}</div>}
+  </section>;
+}
+
+
+function PaymentsSection({ records, empty, onAdd, headers, onSaved }: { records: any[]; empty: string; onAdd: () => void; headers: () => Record<string,string>; onSaved: () => void }) {
+  const [amounts,setAmounts] = useState<Record<string,string>>({});
+  const [methods,setMethods] = useState<Record<string,string>>({});
+  const [saving,setSaving] = useState('');
+  const [error,setError] = useState('');
+  const addInstallment = async (paymentId:string) => {
+    setSaving(paymentId); setError('');
+    try {
+      const response=await fetch('/api/health/payments/'+encodeURIComponent(paymentId)+'/installments',{method:'POST',headers:headers(),body:JSON.stringify({amount:Number(amounts[paymentId]),method:methods[paymentId]||'transferencia'})});
+      const data=await response.json(); if(!response.ok) throw new Error(data.error||'No se pudo registrar el abono.');
+      setAmounts(v=>({...v,[paymentId]:''})); onSaved();
+    } catch(e) { setError(e instanceof Error?e.message:'Error al registrar abono.'); } finally { setSaving(''); }
+  };
+  return <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+    <div className="flex items-center justify-between"><h2 className="font-semibold">Pagos y abonos</h2><button onClick={onAdd} className="rounded-lg bg-[#102b4c] px-3 py-2 text-sm font-semibold text-white"><Plus className="mr-1 inline h-4 w-4"/>Nuevo pago</button></div>
+    {error && <p role="alert" className="rounded bg-rose-50 p-2 text-sm text-rose-700">{error}</p>}
+    {!records.length ? <p className="text-sm text-slate-500">{empty}</p> : records.map(p=>{const paid=(p.installments||[]).reduce((sum:number,i:any)=>sum+Number(i.amount||0),0);const balance=Math.max(0,Number(p.amount||0)-paid);return <article key={p.id} className="rounded-lg border border-slate-200 p-4">
+      <div className="flex flex-wrap justify-between gap-2"><div><strong>{p.concept}</strong><p className="text-xs text-slate-500">{p.currency} · {p.status} · {new Date(p.created_at).toLocaleString()}</p></div><div className="text-right text-sm"><p>Total: {Number(p.amount).toFixed(2)} {p.currency}</p><p>Abonado: {paid.toFixed(2)} · Saldo: {balance.toFixed(2)}</p></div></div>
+      {(p.installments||[]).map((i:any)=><p key={i.id} className="mt-2 text-xs text-slate-500">Abono {Number(i.amount).toFixed(2)} · {i.method||'Sin método'} · {new Date(i.created_at).toLocaleDateString()}</p>)}
+      {balance>0 && <div className="mt-3 flex flex-wrap gap-2"><input type="number" min="0.01" max={balance} step="0.01" value={amounts[p.id]||''} onChange={e=>setAmounts(v=>({...v,[p.id]:e.target.value}))} placeholder="Monto del abono" className="min-w-0 flex-1 rounded border px-3 py-2 text-sm"/><input value={methods[p.id]||''} onChange={e=>setMethods(v=>({...v,[p.id]:e.target.value}))} placeholder="Método" className="w-36 rounded border px-3 py-2 text-sm"/><button disabled={saving===p.id||!(Number(amounts[p.id])>0)} onClick={()=>void addInstallment(p.id)} className="rounded bg-teal-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving===p.id?'Guardando…':'Registrar abono'}</button></div>}
+    </article>})}
   </section>;
 }
