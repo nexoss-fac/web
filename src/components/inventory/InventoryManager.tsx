@@ -111,7 +111,7 @@ export const InventoryManager: React.FC = () => {
   const [isBatchWhiteBgOpen, setIsBatchWhiteBgOpen] = useState(false);
   const [isGeneratingBarcodes, setIsGeneratingBarcodes] = useState(false);
   const productsWithoutBarcode = useMemo(
-    () => products.filter((product) => product.activo && !String(product.codigo_barras || '').trim()).length,
+    () => products.filter((product) => !String(product.codigo_barras || '').trim()).length,
     [products]
   );
 
