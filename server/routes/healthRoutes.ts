@@ -6,6 +6,12 @@ import type { TenantAuthenticatedRequest } from '../multiempresa/companyAccess.t
 type Sql = NonNullable<ReturnType<typeof getNeonSql>>;
 const text = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 
+export function healthRoleAllows(role: string, method: string): boolean {
+  const canRead = ['owner', 'admin', 'auditor'].includes(role);
+  const canWrite = ['owner', 'admin'].includes(role);
+  return method === 'GET' || method === 'HEAD' ? canRead : canWrite;
+}
+
 function authorizedClinic(req: Request, res: Response, write = false): boolean {
   const tenant = (req as TenantAuthenticatedRequest).tenant;
   if (!tenant || tenant.industryTemplate !== 'health') {
@@ -13,9 +19,7 @@ function authorizedClinic(req: Request, res: Response, write = false): boolean {
     return false;
   }
   const role = tenant.role;
-  const canRead = ['owner', 'admin', 'auditor'].includes(role);
-  const canWrite = ['owner', 'admin'].includes(role);
-  if (!(write ? canWrite : canRead)) {
+  if (!healthRoleAllows(role, write ? 'POST' : 'GET')) {
     res.status(403).json({ error: write ? 'Solo el propietario o administrador puede modificar registros clínicos.' : 'Tu rol no tiene permiso para consultar expedientes clínicos.' });
     return false;
   }
