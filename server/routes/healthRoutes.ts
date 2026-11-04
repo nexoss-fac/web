@@ -1,4 +1,4 @@
-import type { Express, Request, RequestHandler, Response } from 'express';
+import type { Express, Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { getNeonSql, initDatabaseSchema } from '../db.ts';
 import type { TenantAuthenticatedRequest } from '../multiempresa/companyAccess.ts';
@@ -6,10 +6,17 @@ import type { TenantAuthenticatedRequest } from '../multiempresa/companyAccess.t
 type Sql = NonNullable<ReturnType<typeof getNeonSql>>;
 const text = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 
-function authorizedClinic(req: Request, res: Response): boolean {
+function authorizedClinic(req: Request, res: Response, write = false): boolean {
   const tenant = (req as TenantAuthenticatedRequest).tenant;
   if (!tenant || tenant.industryTemplate !== 'health') {
     res.status(403).json({ error: 'El expediente clínico solo está disponible para empresas del rubro Salud.' });
+    return false;
+  }
+  const role = tenant.role;
+  const canRead = ['owner', 'admin', 'auditor'].includes(role);
+  const canWrite = ['owner', 'admin'].includes(role);
+  if (!(write ? canWrite : canRead)) {
+    res.status(403).json({ error: write ? 'Solo el propietario o administrador puede modificar registros clínicos.' : 'Tu rol no tiene permiso para consultar expedientes clínicos.' });
     return false;
   }
   return true;
@@ -19,9 +26,9 @@ function identity(req: Request) {
   return (req as TenantAuthenticatedRequest).tenant?.uid || 'system';
 }
 
-export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): void {
-  const route = (handler: (req: Request, res: Response, sql: Sql) => Promise<unknown>) => [ownerOnly, async (req: Request, res: Response) => {
-    if (!authorizedClinic(req, res)) return;
+export function registerHealthRoutes(app: Express, _ownerOnly?: unknown): void {
+  const route = (handler: (req: Request, res: Response, sql: Sql) => Promise<unknown>) => [async (req: Request, res: Response) => {
+    if (!authorizedClinic(req, res, req.method !== 'GET' && req.method !== 'HEAD')) return;
     const sql = getNeonSql();
     if (!sql) return res.status(503).json({ error: 'La base de datos clínica no está disponible.' });
     try { await initDatabaseSchema(); await handler(req, res, sql); }
@@ -191,6 +198,4 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
       VALUES (${id}, ${patientId}, ${concept}, ${amount}, ${req.body?.currency === 'VES' ? 'VES' : 'USD'}, ${text(req.body?.method, 80)}, ${req.body?.status === 'pending' ? 'pending' : 'paid'}, CASE WHEN ${req.body?.status === 'pending'} THEN NULL ELSE NOW() END, ${text(req.body?.notes, 1000)}, ${identity(req)}) RETURNING *`;
     return res.status(201).json({ payment: rows[0] });
   }));
-    const aestheticHistories = await sql`SELECT * FROM health_aesthetic_histories WHERE patient_id = ${patientId} ORDER BY performed_at DESC LIMIT 200`;
-
 }
