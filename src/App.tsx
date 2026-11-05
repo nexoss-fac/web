@@ -75,7 +75,7 @@ function AppContent() {
   useEffect(() => {
     if ((userRole === 'cajera' || !isCompanyAdmin) && activeTab === 'admin') setActiveTab(companyIndustry === 'health' ? 'health' : 'pos');
     if (!isManufacturingIndustry && activeTab === 'production') setActiveTab('pos');
-    if ((userRole === 'cajera' || companyRole === 'cashier') && activeTab !== 'pos' && activeTab !== 'fiscal') setActiveTab('pos');
+    if (((userRole === 'cajera' && companyRole !== 'doctor') || companyRole === 'cashier') && activeTab !== 'pos' && activeTab !== 'fiscal') setActiveTab('pos');
     if (activeTab === 'health' && companyIndustry === 'health' && !isClinicStaff) setActiveTab('pos');
   }, [userRole, companyRole, isCompanyAdmin, isClinicStaff, isManufacturingIndustry, companyIndustry, activeTab]);
   const handleCompanySelect = (companyId: string) => {
