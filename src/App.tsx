@@ -72,12 +72,9 @@ function AppContent() {
     return () => window.removeEventListener('nexoss:company-profile-updated', syncCompanyName);
   }, []);
   useEffect(() => {
-    // Las empresas del sector Salud deben abrir siempre su espacio clínico,
-    // incluso si el navegador conserva una pestaña empresarial anterior.
-    if (companyIndustry === 'health' && activeTab !== 'health') setActiveTab('health');
     if ((userRole === 'cajera' || !isCompanyAdmin) && activeTab === 'admin') setActiveTab(companyIndustry === 'health' ? 'health' : 'pos');
     if (!isManufacturingIndustry && activeTab === 'production') setActiveTab('pos');
-    if (userRole === 'cajera') setActiveTab('pos');
+    if (userRole === 'cajera' && activeTab !== 'pos' && activeTab !== 'fiscal') setActiveTab('pos');
   }, [userRole, isCompanyAdmin, isManufacturingIndustry, companyIndustry, activeTab]);
   const handleCompanySelect = (companyId: string) => {
     setActiveCompanyId(companyId);
@@ -135,7 +132,7 @@ function AppContent() {
             {activeTab === 'cash' && <CashClosure />}
             {activeTab === 'expenses' && <ExpensesManager isManufacturingIndustry={isManufacturingIndustry} />}
             {activeTab === 'conciliacion' && <BankReconciliationView />}
-            {activeTab === 'contabilidad' && <AccountingManager />}
+            {activeTab === 'contabilidad' && (userRole === 'admin' || (companyIndustry === 'health' && isCompanyAdmin)) && <AccountingManager />}
             {activeTab === 'admin' && isCompanyAdmin && <CompanyAdminPanel companyId={activeCompanyId} />}
             {activeTab === 'firmaContable' && isCompanyAdmin && <AccountingFirmDashboard companyId={activeCompanyId} companyName={selectedCompanyName} onOpenBilling={() => setActiveTab('pos')} onOpenAccounting={() => setActiveTab('contabilidad')} />}
             {activeTab === 'fiscal' && <FiscalFolder key={activeCompanyId} companyId={activeCompanyId} companyName={selectedCompanyName} />}
