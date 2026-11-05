@@ -20,7 +20,14 @@ function identity(req: Request) {
 }
 
 export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): void {
-  const route = (handler: (req: Request, res: Response, sql: Sql) => Promise<unknown>) => [ownerOnly, async (req: Request, res: Response) => {
+  const clinicStaffOnly: RequestHandler = (req, res, next) => {
+    const role = (req as TenantAuthenticatedRequest).tenant?.role;
+    if (!['owner', 'admin', 'doctor'].includes(String(role))) return res.status(403).json({ error: 'Tu rol no permite acceder al expediente clínico.' });
+    next();
+  };
+  const route = (handler: (req: Request, res: Response, sql: Sql) => Promise<unknown>, allowedRoles: string[] = ['owner', 'admin', 'doctor']) => [clinicStaffOnly, async (req: Request, res: Response) => {
+    const role = (req as TenantAuthenticatedRequest).tenant?.role;
+    if (!allowedRoles.includes(String(role))) return res.status(403).json({ error: 'Tu rol no permite esta operación clínica.' });
     if (!authorizedClinic(req, res)) return;
     const sql = getNeonSql();
     if (!sql) return res.status(503).json({ error: 'La base de datos clínica no está disponible.' });
@@ -56,7 +63,7 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
     const rows = await sql`INSERT INTO health_providers (id, full_name, role, specialty, license_number, created_by)
       VALUES (${id}, ${fullName}, ${role}, ${text(req.body?.specialty,180)}, ${text(req.body?.licenseNumber,80)}, ${identity(req)}) RETURNING *`;
     return res.status(201).json({ provider: rows[0] });
-  }));
+  }, ['owner', 'admin']));
 
   app.get('/api/health/appointment-requests', ...route(async (_req, res, sql) => {
     const requests = await sql`SELECT * FROM health_appointment_requests ORDER BY created_at DESC LIMIT 500`;
@@ -98,7 +105,7 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
         VALUES (${id},${identity(req)},${title},${slug},${text(req.body?.summary,3000)},${content},${text(req.body?.coverImage,2000)},${JSON.stringify(Array.isArray(req.body?.images)?req.body.images.slice(0,30):[])},${text(req.body?.videoUrl,1000)},${!!req.body?.published},CASE WHEN ${!!req.body?.published} THEN NOW() ELSE NULL END,${identity(req)}) RETURNING *`;
       return res.status(201).json({ post: rows[0] });
     } catch { return res.status(409).json({ error: 'Ya existe una publicación con ese slug.' }); }
-  }));
+  }, ['owner', 'admin']));
 
   app.post('/api/health/patients/:patientId/aesthetic-histories', ...route(async (req, res, sql) => {
     const patientId=text(req.params.patientId,64), treatment=text(req.body?.treatmentType,180);
@@ -121,7 +128,7 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
     const rows=await sql`INSERT INTO health_payment_installments (id,payment_id,amount,method,reference,notes,created_by)
       VALUES (${id},${paymentId},${amount},${text(req.body?.method,80)},${text(req.body?.reference,120)},${text(req.body?.notes,1000)},${identity(req)}) RETURNING *`;
     return res.status(201).json({ installment: rows[0], balance: Math.max(0,outstanding-amount) });
-  }));
+  }, ['owner', 'admin']));
 
   app.get('/api/health/patients/:patientId/record', ...route(async (req, res, sql) => {
     const patientId = text(req.params.patientId, 64);
@@ -133,7 +140,9 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
       sql`SELECT * FROM health_prescriptions WHERE patient_id = ${patientId} ORDER BY issued_at DESC LIMIT 200`,
       sql`SELECT * FROM health_exam_orders WHERE patient_id = ${patientId} ORDER BY ordered_at DESC LIMIT 200`,
       sql`SELECT * FROM health_patient_reports WHERE patient_id = ${patientId} ORDER BY issued_at DESC LIMIT 200`,
-      sql`SELECT * FROM health_payments WHERE patient_id = ${patientId} ORDER BY created_at DESC LIMIT 200`,
+      ['owner', 'admin', 'accountant'].includes(String((req as TenantAuthenticatedRequest).tenant?.role))
+        ? sql`SELECT * FROM health_payments WHERE patient_id = ${patientId} ORDER BY created_at DESC LIMIT 200`
+        : Promise.resolve([]),
       sql`SELECT * FROM health_aesthetic_histories WHERE patient_id = ${patientId} ORDER BY performed_at DESC LIMIT 200`,
     ]);
     return res.json({ patient: found[0], appointments, consultations, prescriptions, examOrders, reports, payments, aestheticHistories });
@@ -190,7 +199,7 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
     const rows = await sql`INSERT INTO health_payments (id, patient_id, concept, amount, currency, method, status, paid_at, notes, created_by)
       VALUES (${id}, ${patientId}, ${concept}, ${amount}, ${req.body?.currency === 'VES' ? 'VES' : 'USD'}, ${text(req.body?.method, 80)}, ${req.body?.status === 'pending' ? 'pending' : 'paid'}, CASE WHEN ${req.body?.status === 'pending'} THEN NULL ELSE NOW() END, ${text(req.body?.notes, 1000)}, ${identity(req)}) RETURNING *`;
     return res.status(201).json({ payment: rows[0] });
-  }));
+  }, ['owner', 'admin']));
 
 
 }
