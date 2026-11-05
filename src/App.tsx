@@ -49,6 +49,7 @@ function AppContent() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { userRole, currentUser, isAuthLoading, products, criticalStockProducts, logoutUserAction } = useStore();
   const isCompanyAdmin = companyRole === 'owner' || companyRole === 'admin';
+  const isClinicStaff = isCompanyAdmin || companyRole === 'doctor';
   // Producción y trazabilidad solo corresponden a empresas que transforman/fabrican productos.
   const isManufacturingIndustry = companyIndustry === 'manufacturing' || companyIndustry === 'food_manufacturing';
   useEffect(() => {
@@ -74,8 +75,9 @@ function AppContent() {
   useEffect(() => {
     if ((userRole === 'cajera' || !isCompanyAdmin) && activeTab === 'admin') setActiveTab(companyIndustry === 'health' ? 'health' : 'pos');
     if (!isManufacturingIndustry && activeTab === 'production') setActiveTab('pos');
-    if (userRole === 'cajera' && activeTab !== 'pos' && activeTab !== 'fiscal') setActiveTab('pos');
-  }, [userRole, isCompanyAdmin, isManufacturingIndustry, companyIndustry, activeTab]);
+    if ((userRole === 'cajera' || companyRole === 'cashier') && activeTab !== 'pos' && activeTab !== 'fiscal') setActiveTab('pos');
+    if (activeTab === 'health' && companyIndustry === 'health' && !isClinicStaff) setActiveTab('pos');
+  }, [userRole, companyRole, isCompanyAdmin, isClinicStaff, isManufacturingIndustry, companyIndustry, activeTab]);
   const handleCompanySelect = (companyId: string) => {
     setActiveCompanyId(companyId);
     setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
@@ -102,6 +104,7 @@ function AppContent() {
         setMobileOpen={setMobileOpen}
         isCompanyAdmin={isCompanyAdmin}
         isHealthIndustry={companyIndustry === 'health'}
+        companyRole={companyRole}
         isManufacturingIndustry={isManufacturingIndustry}
       />
 
@@ -136,7 +139,7 @@ function AppContent() {
             {activeTab === 'admin' && isCompanyAdmin && <CompanyAdminPanel companyId={activeCompanyId} />}
             {activeTab === 'firmaContable' && isCompanyAdmin && <AccountingFirmDashboard companyId={activeCompanyId} companyName={selectedCompanyName} onOpenBilling={() => setActiveTab('pos')} onOpenAccounting={() => setActiveTab('contabilidad')} />}
             {activeTab === 'fiscal' && <FiscalFolder key={activeCompanyId} companyId={activeCompanyId} companyName={selectedCompanyName} />}
-            {activeTab === 'health' && companyIndustry === 'health' && isCompanyAdmin && <HealthWorkspace key={activeCompanyId} />}
+            {activeTab === 'health' && companyIndustry === 'health' && isClinicStaff && <HealthWorkspace key={activeCompanyId} canManagePayments={isCompanyAdmin} canManageInventory={isCompanyAdmin} />}
           </Suspense>
         </main>
 
