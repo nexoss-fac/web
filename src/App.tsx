@@ -135,7 +135,7 @@ function AppContent() {
             {activeTab === 'cash' && <CashClosure />}
             {activeTab === 'expenses' && <ExpensesManager isManufacturingIndustry={isManufacturingIndustry} />}
             {activeTab === 'conciliacion' && <BankReconciliationView />}
-            {activeTab === 'contabilidad' && (userRole === 'admin' || (companyIndustry === 'health' && isCompanyAdmin)) && <AccountingManager />}
+            {activeTab === 'contabilidad' && (companyIndustry === 'health' ? isCompanyAdmin : userRole === 'admin') && <AccountingManager />}
             {activeTab === 'admin' && isCompanyAdmin && <CompanyAdminPanel companyId={activeCompanyId} />}
             {activeTab === 'firmaContable' && isCompanyAdmin && <AccountingFirmDashboard companyId={activeCompanyId} companyName={selectedCompanyName} onOpenBilling={() => setActiveTab('pos')} onOpenAccounting={() => setActiveTab('contabilidad')} />}
             {activeTab === 'fiscal' && <FiscalFolder key={activeCompanyId} companyId={activeCompanyId} companyName={selectedCompanyName} />}
