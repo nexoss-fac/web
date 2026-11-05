@@ -119,7 +119,7 @@ export const Sidebar: React.FC<{
           <div
             className="flex items-center space-x-3 cursor-pointer group"
             onClick={() => {
-              setActiveTab('pos');
+              setActiveTab(isHealthIndustry ? 'health' : 'pos');
               setMobileOpen(false);
             }}
           >
@@ -220,7 +220,7 @@ export const Sidebar: React.FC<{
               <span>Manufactura y trazabilidad</span>
             </button>
           )}
-          {isCompanyAdmin && <button
+          {isCompanyAdmin && !isHealthIndustry && <button
             id="sidebar-nav-firma-contable"
             onClick={() => { setActiveTab('firmaContable'); setMobileOpen(false); }}
             className={`w-full p-2.5 rounded-md flex items-center gap-3 text-xs font-medium cursor-pointer transition-colors ${activeTab === 'firmaContable' ? 'bg-slate-800 text-white font-semibold shadow-xs' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
@@ -353,6 +353,8 @@ export const Header: React.FC<{
     switch (activeTab) {
       case 'pos':
         return 'Ventas';
+      case 'health':
+        return 'INTERMED · Salud y bienestar';
       case 'inventory':
         return 'Compras';
       case 'layaways':
