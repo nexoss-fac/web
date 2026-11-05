@@ -2,6 +2,7 @@
 
 - `control-plane/001_control_plane.sql`: solo en una base de control nueva y vacía; incluye empresas, usuarios, membresías, invitaciones, planes, suscripciones, conexiones tenant y auditoría.
 - `control-plane/002_current_platform_model.sql`: migración aditiva para alinear una base que ya ejecutó `001` con los campos de empresa, vigencia de invitación y uso actuales.
+- `control-plane/022_health_clinical_roles.sql`: habilita el rol `doctor` en membresías e invitaciones. Aplicar manualmente solo después de confirmar la base central dedicada y contar con backup.
 - `tenant/001_fiscal_workspace.sql`: solo en una base tenant de prueba nueva y vacía.
 - Nunca ejecutar ambas migraciones en la base actual de MAKD.
 - Estas migraciones no migran el inventario, ventas, apartados ni contabilidad existentes.
