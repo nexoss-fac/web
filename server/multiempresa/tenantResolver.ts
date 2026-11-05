@@ -5,7 +5,7 @@ import type { IndustryTemplate } from '../../src/domain/companyIndustries.ts';
  * Este módulo NO está conectado todavía a las rutas heredadas.
  * La identidad debe venir de un verificador de tokens confiable en el servidor.
  */
-export type TenantRole = 'owner' | 'admin' | 'accountant' | 'auditor' | 'supervisor' | 'cashier';
+export type TenantRole = 'owner' | 'admin' | 'accountant' | 'auditor' | 'supervisor' | 'cashier' | 'doctor';
 
 export interface VerifiedIdentity {
   provider: string;
