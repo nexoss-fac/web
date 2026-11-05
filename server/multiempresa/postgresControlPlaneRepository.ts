@@ -644,7 +644,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
   async createInvitation(companyId: string, email: string, role: Exclude<MembershipRole, 'owner'>, identity: { uid: string }): Promise<{ id: string; expiresAt: string } | { error: string } | null> {
     return this.transaction(async (client) => {
       const authorized = await client.query(
-        `SELECT u.id AS user_id, p.max_users
+        `SELECT u.id AS user_id, p.max_users, c.workspace
          FROM platform_users u
          JOIN company_memberships m ON m.user_id = u.id AND m.company_id = $2
            AND m.status = 'active' AND m.role IN ('owner', 'admin')
@@ -658,6 +658,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
       );
       const owner = authorized.rows[0];
       if (!owner) return null;
+      if (role === 'doctor' && owner.workspace?.industryTemplate !== 'health') return { error: 'El rol médico solo puede asignarse a empresas del sector Salud.' };
       await client.query(
         `UPDATE company_invitations SET status = 'expired'
          WHERE company_id = $1 AND status = 'pending' AND expires_at <= NOW()`,
@@ -716,7 +717,9 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     return this.transaction(async (client) => {
       const result = await client.query(
         `UPDATE company_memberships m SET role = $3, updated_at = NOW()
-         WHERE m.company_id = $1 AND m.user_id = $2 AND m.status = 'active' AND m.role <> 'owner'
+         FROM platform_companies c
+         WHERE c.id = m.company_id AND m.company_id = $1 AND m.user_id = $2 AND m.status = 'active' AND m.role <> 'owner'
+           AND ($3 <> 'doctor' OR c.workspace->>'industryTemplate' = 'health')
            AND EXISTS (
              SELECT 1 FROM platform_users actor
              JOIN company_memberships admin_membership ON admin_membership.user_id = actor.id
