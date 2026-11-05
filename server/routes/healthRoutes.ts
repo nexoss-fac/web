@@ -191,6 +191,6 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
       VALUES (${id}, ${patientId}, ${concept}, ${amount}, ${req.body?.currency === 'VES' ? 'VES' : 'USD'}, ${text(req.body?.method, 80)}, ${req.body?.status === 'pending' ? 'pending' : 'paid'}, CASE WHEN ${req.body?.status === 'pending'} THEN NULL ELSE NOW() END, ${text(req.body?.notes, 1000)}, ${identity(req)}) RETURNING *`;
     return res.status(201).json({ payment: rows[0] });
   }));
-    const aestheticHistories = await sql`SELECT * FROM health_aesthetic_histories WHERE patient_id = ${patientId} ORDER BY performed_at DESC LIMIT 200`;
+
 
 }
