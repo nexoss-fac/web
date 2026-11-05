@@ -70,6 +70,12 @@ const ROLE_POLICY: Record<MembershipRole, RolePolicy> = {
     readAny: true,
     writeExcept: /^\/(?:db(?:\/|$)|catalog(?:\/|$)|store\/sync$|accounting(?:\/|$))/,
   },
+  doctor: {
+    allow: [
+      { methods: 'read', route: /^\\/health\\/(?:patients|providers|appointment-requests|blog)(?:\\/|$)/ },
+      { methods: 'write', route: /^\\/health\\/(?:patients|appointment-requests)(?:\\/|$)/ },
+    ],
+  },
   cashier: {
     allow: [
       { methods: 'read', route: /^\/pos\/(?:state|version)$/ },
