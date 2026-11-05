@@ -72,10 +72,13 @@ function AppContent() {
     return () => window.removeEventListener('nexoss:company-profile-updated', syncCompanyName);
   }, []);
   useEffect(() => {
-    if ((userRole === 'cajera' || !isCompanyAdmin) && activeTab === 'admin') setActiveTab('pos');
+    // Las empresas del sector Salud deben abrir siempre su espacio clínico,
+    // incluso si el navegador conserva una pestaña empresarial anterior.
+    if (companyIndustry === 'health' && activeTab !== 'health') setActiveTab('health');
+    if ((userRole === 'cajera' || !isCompanyAdmin) && activeTab === 'admin') setActiveTab(companyIndustry === 'health' ? 'health' : 'pos');
     if (!isManufacturingIndustry && activeTab === 'production') setActiveTab('pos');
     if (userRole === 'cajera') setActiveTab('pos');
-  }, [userRole, isCompanyAdmin, isManufacturingIndustry, activeTab]);
+  }, [userRole, isCompanyAdmin, isManufacturingIndustry, companyIndustry, activeTab]);
   const handleCompanySelect = (companyId: string) => {
     setActiveCompanyId(companyId);
     setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
