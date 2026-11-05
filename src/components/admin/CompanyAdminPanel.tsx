@@ -23,7 +23,9 @@ const roleOptions = [
   { value: 'auditor', label: 'Auditor' },
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'cashier', label: 'Cajera / Ventas' },
+  { value: 'doctor', label: 'Médico · acceso clínico' },
 ];
+
 
 const industryIcons: Record<IndustryTemplate, React.ComponentType<{ className?: string }>> = {
   food_manufacturing: Milk,
@@ -100,6 +102,8 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  const availableRoleOptions = profile.industryTemplate === 'health' ? roleOptions : roleOptions.filter((role) => role.value !== 'doctor');
 
   const activeIndustry = useMemo(
     () => industryOptions.find((item) => item.value === profile.industryTemplate) || industryOptions.find((item) => item.value === 'other')!,
@@ -407,7 +411,7 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
             <label className="space-y-1 text-xs font-semibold text-slate-600">
               Rol asignado
               <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">
-                {roleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                {availableRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
               </select>
             </label>
             <button disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"><Plus className="h-4 w-4" /> Invitar</button>
@@ -440,7 +444,7 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
             <div className="divide-y divide-slate-100">
               {invitations.map((invitation) => (
                 <div key={invitation.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div><p className="text-sm font-semibold text-slate-900">{invitation.email}</p><p className="text-xs text-slate-500">{roleOptions.find((role) => role.value === invitation.role)?.label || invitation.role} · vence {new Date(invitation.expiresAt).toLocaleDateString()}</p></div>
+                  <div><p className="text-sm font-semibold text-slate-900">{invitation.email}</p><p className="text-xs text-slate-500">{availableRoleOptions.find((role) => role.value === invitation.role)?.label || invitation.role} · vence {new Date(invitation.expiresAt).toLocaleDateString()}</p></div>
                   <button type="button" disabled={busy} onClick={() => void revokeInvitation(invitation)} className="inline-flex items-center gap-1 self-start rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"><X className="h-3.5 w-3.5" /> Revocar</button>
                 </div>
               ))}
