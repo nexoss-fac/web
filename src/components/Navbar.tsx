@@ -91,7 +91,14 @@ export const Sidebar: React.FC<{
       ],
     },
   ];
-  const healthNavGroups = [{ id: 'health', label: 'Clínica', icon: HeartPulse, items: [{ id: 'health' as const, label: 'Salud', subtitle: 'Pacientes y atención', icon: HeartPulse, count: null }] }];
+  const healthNavGroups = [
+    { id: 'health', label: 'Clínica', icon: HeartPulse, items: [{ id: 'health' as const, label: 'Salud', subtitle: 'Pacientes y atención', icon: HeartPulse, count: null }] },
+    { id: 'management', label: 'Gestión empresarial', icon: Settings, items: [
+      { id: 'admin' as const, label: 'Administrar empresa', subtitle: 'Invitar médico y cajera', icon: Settings, count: null },
+      { id: 'contabilidad' as const, label: 'Contabilidad', icon: BookOpen, count: null },
+      { id: 'fiscal' as const, label: 'Cartelera fiscal', subtitle: 'Recaudos y documentos', icon: FolderOpen, count: null },
+    ] },
+  ];
   const visibleNavGroups = isHealthIndustry ? healthNavGroups : userRole === 'cajera'
     ? navGroups.slice(0, 1).map((group) => ({ ...group, items: group.items.filter((item) => item.id === 'pos') }))
     : navGroups;
@@ -228,7 +235,7 @@ export const Sidebar: React.FC<{
             <Building2 className={`w-4 h-4 ${activeTab === 'firmaContable' ? 'text-indigo-400' : 'text-slate-400'}`} />
             <span>Firma contable</span>
           </button>}
-          {userRole === 'admin' && <button
+          {(userRole === 'admin' || (isHealthIndustry && isCompanyAdmin)) && !isHealthIndustry && <button
             id="sidebar-nav-contabilidad"
             onClick={() => {
               setActiveTab('contabilidad');
@@ -243,7 +250,7 @@ export const Sidebar: React.FC<{
             <BookOpen className={`w-4 h-4 ${activeTab === 'contabilidad' ? 'text-indigo-400' : 'text-slate-400'}`} />
             <span>Contabilidad</span>
           </button>}
-          {isCompanyAdmin && (
+          {isCompanyAdmin && !isHealthIndustry && (
             <button
               id="sidebar-nav-admin"
               onClick={() => {
