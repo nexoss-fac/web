@@ -34,10 +34,11 @@ let rememberedDevice: BleDevice | null = null;
 
 async function getMxw01Device(bluetooth: BluetoothApi): Promise<BleDevice> {
   // Reutiliza primero el dispositivo autorizado durante esta sesión.
-  if (rememberedDevice?.gatt) return rememberedDevice;
+  if (rememberedDevice?.gatt?.connected) return rememberedDevice;
 
   // Chromium permite recuperar dispositivos previamente autorizados sin abrir
-  // el selector Bluetooth en cada impresión.
+  // el selector Bluetooth en cada impresión. Se consulta de nuevo cuando la
+  // conexión anterior se perdió para no reutilizar referencias obsoletas.
   if (bluetooth.getDevices) {
     const devices = await bluetooth.getDevices();
     const remembered = devices.find((device) => device.name?.startsWith('MXW01'));
@@ -47,7 +48,9 @@ async function getMxw01Device(bluetooth: BluetoothApi): Promise<BleDevice> {
     }
   }
 
-  // Solo la primera vez (o si se revocó el permiso) se solicita selección manual.
+  rememberedDevice = null;
+  // Solo la primera vez (o si el permiso/dispositivo ya no está disponible)
+  // se solicita selección manual desde el gesto del usuario.
   const selected = await bluetooth.requestDevice({
     filters: [{ namePrefix: 'MXW01' }],
     optionalServices: [SERVICE],
@@ -138,14 +141,13 @@ export async function printCanvasToMxw01(canvas: HTMLCanvasElement, copies = 1):
   const safeCopies = Math.max(1, Math.min(100, Math.floor(copies)));
   if (raster.lines > 0xffff) throw new Error('La etiqueta supera la longitud admitida por la impresora.');
 
-  try {
-    // Estado e intensidad de impresión. El firmware no documenta oficialmente los ACK.
+  // Estado e intensidad de impresión. El firmware no documenta oficialmente los ACK.
     await writeBle(control, controlFrame(0xa2, new Uint8Array([0x5d])));
     await writeBle(control, controlFrame(0xa1, new Uint8Array([0x00])));
     await wait(250);
 
     const startPayload = new Uint8Array([raster.lines & 0xff, (raster.lines >> 8) & 0xff, 0x30, 0x00]);
-    for (let copy = 0; copy < safeCopies; copy += 1) {
+  for (let copy = 0; copy < safeCopies; copy += 1) {
       await writeBle(control, controlFrame(0xa9, startPayload));
       await wait(250);
       for (let offset = 0; offset < raster.bytes.length; offset += CHUNK_SIZE) {
@@ -155,8 +157,8 @@ export async function printCanvasToMxw01(canvas: HTMLCanvasElement, copies = 1):
       }
       await writeBle(control, controlFrame(0xad, new Uint8Array([0x00])));
       await wait(700);
-    }
-  } finally {
-    if (server.connected) server.disconnect();
   }
+  // No cerrar GATT al terminar: mantener la sesión disponible para la
+  // siguiente etiqueta. Chromium gestionará la desconexión si el dispositivo
+  // se apaga o sale de alcance; getMxw01Device volverá a resolverlo al imprimir.
 }
