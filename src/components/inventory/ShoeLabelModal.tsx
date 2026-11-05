@@ -122,10 +122,10 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
     if (!product) return '';
     return renderLabelToCanvas(product, {
       format: labelFormat, showCost, showPrice, showBsPrice, showBarcode,
-      showStoreAddress, exchangeRate, availableSizes, showAvailableSizes, companyName: companyBrand.name, companyLogo: companyBrand.logo,
+      showStoreAddress, exchangeRate, availableSizes, showAvailableSizes,
       customWidthMm, customHeightMm, companyName: companyBrand.name, companyLogo: companyBrand.logo,
     }).toDataURL('image/png');
-  }, [product, labelFormat, showCost, showPrice, showBsPrice, showBarcode, showStoreAddress, exchangeRate, availableSizes, showAvailableSizes, companyName: companyBrand.name, companyLogo: companyBrand.logo, customWidthMm, customHeightMm, companyBrand.name, companyBrand.logo]);
+  }, [product, labelFormat, showCost, showPrice, showBsPrice, showBarcode, showStoreAddress, exchangeRate, availableSizes, showAvailableSizes, customWidthMm, customHeightMm, companyBrand.name, companyBrand.logo]);
 
   if (!isOpen || !product) return null;
 
@@ -138,7 +138,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
     try {
       const canvas = renderLabelToCanvas(product, {
         format: labelFormat, showCost, showPrice, showBsPrice, showBarcode,
-        showStoreAddress, exchangeRate, availableSizes, showAvailableSizes, companyName: companyBrand.name, companyLogo: companyBrand.logo,
+        showStoreAddress, exchangeRate, availableSizes, showAvailableSizes,
         customWidthMm, customHeightMm, companyName: companyBrand.name, companyLogo: companyBrand.logo,
       });
       const dataUrl = canvas.toDataURL('image/png');
