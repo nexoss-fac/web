@@ -72,8 +72,8 @@ const ROLE_POLICY: Record<MembershipRole, RolePolicy> = {
   },
   doctor: {
     allow: [
-      { methods: 'read', route: /^\\/health\\/(?:patients|providers|appointment-requests|blog)(?:\\/|$)/ },
-      { methods: 'write', route: /^\\/health\\/(?:patients|appointment-requests)(?:\\/|$)/ },
+      { methods: 'read', route: /^\/health\/(?:patients|providers|appointment-requests|blog)(?:\\/|$)/ },
+      { methods: 'write', route: /^\/health\/(?:patients|appointment-requests)(?:\\/|$)/ },
     ],
   },
   cashier: {
