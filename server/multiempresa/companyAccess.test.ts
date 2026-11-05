@@ -113,3 +113,37 @@ test('las funciones de calzado se limitan en servidor al giro footwear', () => {
   assert.equal(run('admin', 'POST', '/api/ai/analyze-shoe', {}, 'services').status, 403);
   assert.equal(run('owner', 'POST', '/api/ai/analyze-shoe', {}, 'footwear').nextCalled, true);
 });
+
+
+test('médico solo puede operar el expediente clínico y no puede cobrar ni acceder a contabilidad', () => {
+  for (const [method, url] of [
+    ['GET', '/api/health/patients'],
+    ['POST', '/api/health/patients'],
+    ['GET', '/api/health/patients/123/record'],
+    ['POST', '/api/health/patients/123/consultations'],
+    ['POST', '/api/health/patients/123/prescriptions'],
+    ['POST', '/api/health/patients/123/exam-orders'],
+    ['POST', '/api/health/patients/123/reports'],
+    ['GET', '/api/health/providers'],
+  ]) {
+    assert.equal(run('doctor', method, url, {}, 'health').nextCalled, true, `${method} ${url}`);
+  }
+  for (const [method, url] of [
+    ['POST', '/api/health/patients/123/payments'],
+    ['POST', '/api/health/payments/123/installments'],
+    ['POST', '/api/health/providers'],
+    ['POST', '/api/health/blog'],
+    ['GET', '/api/accounting'],
+    ['POST', '/api/sales'],
+    ['GET', '/api/expenses'],
+    ['GET', '/api/company/profile'],
+  ]) {
+    const result = run('doctor', method, url, {}, 'health');
+    assert.equal(result.status, 403, `${method} ${url}`);
+    assert.equal(result.nextCalled, false, `${method} ${url}`);
+  }
+});
+
+test('médico no puede acceder a funciones clínicas de otra industria', () => {
+  assert.equal(run('doctor', 'GET', '/api/health/patients', {}, 'commerce').status, 403);
+});
