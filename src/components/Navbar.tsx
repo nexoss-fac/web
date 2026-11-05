@@ -55,8 +55,9 @@ export const Sidebar: React.FC<{
   setMobileOpen: (open: boolean) => void;
   isCompanyAdmin?: boolean;
   isHealthIndustry?: boolean;
+  companyRole?: string;
   isManufacturingIndustry?: boolean;
-}> = ({ activeTab, setActiveTab, mobileOpen, setMobileOpen, isCompanyAdmin = false, isHealthIndustry = false, isManufacturingIndustry = false }) => {
+}> = ({ activeTab, setActiveTab, mobileOpen, setMobileOpen, isCompanyAdmin = false, isHealthIndustry = false, companyRole = '', isManufacturingIndustry = false }) => {
   const { criticalStockProducts, userRole, layaways, logoutSession } = useStore();
   const activeLayawaysCount = layaways ? layaways.filter((l) => l.estado === 'activo').length : 0;
   const navGroups = [
@@ -99,7 +100,11 @@ export const Sidebar: React.FC<{
       { id: 'fiscal' as const, label: 'Cartelera fiscal', subtitle: 'Recaudos y documentos', icon: FolderOpen, count: null },
     ] },
   ];
-  const visibleNavGroups = isHealthIndustry ? healthNavGroups : userRole === 'cajera'
+  const visibleNavGroups = isHealthIndustry && companyRole === 'doctor'
+    ? healthNavGroups.slice(0, 1)
+    : isHealthIndustry && companyRole === 'cashier'
+      ? navGroups.slice(0, 1).map((group) => ({ ...group, items: group.items.filter((item) => item.id === 'pos') }))
+      : isHealthIndustry ? healthNavGroups : userRole === 'cajera'
     ? navGroups.slice(0, 1).map((group) => ({ ...group, items: group.items.filter((item) => item.id === 'pos') }))
     : navGroups;
   const activeGroup = visibleNavGroups.find((group) => group.items.some((item) => item.id === activeTab))?.id;
