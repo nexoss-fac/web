@@ -50,7 +50,7 @@ function mapAudit(row: QueryResultRow): AuditEvent {
 }
 
 function isRole(value: unknown): value is MembershipRole {
-  return ['owner', 'admin', 'accountant', 'auditor', 'supervisor', 'cashier'].includes(String(value));
+  return ['owner', 'admin', 'accountant', 'auditor', 'supervisor', 'cashier', 'doctor'].includes(String(value));
 }
 
 function safeFields(data: unknown, keys: string[]): Record<string, unknown> {
