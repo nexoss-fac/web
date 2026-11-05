@@ -171,6 +171,7 @@ export async function printCanvasToMxw01(canvas: HTMLCanvasElement, copies = 1, 
       ensureNotCancelled();
       await writeBle(control, controlFrame(0xad, new Uint8Array([0x00])));
       await wait(700);
+      ensureNotCancelled();
       onProgress?.(copy + 1, safeCopies);
     }
   } catch (error) {
