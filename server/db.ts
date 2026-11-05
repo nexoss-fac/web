@@ -684,6 +684,7 @@ export async function initDatabaseSchema() {
 
 
 
+      if (tenant?.industryTemplate === 'health') {
       // Extensión compatible y no destructiva del expediente Intermed.
       await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS national_id VARCHAR(40)`;
       await sql`ALTER TABLE health_patients ADD COLUMN IF NOT EXISTS occupation VARCHAR(180)`;
@@ -741,6 +742,8 @@ export async function initDatabaseSchema() {
       await sql`ALTER TABLE health_payments ADD COLUMN IF NOT EXISTS exchange_rate NUMERIC(18,6)`;
       await sql`ALTER TABLE health_payments ADD COLUMN IF NOT EXISTS line_items JSONB NOT NULL DEFAULT '[]'::jsonb`;
       await sql`CREATE UNIQUE INDEX IF NOT EXISTS health_payments_invoice_uidx ON health_payments (invoice_number) WHERE invoice_number IS NOT NULL`;
+    }
+
     initializedTenantSchemas.add(schemaKey);
     logger.info('✅ Esquema Neon PostgreSQL verificado e inicializado correctamente.');
   } catch (error) {
