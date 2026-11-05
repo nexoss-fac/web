@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   Printer,
@@ -35,6 +35,35 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
   allProducts = [],
 }) => {
   const [copies, setCopies] = useState<number>(1);
+  const [companyBrand, setCompanyBrand] = useState<{ name: string; logo: HTMLImageElement | null }>({ name: '', logo: null });
+
+  // Cargar la identidad visual de la empresa activa desde su perfil administrativo.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const cachedName = localStorage.getItem('nexoss_active_company_name') || '';
+    setCompanyBrand({ name: cachedName, logo: null });
+    fetch('/api/company/profile')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('No se pudo cargar el perfil de empresa.');
+        const data = await response.json();
+        const profile = data?.company || {};
+        const name = String(profile.tradeName || profile.legalName || cachedName || '');
+        const logoUrl = typeof profile.logoUrl === 'string' ? profile.logoUrl : '';
+        if (!logoUrl) {
+          if (!cancelled) setCompanyBrand({ name, logo: null });
+          return;
+        }
+        const image = new Image();
+        image.onload = () => { if (!cancelled) setCompanyBrand({ name, logo: image }); };
+        image.onerror = () => { if (!cancelled) setCompanyBrand({ name, logo: null }); };
+        image.src = logoUrl;
+      })
+      .catch(() => {
+        if (!cancelled) setCompanyBrand((current) => ({ ...current, name: current.name || cachedName }));
+      });
+    return () => { cancelled = true; };
+  }, [isOpen]);
   const [showCost, setShowCost] = useState<boolean>(true);
   const [showPrice, setShowPrice] = useState<boolean>(true);
   const [showBsPrice, setShowBsPrice] = useState<boolean>(true);
@@ -93,10 +122,10 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
     if (!product) return '';
     return renderLabelToCanvas(product, {
       format: labelFormat, showCost, showPrice, showBsPrice, showBarcode,
-      showStoreAddress, exchangeRate, availableSizes, showAvailableSizes,
-      customWidthMm, customHeightMm,
+      showStoreAddress, exchangeRate, availableSizes, showAvailableSizes, companyName: companyBrand.name, companyLogo: companyBrand.logo,
+      customWidthMm, customHeightMm, companyName: companyBrand.name, companyLogo: companyBrand.logo,
     }).toDataURL('image/png');
-  }, [product, labelFormat, showCost, showPrice, showBsPrice, showBarcode, showStoreAddress, exchangeRate, availableSizes, showAvailableSizes, customWidthMm, customHeightMm]);
+  }, [product, labelFormat, showCost, showPrice, showBsPrice, showBarcode, showStoreAddress, exchangeRate, availableSizes, showAvailableSizes, companyName: companyBrand.name, companyLogo: companyBrand.logo, customWidthMm, customHeightMm, companyBrand.name, companyBrand.logo]);
 
   if (!isOpen || !product) return null;
 
@@ -109,8 +138,8 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
     try {
       const canvas = renderLabelToCanvas(product, {
         format: labelFormat, showCost, showPrice, showBsPrice, showBarcode,
-        showStoreAddress, exchangeRate, availableSizes, showAvailableSizes,
-        customWidthMm, customHeightMm,
+        showStoreAddress, exchangeRate, availableSizes, showAvailableSizes, companyName: companyBrand.name, companyLogo: companyBrand.logo,
+        customWidthMm, customHeightMm, companyName: companyBrand.name, companyLogo: companyBrand.logo,
       });
       const dataUrl = canvas.toDataURL('image/png');
       const dimensions: Record<LabelFormat, [number, number]> = {
@@ -158,6 +187,8 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
         showAvailableSizes,
         customWidthMm,
         customHeightMm,
+        companyName: companyBrand.name,
+        companyLogo: companyBrand.logo,
       });
       await printCanvasToMxw01(canvas, copies);
       setPrintMessage('Trabajo enviado a la MXW01. Verifica la etiqueta impresa.');
@@ -186,6 +217,8 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
         showAvailableSizes,
         customWidthMm,
         customHeightMm,
+        companyName: companyBrand.name,
+        companyLogo: companyBrand.logo,
       },
       format
     );
