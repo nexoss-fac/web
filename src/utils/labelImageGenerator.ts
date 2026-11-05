@@ -159,85 +159,89 @@ export function renderLabelToCanvas(
       (options.customHeightMm || 25) <= 30;
 
   if (isCompactFormat) {
-    // Etiqueta 40×25 mm: composición de alto impacto, usando prácticamente
-    // toda la superficie imprimible para talla, código de barras y precio USD.
+    // Composición de alto impacto basada en la referencia aprobada:
+    // cabecera con marca/talla, nombre, código y precio ocupando todo el ancho.
     const scale = Math.min(width / 480, height / 300);
     ctx.save();
     ctx.scale(scale, scale);
     const logicalWidth = width / scale;
-    const logicalHeight = height / scale;
-    const margin = 12;
+    const margin = 10;
     const centerX = logicalWidth / 2;
     const companyName = (options.companyName || 'EMPRESA').trim().toUpperCase();
 
-    // Cabecera compacta: logo y nombre comercial a la izquierda, talla dominante a la derecha.
+    // Cabecera: logo + nombre de la empresa, con talla grande a la derecha.
+    const badgeWidth = 145;
+    const badgeHeight = 72;
+    const badgeX = logicalWidth - margin - badgeWidth;
     if (options.companyLogo && options.companyLogo.complete && options.companyLogo.naturalWidth > 0) {
       const logo = options.companyLogo;
-      const logoScale = Math.min(72 / logo.naturalWidth, 42 / logo.naturalHeight);
+      const logoScale = Math.min(64 / logo.naturalWidth, 54 / logo.naturalHeight);
       const logoWidth = logo.naturalWidth * logoScale;
       const logoHeight = logo.naturalHeight * logoScale;
-      ctx.drawImage(logo, margin, 7, logoWidth, logoHeight);
-      ctx.fillStyle = '#0f172a';
+      ctx.drawImage(logo, margin, 8, logoWidth, logoHeight);
+      ctx.fillStyle = '#050505';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.font = '900 19px sans-serif';
-      ctx.fillText(fitText(ctx, companyName, 255 - logoWidth), margin + logoWidth + 8, 27);
+      ctx.font = '900 30px sans-serif';
+      ctx.fillText(fitText(ctx, companyName, badgeX - margin - logoWidth - 12), margin + logoWidth + 8, 34);
     } else {
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = '#050505';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.font = '900 21px sans-serif';
-      ctx.fillText(fitText(ctx, companyName, 260), margin, 27);
+      ctx.font = '900 38px sans-serif';
+      ctx.fillText(fitText(ctx, companyName, badgeX - margin - 8), margin, 40);
     }
 
-    const badgeWidth = 105;
-    const badgeHeight = 58;
-    const badgeX = logicalWidth - margin - badgeWidth;
-    ctx.fillStyle = '#090d16';
+    ctx.fillStyle = '#050505';
     ctx.beginPath();
-    drawRoundedRect(ctx, badgeX, 7, badgeWidth, badgeHeight, 6);
+    drawRoundedRect(ctx, badgeX, 8, badgeWidth, badgeHeight, 10);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('TALLA', badgeX + badgeWidth / 2, 20);
-    ctx.font = '900 31px monospace';
-    ctx.fillText(fitText(ctx, product.talla || '--', badgeWidth - 8), badgeX + badgeWidth / 2, 43);
+    ctx.font = '900 18px sans-serif';
+    ctx.fillText('TALLA', badgeX + badgeWidth / 2, 27);
+    ctx.font = '900 43px sans-serif';
+    ctx.fillText(fitText(ctx, product.talla || '--', badgeWidth - 10), badgeX + badgeWidth / 2, 53);
 
-    // Nombre del producto en una sola línea grande; detalles secundarios se omiten
-    // para reservar el área central al código y evitar texto microscópico.
-    ctx.fillStyle = '#0f172a';
+    // Nombre del producto, destacado debajo de la cabecera.
+    ctx.fillStyle = '#050505';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.font = '900 20px sans-serif';
-    ctx.fillText(fitText(ctx, product.nombre.toUpperCase(), logicalWidth - margin * 2), margin, 82);
+    ctx.font = '900 27px sans-serif';
+    ctx.fillText(fitText(ctx, product.nombre.toUpperCase(), logicalWidth - margin * 2), margin, 98);
 
+    // Código de barras ancho, centrado y legible.
     if (options.showBarcode && barcodeValue) {
-      const barcodeY = 112;
-      const barcodeHeight = 76;
+      const barcodeY = 122;
+      const barcodeHeight = 82;
       drawBarcode(ctx, barcodeValue, centerX, barcodeY, logicalWidth - margin * 2, barcodeHeight);
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = '#050505';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText(fitText(ctx, barcodeValue, logicalWidth - margin * 2), centerX, 197);
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText(fitText(ctx, barcodeValue, logicalWidth - margin * 2), centerX, 215);
     } else {
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = '#050505';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = 'bold 16px monospace';
-      ctx.fillText(fitText(ctx, product.sku, logicalWidth - margin * 2), centerX, 155);
+      ctx.font = 'bold 18px monospace';
+      ctx.fillText(fitText(ctx, product.sku, logicalWidth - margin * 2), centerX, 170);
     }
 
-    // Precio en dólares, centrado y de gran tamaño. El costo interno no se imprime
-    // en la etiqueta térmica comercial para no competir con el precio de venta.
+    // El precio utiliza el mismo ancho visual del código de barras.
     if (options.showPrice) {
-      ctx.fillStyle = '#090d16';
+      const priceText = '$' + product.precio.toFixed(2);
+      ctx.fillStyle = '#050505';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '900 54px monospace';
-      ctx.fillText('$' + product.precio.toFixed(2), centerX, 258);
+      let priceFontSize = 112;
+      ctx.font = `900 ${priceFontSize}px monospace`;
+      while (priceFontSize > 54 && ctx.measureText(priceText).width > logicalWidth - margin * 2) {
+        priceFontSize -= 2;
+        ctx.font = `900 ${priceFontSize}px monospace`;
+      }
+      ctx.fillText(priceText, centerX, 265);
     }
     ctx.restore();
   } else {
