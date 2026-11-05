@@ -428,7 +428,7 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
                       ? <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800"><ShieldCheck className="h-4 w-4" /> Propietario</span>
                       : <>
                         <select aria-label={`Rol de ${member.email}`} disabled={busy} value={member.role} onChange={(event) => void changeMemberRole(member, event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800">
-                          {roleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                          {availableRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
                         </select>
                         <button type="button" disabled={busy} onClick={() => void removeMember(member)} aria-label={`Retirar ${member.email}`} className="rounded-lg border border-rose-200 p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>
                       </>}
