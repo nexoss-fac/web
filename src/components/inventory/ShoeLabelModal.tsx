@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   X,
   Printer,
@@ -76,6 +76,8 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [isPrinting, setIsPrinting] = useState<boolean>(false);
+  const [printProgress, setPrintProgress] = useState<{ completed: number; total: number } | null>(null);
+  const printAbortRef = useRef<AbortController | null>(null);
   const [printMessage, setPrintMessage] = useState<string | null>(null);
 
   // Calculate available sizes for this shoe style in inventory
@@ -172,8 +174,13 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
 
   const handleBluetoothPrint = async () => {
     if (!product || isPrinting) return;
+    const requestedCopies = Math.max(1, Math.min(100, Math.floor(Number(copies) || 1)));
+    const controller = new AbortController();
+    printAbortRef.current = controller;
+    setCopies(requestedCopies);
+    setPrintProgress({ completed: 0, total: requestedCopies });
     setIsPrinting(true);
-    setPrintMessage('Selecciona la impresora MXW01 en la ventana Bluetooth del navegador…');
+    setPrintMessage(`Preparando ${requestedCopies} etiquetas para la MXW01…`);
     try {
       const canvas = renderLabelToCanvas(product, {
         format: labelFormat,
@@ -190,13 +197,27 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
         companyName: companyBrand.name,
         companyLogo: companyBrand.logo,
       });
-      await printCanvasToMxw01(canvas, copies);
-      setPrintMessage('Trabajo enviado a la MXW01. Verifica la etiqueta impresa.');
+      await printCanvasToMxw01(canvas, requestedCopies, controller.signal, (completed, total) => {
+        setPrintProgress({ completed, total });
+        setPrintMessage(`Imprimiendo etiqueta ${completed} de ${total}…`);
+      });
+      setPrintMessage(`Proceso terminado: ${requestedCopies} etiquetas enviadas.`);
     } catch (error) {
-      setPrintMessage(error instanceof Error ? error.message : 'No se pudo enviar la etiqueta a la impresora.');
+      if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+        setPrintMessage('Impresión cancelada. Se detuvo el envío de las etiquetas restantes.');
+      } else {
+        setPrintMessage(error instanceof Error ? error.message : 'No se pudo enviar la etiqueta a la impresora.');
+      }
     } finally {
+      printAbortRef.current = null;
       setIsPrinting(false);
+      setPrintProgress(null);
     }
+  };
+
+  const handleCancelPrint = () => {
+    printAbortRef.current?.abort();
+    setPrintMessage('Cancelando impresión…');
   };
 
   const handleDownload = async (format: 'png' | 'jpeg' = 'png') => {
@@ -333,7 +354,8 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                     min="1"
                     max="100"
                     value={copies}
-                    onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value) || 1))}
+                    max={100}
+                    onChange={(e) => setCopies(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
                     className="w-24 px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-900 text-sm focus:outline-none focus:border-indigo-500"
                   />
                   <span className="text-slate-500 text-[11px]">
@@ -549,11 +571,22 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
               onClick={handleBluetoothPrint}
               disabled={isPrinting || isDownloading}
               className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-50"
-              title="Conectar por Bluetooth e imprimir directamente en la MXW01"
+              title={`Enviar ${copies} etiquetas por Bluetooth a la MXW01`}
             >
               <Printer className="w-4 h-4" />
-              <span>{isPrinting ? 'Conectando / enviando…' : 'Imprimir MXW01'}</span>
+              <span>{isPrinting ? (printProgress ? `Imprimiendo ${printProgress.completed}/${printProgress.total}` : 'Conectando…') : `Imprimir ${copies} etiquetas MXW01`}</span>
             </button>
+            {isPrinting && (
+              <button
+                type="button"
+                onClick={handleCancelPrint}
+                className="w-full sm:w-auto py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                title="Cancelar el envío de las etiquetas restantes"
+              >
+                <X className="w-4 h-4" />
+                Cancelar
+              </button>
+            )}
 
             {/* Print Button */}
             <button
