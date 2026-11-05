@@ -576,7 +576,7 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
               <Printer className="w-4 h-4" />
               <span>{isPrinting ? (printProgress ? `Imprimiendo ${printProgress.completed}/${printProgress.total}` : 'Conectando…') : `Imprimir ${copies} etiquetas MXW01`}</span>
             </button>
-            {isPrinting && (
+            {isPrinting && printAbortRef.current && (
               <button
                 type="button"
                 onClick={handleCancelPrint}
