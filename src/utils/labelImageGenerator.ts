@@ -15,6 +15,8 @@ export interface LabelOptions {
   showAvailableSizes?: boolean;
   customWidthMm?: number;
   customHeightMm?: number;
+  companyName?: string;
+  companyLogo?: HTMLImageElement | null;
 }
 
 /**
@@ -169,8 +171,19 @@ export function renderLabelToCanvas(
     ctx.fillStyle = '#0f172a';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.font = '900 22px sans-serif';
-    ctx.fillText('NEXOSS', margin, 20);
+    const companyName = (options.companyName || 'EMPRESA').trim().toUpperCase();
+    if (options.companyLogo && options.companyLogo.complete && options.companyLogo.naturalWidth > 0) {
+      const logo = options.companyLogo;
+      const logoScale = Math.min(88 / logo.naturalWidth, 30 / logo.naturalHeight);
+      const logoWidth = logo.naturalWidth * logoScale;
+      const logoHeight = logo.naturalHeight * logoScale;
+      ctx.drawImage(logo, margin, 5, logoWidth, logoHeight);
+      ctx.font = '900 16px sans-serif';
+      ctx.fillText(fitText(ctx, companyName, logicalWidth - margin * 2 - logoWidth - 10), margin + logoWidth + 10, 20);
+    } else {
+      ctx.font = '900 22px sans-serif';
+      ctx.fillText(fitText(ctx, companyName, logicalWidth - margin * 2 - (product.talla ? 96 : 0)), margin, 20);
+    }
 
     if (product.talla) {
       const badgeWidth = 82;
@@ -259,7 +272,16 @@ export function renderLabelToCanvas(
     ctx.font = '900 24px sans-serif';
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
-    ctx.fillText('NEXOSS', 18, 16);
+    const companyName = (options.companyName || 'EMPRESA').trim().toUpperCase();
+    if (options.companyLogo && options.companyLogo.complete && options.companyLogo.naturalWidth > 0) {
+      const logo = options.companyLogo;
+      const logoScale = Math.min(120 / logo.naturalWidth, 42 / logo.naturalHeight);
+      ctx.drawImage(logo, 18, 12, logo.naturalWidth * logoScale, logo.naturalHeight * logoScale);
+      ctx.font = '900 20px sans-serif';
+      ctx.fillText(fitText(ctx, companyName, width - 180), 150, 22);
+    } else {
+      ctx.fillText(fitText(ctx, companyName, width - 180), 18, 16);
+    }
 
     if (options.showStoreAddress) {
       ctx.fillStyle = '#64748b';
