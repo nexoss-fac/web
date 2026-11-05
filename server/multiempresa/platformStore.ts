@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { ALL_INDUSTRY_CATEGORIES, normalizeIndustryTemplate } from '../../src/domain/companyIndustries.ts';
 
 export type CompanyStatus = 'onboarding' | 'active' | 'suspended' | 'archived';
-export type MembershipRole = 'owner' | 'admin' | 'accountant' | 'auditor' | 'supervisor' | 'cashier';
+export type MembershipRole = 'owner' | 'admin' | 'accountant' | 'auditor' | 'supervisor' | 'cashier' | 'doctor';
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'suspended' | 'canceled';
 
 export interface PlatformCompany {
