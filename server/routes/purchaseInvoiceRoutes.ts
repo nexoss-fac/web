@@ -3,6 +3,7 @@ import { analyzePurchaseInvoice } from '../purchaseInvoiceAi.ts';
 import { commitPurchaseInvoice } from '../purchases/commitPurchaseInvoice.ts';
 import { tenantStorageContext } from '../multiempresa/companyAccess.ts';
 import { logger } from '../logger.ts';
+import { compressFiscalPdfDataUrl } from '../fiscalPdfCompression.ts';
 
 export function registerPurchaseInvoiceRoutes(app: Express, adminOnly: RequestHandler): void {
   app.post('/api/purchases/scan-invoice', adminOnly, async (req: Request, res: Response) => {
@@ -15,7 +16,17 @@ export function registerPurchaseInvoiceRoutes(app: Express, adminOnly: RequestHa
       if (!tenant?.companyId) {
         return res.status(403).json({ success: false, error: 'No hay una empresa activa autorizada para esta operación.' });
       }
-      const draft = await analyzePurchaseInvoice(documentBase64, tenant.industryTemplate || 'comercio general');
+      // Reducir el peso del PDF antes de enviarlo a Gemini, sin alterar
+      // documentos firmados ni reemplazar el original si no queda más pequeño.
+      const pdfOptimization = await compressFiscalPdfDataUrl(documentBase64);
+      const documentForAi = pdfOptimization?.dataUrl || documentBase64;
+      if (pdfOptimization?.compressed) {
+        logger.info('[PDF] Factura de compra optimizada antes de Gemini:', {
+          originalBytes: pdfOptimization.originalBytes,
+          optimizedBytes: pdfOptimization.storedBytes,
+        });
+      }
+      const draft = await analyzePurchaseInvoice(documentForAi, tenant.industryTemplate || 'comercio general');
       return res.json({ success: true, draft, persisted: false, requiresReview: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
