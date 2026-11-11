@@ -113,7 +113,7 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
   // Facturación clínica: comparte el registro de ventas y la secuencia fiscal de NEXOSS,
   // sin descontar existencias de shoe_products.
   app.get('/api/health/invoices', ...route(async (_req, res, sql) => {
-    const invoices = await sql`SELECT id, numero_factura, cliente_nombre, cliente_apellido, subtotal_usd, iva_monto_usd, total_usd, total_bs, tasa_cambio, items, pagos, fecha, estado, notas
+    const invoices = await sql`SELECT id, numero_factura, cliente_nombre, cliente_apellido, subtotal_usd, iva_monto_usd, total_usd, total_bs, tasa_cambio, total_positivo_inmediato_usd, items, pagos, fecha, estado, notas
       FROM sales_transactions WHERE notas LIKE 'INTERMED|%' ORDER BY fecha DESC LIMIT 300`;
     return res.json({ invoices });
   }));
