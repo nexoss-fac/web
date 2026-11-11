@@ -1,13 +1,14 @@
 import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { CalendarDays, ClipboardPlus, FileText, FlaskConical, HeartPulse, Plus, Search, Stethoscope, Users, Wallet, X } from 'lucide-react';
+import { HealthBilling } from './HealthBilling';
 const InventoryManager = lazy(() => import('../inventory/InventoryManager').then((module) => ({ default: module.InventoryManager })));
 
 type Patient = { id: string; patient_number: string; first_name: string; last_name: string; birth_date?: string; phone?: string; email?: string };
-type Section = 'patients' | 'appointments' | 'payments' | 'inventory' | 'reports';
+type Section = 'patients' | 'appointments' | 'payments' | 'billing' | 'inventory' | 'reports';
 type RecordData = { patient: Record<string, any>; appointments: any[]; consultations: any[]; prescriptions: any[]; examOrders: any[]; reports: any[]; payments: any[] };
 type FormKind = 'patient' | 'appointment' | 'consultation' | 'prescription' | 'examOrder' | 'report' | 'payment';
 
-const sectionLabels: Record<Section, string> = { patients: 'Pacientes', appointments: 'Citas', payments: 'Pagos', inventory: 'Inventario', reports: 'Reportes' };
+const sectionLabels: Record<Section, string> = { patients: 'Pacientes', appointments: 'Citas', payments: 'Pagos', billing: 'Facturación y Caja', inventory: 'Inventario', reports: 'Reportes' };
 const formFields: Record<FormKind, Array<{ key: string; label: string; type?: string; required?: boolean; wide?: boolean }>> = {
   patient: [
     { key: 'firstName', label: 'Nombre', required: true }, { key: 'lastName', label: 'Apellido', required: true },
@@ -98,6 +99,7 @@ export const HealthWorkspace: React.FC = () => {
       </div>}</main>
     </div>}
     {section === 'appointments' && <RecordSection title="Citas" records={record?.appointments || []} empty="Selecciona un paciente en Pacientes para ver o registrar citas." onAdd={() => record && openForm('appointment')} />}
+    {section === 'billing' && <HealthBilling patient={record?.patient || null} />}
     {section === 'payments' && <RecordSection title="Pagos" records={record?.payments || []} empty="Selecciona un paciente en Pacientes para ver o registrar pagos." onAdd={() => record && openForm('payment')} />}
     {section === 'inventory' && <Suspense fallback={<p className="text-sm text-slate-500">Cargando inventario…</p>}><InventoryManager /></Suspense>}
     {section === 'reports' && <div className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Informes clínicos</h2><p className="mt-2 text-sm text-slate-600">Los informes que redactes desde el expediente se conservan separados de las notas internas de consulta.</p></div>}

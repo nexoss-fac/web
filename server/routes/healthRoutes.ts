@@ -1,6 +1,6 @@
 import type { Express, Request, RequestHandler, Response } from 'express';
 import { randomUUID } from 'node:crypto';
-import { getNeonSql, initDatabaseSchema } from '../db.ts';
+import { getNeonSql, initDatabaseSchema, getNextInvoiceNumber } from '../db.ts';
 import type { TenantAuthenticatedRequest } from '../multiempresa/companyAccess.ts';
 
 type Sql = NonNullable<ReturnType<typeof getNeonSql>>;
@@ -109,4 +109,66 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
       VALUES (${id}, ${patientId}, ${concept}, ${amount}, ${req.body?.currency === 'VES' ? 'VES' : 'USD'}, ${text(req.body?.method, 80)}, ${req.body?.status === 'pending' ? 'pending' : 'paid'}, CASE WHEN ${req.body?.status === 'pending'} THEN NULL ELSE NOW() END, ${text(req.body?.notes, 1000)}, ${identity(req)}) RETURNING *`;
     return res.status(201).json({ payment: rows[0] });
   }));
+
+  // Facturación clínica: comparte el registro de ventas y la secuencia fiscal de NEXOSS,
+  // sin descontar existencias de shoe_products.
+  app.get('/api/health/invoices', ...route(async (_req, res, sql) => {
+    const invoices = await sql`SELECT id, numero_factura, cliente_nombre, cliente_apellido, subtotal_usd, iva_monto_usd, total_usd, total_bs, tasa_cambio, items, pagos, fecha, estado, notas
+      FROM sales_transactions WHERE notas LIKE 'INTERMED|%' ORDER BY fecha DESC LIMIT 300`;
+    return res.json({ invoices });
+  }));
+
+  app.post('/api/health/invoices', ...route(async (req, res, sql) => {
+    const patientId = text(req.body?.patientId, 64);
+    const patientRows = await sql`SELECT id, first_name, last_name, national_id, phone, email FROM health_patients WHERE id = ${patientId} LIMIT 1`;
+    const patient = patientRows[0];
+    if (!patient) return res.status(404).json({ error: 'Selecciona un paciente válido.' });
+    const rawLines = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!rawLines.length || rawLines.length > 50) return res.status(400).json({ error: 'La factura debe contener entre 1 y 50 servicios o tratamientos.' });
+    const items = rawLines.map((line: any) => ({
+      producto_id: '', tipo: 'servicio_clinico',
+      nombre_producto: text(line?.description, 240),
+      descripcion: text(line?.description, 500),
+      talla: text(line?.category, 80) || 'Servicio',
+      cantidad: Number(line?.quantity),
+      precio_unitario: Number(line?.unitPrice),
+      costo_unitario: 0,
+      subtotal: Number(line?.quantity) * Number(line?.unitPrice),
+    }));
+    if (items.some((line: any) => !line.nombre_producto || !Number.isFinite(line.cantidad) || line.cantidad <= 0 || !Number.isFinite(line.precio_unitario) || line.precio_unitario < 0)) {
+      return res.status(400).json({ error: 'Revisa la descripción, cantidad y precio de cada servicio.' });
+    }
+    const subtotal = Math.round(items.reduce((sum: number, line: any) => sum + line.subtotal, 0) * 100) / 100;
+    const ivaEnabled = req.body?.applyTax === true;
+    const taxRate = ivaEnabled ? Number(req.body?.taxRate) : 0;
+    if (ivaEnabled && (!Number.isFinite(taxRate) || taxRate <= 0 || taxRate > 100)) return res.status(400).json({ error: 'Indica una alícuota fiscal válida y configurada para esta empresa.' });
+    const tax = Math.round(subtotal * taxRate) / 100;
+    const total = Math.round((subtotal + tax) * 100) / 100;
+    const exchangeRate = Number(req.body?.exchangeRate);
+    if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) return res.status(400).json({ error: 'Indica la tasa de cambio aplicable a la fecha de la factura.' });
+    const received = Number(req.body?.paidAmount || 0);
+    const paymentCurrency = req.body?.paymentCurrency === 'VES' ? 'Bs' : 'USD';
+    const paidUsd = paymentCurrency === 'Bs' ? received / exchangeRate : received;
+    if (!Number.isFinite(received) || received < 0 || !Number.isFinite(paidUsd) || paidUsd > total + 0.005) return res.status(400).json({ error: 'El abono supera el saldo de la factura o no es válido.' });
+    const paymentMethod = text(req.body?.paymentMethod, 80);
+    if (received > 0 && !paymentMethod) return res.status(400).json({ error: 'Indica el método de pago para registrar el abono.' });
+    const invoiceNumber = await getNextInvoiceNumber();
+    if (!invoiceNumber) return res.status(503).json({ error: 'No se pudo reservar el correlativo fiscal de NEXOSS.' });
+    const id = randomUUID();
+    const payments = received > 0 ? [{ cuenta: paymentMethod, moneda: paymentCurrency, monto: received, referencia: text(req.body?.paymentReference, 100) }] : [];
+    const status = paidUsd + 0.005 >= total ? 'completada' : 'pendiente';
+    const notes = `INTERMED|patient_id=${patientId}|provider=${text(req.body?.providerName, 180)}`;
+    const rows = await sql`INSERT INTO sales_transactions
+      (id, numero_factura, cliente_nombre, cliente_apellido, cliente_rif, cliente_telefono, cliente_correo,
+       subtotal_usd, descuento_usd, aplica_iva, iva_incluido, porcentaje_iva, iva_monto_usd,
+       total_usd, total_bs, costo_total_usd, ganancia_neta_usd, tasa_cambio, items, pagos, fecha,
+       usuario, notas, estado, total_positivo_inmediato_usd, total_cashea_pendiente_usd, estado_cashea)
+      VALUES (${id}, ${invoiceNumber}, ${patient.first_name}, ${patient.last_name}, ${patient.national_id || null},
+       ${patient.phone || null}, ${patient.email || null}, ${subtotal}, 0, ${ivaEnabled}, false, ${taxRate},
+       ${tax}, ${total}, ${Math.round(total * exchangeRate * 100) / 100}, 0, 0, ${exchangeRate},
+       ${JSON.stringify(items)}, ${JSON.stringify(payments)}, NOW(), ${text(req.body?.providerName, 180) || identity(req)},
+       ${notes}, ${status}, ${paidUsd}, 0, 'sin_cashea') RETURNING *`;
+    return res.status(201).json({ invoice: rows[0] });
+  }));
+
 }
