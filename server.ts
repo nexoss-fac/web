@@ -44,7 +44,7 @@ import {
 import { verifyBdvPayment, getBdvApiConfig, getRecentVerifications } from './server/bdv.ts';
 import { analyzeShoeImage } from './server/shoeAi.ts';
 import { analyzeProductImage } from './server/productAi.ts';
-import { analyzeReceiptImage } from './server/receiptAi.ts';
+import { analyzeReceiptImage, analyzeCurrencyOperation } from './server/receiptAi.ts';
 import { scanFiscalDocument } from './server/fiscalDocumentAi.ts';
 import { compressFiscalPdfDataUrl } from './server/fiscalPdfCompression.ts';
 import { requireFirebaseAuth } from './server/auth/firebaseAuth.ts';
@@ -2561,6 +2561,41 @@ async function startServer() {
 
   app.post('/api/expenses/scan-receipt', handleReceiptScan);
   app.post('/api/ai/scan-receipt', handleReceiptScan);
+
+  // 7.2 Lector inteligente de comprobantes y efectivo para compra/venta de divisas.
+  app.post('/api/currency/scan-evidence', async (req, res) => {
+    try {
+      const { imageBase64, operation, currentRate } = req.body || {};
+      if (!imageBase64 || typeof imageBase64 !== 'string') {
+        return res.status(400).json({ success: false, error: 'Adjunta una foto o captura de la operación.' });
+      }
+      if (operation !== 'compra' && operation !== 'venta') {
+        return res.status(400).json({ success: false, error: 'Tipo de operación no válido.' });
+      }
+      const pdfOptimization = await compressFiscalPdfDataUrl(imageBase64);
+      const documentForAi = pdfOptimization?.dataUrl || imageBase64;
+      if (pdfOptimization?.compressed) {
+        logger.info('[PDF] Evidencia de divisas optimizada:', {
+          originalBytes: pdfOptimization.originalBytes,
+          optimizedBytes: pdfOptimization.storedBytes,
+        });
+      }
+      const result = await analyzeCurrencyOperation(documentForAi, operation, Number(currentRate) || 0);
+      return res.json(result);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[API currency scan error]:', message);
+      const retryable = /503|high demand|UNAVAILABLE|429|RESOURCE_EXHAUSTED|DEADLINE_EXCEEDED|deadline expired|fetch failed|ECONNRESET|ETIMEDOUT|timeout|socket|network/i.test(message);
+      return res.status(retryable ? 503 : 500).json({
+        success: false,
+        retryable,
+        error: retryable
+          ? 'Gemini está temporalmente ocupado o tardó demasiado. La evidencia se conserva; vuelve a intentar.'
+          : message,
+      });
+    }
+  });
+
 
   app.delete('/api/expenses/:id', async (req, res) => {
     const sql = getNeonSql();
