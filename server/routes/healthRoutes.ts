@@ -171,4 +171,66 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
     return res.status(201).json({ invoice: rows[0] });
   }));
 
+
+  // Abonos sucesivos: el identificador enviado por el cliente hace idempotente
+  // el reintento. La factura y health_payments se actualizan en una sola sentencia.
+  app.post('/api/health/invoices/:invoiceId/payments', ...route(async (req, res, sql) => {
+    const invoiceId = text(req.params.invoiceId, 64);
+    const paymentId = text(req.body?.paymentId, 64);
+    const received = Number(req.body?.amount);
+    const currency = req.body?.currency === 'VES' ? 'VES' : 'USD';
+    const exchangeRate = Number(req.body?.exchangeRate);
+    const method = text(req.body?.method, 80);
+    const reference = text(req.body?.reference, 120);
+    if (!paymentId || !invoiceId || !Number.isFinite(received) || received <= 0 || !method) {
+      return res.status(400).json({ error: 'Identificador, monto positivo y método de pago son obligatorios.' });
+    }
+    if (currency === 'VES' && (!Number.isFinite(exchangeRate) || exchangeRate <= 0)) {
+      return res.status(400).json({ error: 'Indica una tasa de cambio válida para el abono en bolívares.' });
+    }
+    const amountUsd = Math.round((currency === 'VES' ? received / exchangeRate : received) * 100) / 100;
+    if (!Number.isFinite(amountUsd) || amountUsd <= 0) return res.status(400).json({ error: 'El equivalente del abono no es válido.' });
+    const concept = `Abono factura clínica ${invoiceId}`;
+    const paymentJson = JSON.stringify([{ cuenta: method, moneda: currency === 'VES' ? 'Bs' : 'USD', monto: received, referencia: reference }]);
+    const result = await sql`
+      WITH prior AS (
+        SELECT id, patient_id, sale_id, concept, amount, currency, method, status, paid_at, notes, created_by
+        FROM health_payments WHERE id = ${paymentId} LIMIT 1
+      ),
+      changed AS (
+        UPDATE sales_transactions s
+        SET pagos = COALESCE(s.pagos, '[]'::jsonb) || ${paymentJson}::jsonb,
+            total_positivo_inmediato_usd = COALESCE(s.total_positivo_inmediato_usd, 0) + ${amountUsd},
+            estado = CASE WHEN COALESCE(s.total_positivo_inmediato_usd, 0) + ${amountUsd} + 0.005 >= s.total_usd THEN 'completada' ELSE 'pendiente' END
+        WHERE s.id = ${invoiceId}
+          AND s.notas LIKE 'INTERMED|%'
+          AND NOT EXISTS (SELECT 1 FROM prior)
+          AND COALESCE(s.total_positivo_inmediato_usd, 0) + ${amountUsd} <= s.total_usd + 0.005
+        RETURNING s.id, s.total_usd, s.total_positivo_inmediato_usd, s.estado,
+          substring(s.notas from 'patient_id=([^|]+)') AS patient_id
+      ),
+      inserted AS (
+        INSERT INTO health_payments
+          (id, patient_id, sale_id, concept, amount, currency, method, status, paid_at, notes, created_by)
+        SELECT ${paymentId}, changed.patient_id, changed.id, ${concept}, ${received}, ${currency},
+          ${method}, 'paid', NOW(), ${reference}, ${identity(req)}
+        FROM changed
+        RETURNING *
+      )
+      SELECT 'created' AS outcome, inserted.id AS payment_id, inserted.sale_id,
+        changed.total_usd, changed.total_positivo_inmediato_usd, changed.estado
+      FROM inserted JOIN changed ON changed.id = inserted.sale_id
+      UNION ALL
+      SELECT 'duplicate' AS outcome, prior.id AS payment_id, prior.sale_id,
+        s.total_usd, s.total_positivo_inmediato_usd, s.estado
+      FROM prior JOIN sales_transactions s ON s.id = prior.sale_id
+    `;
+    if (!result.length) {
+      const invoice = await sql`SELECT id, total_usd, total_positivo_inmediato_usd FROM sales_transactions WHERE id = ${invoiceId} AND notas LIKE 'INTERMED|%' LIMIT 1`;
+      if (!invoice.length) return res.status(404).json({ error: 'No se encontró la factura clínica.' });
+      return res.status(409).json({ error: 'El abono supera el saldo pendiente o no pudo registrarse. Actualiza la factura antes de reintentar.' });
+    }
+    return res.status(200).json({ paymentId: result[0].payment_id, invoice: result[0], duplicate: result[0].outcome === 'duplicate' });
+  }));
+
 }
