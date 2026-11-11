@@ -18,7 +18,7 @@ export const HealthBilling: React.FC<{ patient: Patient }> = ({ patient }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { amount: string; currency: 'USD' | 'VES'; method: string; reference: string }>>({});
+  const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { amount: string; currency: 'USD' | 'VES'; method: string; reference: string; paymentId?: string }>>({});
   const headers = useCallback(() => ({ 'Content-Type': 'application/json', 'x-company-id': localStorage.getItem('nexoss_active_company_id') || '' }), []);
   const load = useCallback(async () => {
     const response = await fetch('/api/health/invoices', { headers: headers() });
@@ -32,24 +32,24 @@ export const HealthBilling: React.FC<{ patient: Patient }> = ({ patient }) => {
   const total = subtotal + tax;
   const update = (index: number, field: keyof Line, value: string) => setLines((current) => current.map((line, i) => i === index ? { ...line, [field]: value } : line));
   const updatePaymentDraft = (invoiceId: string, field: 'amount' | 'currency' | 'method' | 'reference', value: string) => {
-    setPaymentDrafts((current) => ({ ...current, [invoiceId]: { amount: '', currency: 'USD', method: 'Efectivo USD', reference: '', ...current[invoiceId], [field]: value } }));
+    setPaymentDrafts((current) => ({ ...current, [invoiceId]: { amount: '', currency: 'USD', method: 'Efectivo USD', reference: '', paymentId: crypto.randomUUID(), ...current[invoiceId], [field]: value } }));
   };
   const submitPayment = async (event: React.FormEvent, invoice: any) => {
     event.preventDefault(); setError(''); setNotice('');
-    const draft = paymentDrafts[invoice.id] || { amount: '', currency: 'USD' as const, method: 'Efectivo USD', reference: '' };
+    const draft = paymentDrafts[invoice.id] || { amount: '', currency: 'USD' as const, method: 'Efectivo USD', reference: '', paymentId: crypto.randomUUID() };
     if (!(Number(draft.amount) > 0)) return setError('Indica un monto de abono mayor que cero.');
     setBusy(true);
     try {
       const response = await fetch(`/api/health/invoices/${encodeURIComponent(invoice.id)}/payments`, {
         method: 'POST', headers: headers(), body: JSON.stringify({
-          paymentId: crypto.randomUUID(), amount: Number(draft.amount), currency: draft.currency,
+          paymentId: draft.paymentId || crypto.randomUUID(), amount: Number(draft.amount), currency: draft.currency,
           exchangeRate: Number(invoice.tasa_cambio), method: draft.method, reference: draft.reference,
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo registrar el abono.');
       setNotice(data.duplicate ? 'El abono ya estaba registrado.' : 'Abono registrado correctamente.');
-      setPaymentDrafts((current) => ({ ...current, [invoice.id]: { ...draft, amount: '', reference: '' } }));
+      setPaymentDrafts((current) => ({ ...current, [invoice.id]: { ...draft, amount: '', reference: '', paymentId: crypto.randomUUID() } }));
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo registrar el abono.'); }
     finally { setBusy(false); }
