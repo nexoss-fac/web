@@ -28,6 +28,14 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
     catch { return res.status(503).json({ error: 'No se pudo procesar la información clínica.' }); }
   }] as const;
 
+  const billingRoute = (handler: (req: Request, res: Response, sql: Sql) => Promise<unknown>) => [async (req: Request, res: Response) => {
+    if (!authorizedClinic(req, res)) return;
+    const sql = getNeonSql();
+    if (!sql) return res.status(503).json({ error: 'La base de datos clínica no está disponible.' });
+    try { await initDatabaseSchema(); await handler(req, res, sql); }
+    catch { return res.status(503).json({ error: 'No se pudo procesar la información clínica.' }); }
+  }] as const;
+
   app.get('/api/health/patients', ...route(async (_req, res, sql) => {
     const patients = await sql`SELECT id, patient_number, first_name, last_name, birth_date, phone, email, created_at FROM health_patients ORDER BY last_name, first_name LIMIT 500`;
     return res.json({ patients });
@@ -112,13 +120,13 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
 
   // Facturación clínica: comparte el registro de ventas y la secuencia fiscal de NEXOSS,
   // sin descontar existencias de shoe_products.
-  app.get('/api/health/invoices', ...route(async (_req, res, sql) => {
+  app.get('/api/health/invoices', ...billingRoute(async (_req, res, sql) => {
     const invoices = await sql`SELECT id, numero_factura, cliente_nombre, cliente_apellido, subtotal_usd, iva_monto_usd, total_usd, total_bs, tasa_cambio, total_positivo_inmediato_usd, items, pagos, fecha, estado, notas
       FROM sales_transactions WHERE notas LIKE 'INTERMED|%' ORDER BY fecha DESC LIMIT 300`;
     return res.json({ invoices });
   }));
 
-  app.post('/api/health/invoices', ...route(async (req, res, sql) => {
+  app.post('/api/health/invoices', ...billingRoute(async (req, res, sql) => {
     const patientId = text(req.body?.patientId, 64);
     const patientRows = await sql`SELECT id, first_name, last_name, national_id, phone, email FROM health_patients WHERE id = ${patientId} LIMIT 1`;
     const patient = patientRows[0];
@@ -184,7 +192,7 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
 
   // Abonos sucesivos: el identificador enviado por el cliente hace idempotente
   // el reintento. La factura y health_payments se actualizan en una sola sentencia.
-  app.post('/api/health/invoices/:invoiceId/payments', ...route(async (req, res, sql) => {
+  app.post('/api/health/invoices/:invoiceId/payments', ...billingRoute(async (req, res, sql) => {
     const invoiceId = text(req.params.invoiceId, 64);
     const paymentId = text(req.body?.paymentId, 64);
     const received = Number(req.body?.amount);
