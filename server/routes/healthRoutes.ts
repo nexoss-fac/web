@@ -158,7 +158,7 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
     const payments = received > 0 ? [{ cuenta: paymentMethod, moneda: paymentCurrency, monto: received, referencia: text(req.body?.paymentReference, 100) }] : [];
     const status = paidUsd + 0.005 >= total ? 'completada' : 'pendiente';
     const notes = `INTERMED|patient_id=${patientId}|provider=${text(req.body?.providerName, 180)}`;
-    const rows = await sql`INSERT INTO sales_transactions
+    const invoiceInsert = sql`INSERT INTO sales_transactions
       (id, numero_factura, cliente_nombre, cliente_apellido, cliente_rif, cliente_telefono, cliente_correo,
        subtotal_usd, descuento_usd, aplica_iva, iva_incluido, porcentaje_iva, iva_monto_usd,
        total_usd, total_bs, costo_total_usd, ganancia_neta_usd, tasa_cambio, items, pagos, fecha,
@@ -168,6 +168,16 @@ export function registerHealthRoutes(app: Express, ownerOnly: RequestHandler): v
        ${tax}, ${total}, ${Math.round(total * exchangeRate * 100) / 100}, 0, 0, ${exchangeRate},
        ${JSON.stringify(items)}, ${JSON.stringify(payments)}, NOW(), ${text(req.body?.providerName, 180) || identity(req)},
        ${notes}, ${status}, ${paidUsd}, 0, 'sin_cashea') RETURNING *`;
+    const statements = [invoiceInsert];
+    if (received > 0) {
+      statements.push(sql`INSERT INTO health_payments
+        (id, patient_id, sale_id, concept, amount, currency, method, status, paid_at, notes, created_by)
+        VALUES (${randomUUID()}, ${patientId}, ${id}, ${'Factura clínica ' + invoiceNumber},
+          ${received}, ${paymentCurrency === 'Bs' ? 'VES' : 'USD'}, ${paymentMethod}, 'paid',
+          NOW(), ${text(req.body?.paymentReference, 100)}, ${identity(req)})`);
+    }
+    await sql.transaction(statements);
+    const rows = await sql`SELECT * FROM sales_transactions WHERE id = ${id} LIMIT 1`;
     return res.status(201).json({ invoice: rows[0] });
   }));
 
