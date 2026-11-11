@@ -35,7 +35,7 @@ function getGenAI(): GoogleGenAI | null {
     aiClient = new GoogleGenAI({
       apiKey: key,
       httpOptions: {
-        timeout: 18000,
+        timeout: 30000,
         headers: {
           'User-Agent': 'aistudio-build',
         },
@@ -291,7 +291,7 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
         lastErr = err;
 
         const isTransientOverload =
-          /503|high demand|UNAVAILABLE|429|RESOURCE_EXHAUSTED|fetch failed|ECONNRESET|ETIMEDOUT|timeout|socket|network/i.test(errMsg);
+          /503|high demand|UNAVAILABLE|429|RESOURCE_EXHAUSTED|DEADLINE_EXCEEDED|deadline expired|fetch failed|ECONNRESET|ETIMEDOUT|timeout|socket|network/i.test(errMsg);
 
         if (isTransientOverload) {
           logger.warn(`[Gemini Receipt AI] Fallo transitorio en ${model}; se probará el siguiente modelo disponible.`);
@@ -306,8 +306,8 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
   const rawErrMsg = lastErr?.message || '';
   let friendlyMsg = 'No se pudo procesar la imagen de la factura con IA.';
 
-  if (/503|high demand|UNAVAILABLE|fetch failed|ECONNRESET|ETIMEDOUT|timeout|socket|network/i.test(rawErrMsg)) {
-    friendlyMsg = 'El servicio de IA está temporalmente ocupado o perdió la conexión. Puedes reintentar; la foto se conserva para completar los datos manualmente.';
+  if (/503|high demand|UNAVAILABLE|DEADLINE_EXCEEDED|deadline expired|fetch failed|ECONNRESET|ETIMEDOUT|timeout|socket|network/i.test(rawErrMsg)) {
+    friendlyMsg = 'Gemini está temporalmente saturado o tardó demasiado en responder. Puedes reintentar; el documento se conserva para completar los datos manualmente.';
   } else if (/429|RESOURCE_EXHAUSTED/i.test(rawErrMsg)) {
     friendlyMsg = 'Límite de solicitudes momentáneo alcanzado. Espera unos segundos y pulsa "Reintentar".';
   } else if (rawErrMsg) {
