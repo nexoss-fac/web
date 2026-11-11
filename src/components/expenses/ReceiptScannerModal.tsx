@@ -131,10 +131,8 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
       }
 
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch((err) => console.warn('Video play warning:', err));
-      }
+      // El elemento <video> se monta después de activar el estado. La conexión
+      // del stream se realiza en el efecto dedicado de abajo, cuando ya existe.
       setIsCameraActive(true);
     } catch (err: any) {
       console.error('Camera access error:', err);
@@ -153,6 +151,35 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
       stopCamera();
     };
   }, [isOpen, activeTab, capturedImage]);
+
+  // Conectar el stream cuando React ya haya montado el elemento <video>.
+  useEffect(() => {
+    if (!isCameraActive || !videoRef.current || !streamRef.current) return;
+
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    video.srcObject = stream;
+
+    const startPlayback = async () => {
+      try {
+        await video.play();
+      } catch (err) {
+        console.error('Camera playback error:', err);
+        setCameraError('La cámara tiene permiso, pero el navegador no pudo mostrar el video. Recarga la página o revisa los permisos de cámara.');
+      }
+    };
+
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      void startPlayback();
+    } else {
+      video.onloadedmetadata = () => { void startPlayback(); };
+    }
+
+    return () => {
+      video.onloadedmetadata = null;
+      if (video.srcObject === stream) video.srcObject = null;
+    };
+  }, [isCameraActive]);
 
   // Flip camera
   const toggleCameraFacing = () => {
@@ -201,8 +228,12 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
   const handleCaptureFromVideo = async () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
-    const width = video.videoWidth || 640;
-    const height = video.videoHeight || 480;
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+      setCameraError('La cámara todavía está iniciando. Espera un momento y vuelve a tomar la foto.');
+      return;
+    }
+    const width = video.videoWidth;
+    const height = video.videoHeight;
 
     const canvas = document.createElement('canvas');
     canvas.width = width;
