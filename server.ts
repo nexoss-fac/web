@@ -2526,7 +2526,17 @@ async function startServer() {
       }
 
       const rate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 1;
-      const result = await analyzeReceiptImage(imageBase64, rate, historicalRates);
+      // Optimizar el PDF antes de enviarlo a Gemini; conservar el original
+      // si está firmado, no se puede comprimir o el resultado pesa más.
+      const pdfOptimization = await compressFiscalPdfDataUrl(imageBase64);
+      const documentForAi = pdfOptimization?.dataUrl || imageBase64;
+      if (pdfOptimization?.compressed) {
+        logger.info('[PDF] Factura optimizada antes de Gemini:', {
+          originalBytes: pdfOptimization.originalBytes,
+          optimizedBytes: pdfOptimization.storedBytes,
+        });
+      }
+      const result = await analyzeReceiptImage(documentForAi, rate, historicalRates);
       res.json(result);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
