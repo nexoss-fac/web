@@ -123,7 +123,7 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
       const response = await fetch('/api/currency/scan-evidence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(65000),
+        signal: AbortSignal.timeout(70000),
         body: JSON.stringify({ imageBase64: dataUrl, operation, currentRate: Number(tasaCompra) || 0 }),
       });
       const data = await response.json().catch(() => null);
