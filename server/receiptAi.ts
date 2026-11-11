@@ -68,7 +68,7 @@ export async function analyzeReceiptImage(
 ): Promise<ScannedReceiptData> {
   const { data, mimeType } = parseBase64Image(imageBase64);
 
-  if (!/^(image\\/(jpeg|png|webp)|application\\/pdf)$/i.test(mimeType)) {
+  if (!/^(image\/(jpeg|png|webp)|application\/pdf)$/i.test(mimeType)) {
     throw new Error('Formato no compatible. Envía una imagen JPG, PNG, WEBP o un PDF.');
   }
 
