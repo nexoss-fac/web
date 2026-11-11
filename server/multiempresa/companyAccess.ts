@@ -20,6 +20,7 @@ export interface TenantAuthenticatedRequest extends FirebaseAuthenticatedRequest
 
 /** Módulo del plan que habilita cada grupo de rutas (la primera coincidencia gana). */
 const MODULE_BY_ROUTE: Array<{ module: string; route: RegExp }> = [
+  { module: 'pos', route: /^\/health\/invoices(?:\/|$)/ },
   { module: 'accounting', route: /^\/accounting/ },
   { module: 'pos', route: /^\/(?:sales|layaways|bdv|pos|invoices|contacts)(?:\/|$)/ },
   { module: 'inventory', route: /^\/(?:products|movements|catalog|ai)(?:\/|$)/ },
@@ -75,6 +76,9 @@ const ROLE_POLICY: Record<MembershipRole, RolePolicy> = {
       { methods: 'read', route: /^\/pos\/(?:state|version)$/ },
       { methods: 'read', route: /^\/company\/identity$/ },
       { methods: 'read', route: /^\/sales$/ },
+      { methods: 'read', route: /^\/health\/invoices$/ },
+      { methods: ['POST'], route: /^\/health\/invoices$/ },
+      { methods: ['POST'], route: /^\/health\/invoices\/[^/]+\/payments$/ },
       { methods: 'read', route: /^\/contacts$/, when: isCustomerContact },
       { methods: ['POST'], route: /^\/sales$/ },
       { methods: ['POST'], route: /^\/invoices\/next$/ },
