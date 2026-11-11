@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle2, FileText, Loader2, Plus, ScanLine, Trash2, U
 import { useStore } from '../../context/StoreContext';
 import type { ShoeProduct } from '../../types';
 import { getSaleDateKey, getTodayVenezuela } from '../../utils/dateUtils';
+import { resolveIndustryTemplate } from '../../domain/companyIndustries';
 
 type InvoiceLine = {
   description: string; sku: string; barcode: string; quantity: number; unit: string;
@@ -40,6 +41,8 @@ function suggestedProduct(line: InvoiceLine, products: ShoeProduct[]): string {
 
 export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed: () => Promise<void> | void }> = ({ onClose, onConfirmed }) => {
   const { products, exchangeRate, historicalRates, sales, expenses } = useStore();
+  const industryKey = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'));
+  const isSingleMerchandiseFlow = industryKey === 'footwear';
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState('');
   const [draft, setDraft] = useState<InvoiceDraft | null>(null);
@@ -98,7 +101,12 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
       });
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.error || 'No se pudo analizar el documento.');
-      const next = payload.draft as InvoiceDraft;
+      const scannedDraft = payload.draft as InvoiceDraft;
+      // Calzado opera con un único inventario de mercancía: la IA no debe
+      // introducir clasificaciones de fabricación en este tenant.
+      const next: InvoiceDraft = isSingleMerchandiseFlow
+        ? { ...scannedDraft, lines: scannedDraft.lines.map((line) => ({ ...line, inventoryClassification: 'Mercancía' })) }
+        : scannedDraft;
       setDraft(next);
       const historicalRate = next.issueDate ? getKnownRateForDate(next.issueDate) : 0;
       setRate(historicalRate > 0 ? String(historicalRate) : '');
@@ -121,8 +129,8 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
     if (draft.lines.some((line, index) => !mappings[index]?.productId || !(Number(mappings[index]?.unitFactor) > 0))) {
       return setError('Relaciona cada renglón con un producto existente e indica su factor de conversión a la unidad del inventario. No se asume una conversión 1:1.');
     }
-    if (draft.lines.some((line) => !line.description.trim() || !(line.quantity > 0) || !(line.unitCost > 0) || !line.unit || line.inventoryClassification === 'Por clasificar')) {
-      return setError('Completa descripción, cantidad, unidad, costo y clasificación de cada renglón.');
+    if (draft.lines.some((line) => !line.description.trim() || !(line.quantity > 0) || !(line.unitCost > 0) || !line.unit || (!isSingleMerchandiseFlow && line.inventoryClassification === 'Por clasificar'))) {
+      return setError(isSingleMerchandiseFlow ? 'Completa descripción, cantidad, unidad y costo de cada renglón.' : 'Completa descripción, cantidad, unidad, costo y clasificación de cada renglón.');
     }
     setSaving(true);
     try {
@@ -202,7 +210,7 @@ export const PurchaseInvoiceScanner: React.FC<{ onClose: () => void; onConfirmed
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                       <label className="text-[11px] font-semibold text-slate-600 sm:col-span-2">Descripción<input value={line.description} onChange={(e) => updateLine(index, 'description', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs" /></label>
                       <label className="text-[11px] font-semibold text-slate-600">SKU / código<input value={line.sku} onChange={(e) => updateLine(index, 'sku', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs" /></label>
-                      <label className="text-[11px] font-semibold text-slate-600">Clasificación<select value={line.inventoryClassification} onChange={(e) => updateLine(index, 'inventoryClassification', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs"><option>Por clasificar</option><option>Materia prima</option><option>Mercancía</option><option>Productos en proceso</option><option>Productos terminados</option></select></label>
+                      {!isSingleMerchandiseFlow && <label className="text-[11px] font-semibold text-slate-600">Clasificación<select value={line.inventoryClassification} onChange={(e) => updateLine(index, 'inventoryClassification', e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs"><option>Por clasificar</option><option>Materia prima</option><option>Mercancía</option><option>Productos en proceso</option><option>Productos terminados</option></select></label>}{isSingleMerchandiseFlow && <p className="text-[11px] text-slate-500">Clasificación aplicada automáticamente: Mercancía.</p>}
                       <label className="text-[11px] font-semibold text-slate-600">Cantidad facturada<input type="number" min="0" step="0.001" value={line.quantity || ''} onChange={(e) => updateLine(index, 'quantity', numberValue(e.target.value))} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs" /></label>
                       <label className="text-[11px] font-semibold text-slate-600">Unidad facturada<input value={line.unit} onChange={(e) => updateLine(index, 'unit', e.target.value)} placeholder="caja, paquete, litro…" className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs" /></label>
                       <label className="text-[11px] font-semibold text-slate-600">Costo por unidad<input type="number" min="0" step="0.0001" value={line.unitCost || ''} onChange={(e) => updateLine(index, 'unitCost', numberValue(e.target.value))} className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-xs" /></label>
