@@ -97,7 +97,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   );
   const [configuredProductCategories, setConfiguredProductCategories] = useState<string[]>([]);
   const [clasificacionInventario, setClasificacionInventario] = useState<InventoryClassification>(
-    editingProduct?.clasificacion_inventario || classificationForCategory(defaultProductCategory)
+    isFootwear ? 'Mercancía' : (editingProduct?.clasificacion_inventario || classificationForCategory(defaultProductCategory))
   );
 
   // Basic Info
@@ -181,7 +181,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     if (!isOpen || !editingProduct) return;
     setEntryMode('single');
     setCategoria((editingProduct.categoria as ProductCategory) || defaultProductCategory as ProductCategory);
-    setClasificacionInventario(editingProduct.clasificacion_inventario || 'Mercancía');
+    setClasificacionInventario(isFootwear ? 'Mercancía' : (editingProduct.clasificacion_inventario || 'Mercancía'));
     setNombre(editingProduct.nombre || '');
     setSku(editingProduct.sku || '');
     setCodigoBarras(editingProduct.codigo_barras || '');
@@ -205,7 +205,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     if (isOpen && !editingProduct) {
       setCodigoBarras('');
       setCategoria(defaultProductCategory as ProductCategory);
-      setClasificacionInventario(classificationForCategory(defaultProductCategory));
+      setClasificacionInventario(isFootwear ? 'Mercancía' : classificationForCategory(defaultProductCategory));
       setSingleStock('0');
     }
   }, [isOpen, editingProduct?.id]);
@@ -307,7 +307,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const handleCategoryChange = (newCat: ProductCategory) => {
     setCategoria(newCat);
     const nextClassification = classificationForCategory(String(newCat));
-    setClasificacionInventario(nextClassification);
+    setClasificacionInventario(isFootwear ? 'Mercancía' : nextClassification);
     if (nextClassification === 'Productos terminados') setSingleStock('0');
     const available = getTypesForCategory(newCat);
     setTipo(available[0]);
@@ -1042,6 +1042,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             </div>
           </div>
 
+          {!isFootwear && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block text-slate-700 font-bold">
               Clasificación de inventario *
@@ -1067,6 +1068,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               </span>
             </label>
           </div>
+          )}
 
           {/* Product Basic Fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
