@@ -228,19 +228,30 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setAnalysisError('Formato no compatible. Selecciona una factura PDF, JPG, PNG o WEBP.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 18 * 1024 * 1024) {
+      setAnalysisError('El archivo supera 18 MB. Reduce el PDF o la imagen e inténtalo de nuevo.');
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = async (event) => {
       const result = event.target?.result as string;
       if (result) {
         stopCamera();
-        const compressed = await compressImage(result);
-        setCapturedImage(compressed);
-        analyzeInvoice(compressed);
+        // Mantener el MIME original del PDF; solo se comprimen las imágenes.
+        const documentData = isPdf ? result : await compressImage(result);
+        setCapturedImage(documentData);
+        analyzeInvoice(documentData);
       }
     };
+    reader.onerror = () => setAnalysisError('No se pudo leer el archivo seleccionado.');
     reader.readAsDataURL(file);
-    // Reset input so same file can be selected again
     e.target.value = '';
   };
 
@@ -752,7 +763,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,application/pdf,.pdf"
                 className="hidden"
                 onChange={handleFileChange}
               />
@@ -766,10 +777,10 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-800">
-                    Selecciona o arrastra la foto de la factura
+                    Selecciona la factura o comprobante
                   </h4>
                   <p className="text-xs text-slate-500 mt-1">
-                    Formatos JPG, PNG, WEBP o capturas de pantalla de comprobantes
+                    Formatos PDF, JPG, PNG o WEBP. Los PDF se envían directamente a Gemini.
                   </p>
                 </div>
                 <button
@@ -798,12 +809,15 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
                 </p>
               </div>
               {capturedImage && (
-                <div className="w-32 h-20 mx-auto rounded-lg overflow-hidden border border-slate-200 shadow-xs">
-                  <img
-                    src={capturedImage}
-                    alt="Factura capturada"
-                    className="w-full h-full object-cover"
-                  />
+                <div className="w-32 h-20 mx-auto rounded-lg overflow-hidden border border-slate-200 shadow-xs bg-white flex items-center justify-center">
+                  {capturedImage.startsWith('data:application/pdf') ? (
+                    <div className="text-center text-rose-700">
+                      <FileText className="w-8 h-8 mx-auto" />
+                      <span className="text-[10px] font-bold">Documento PDF</span>
+                    </div>
+                  ) : (
+                    <img src={capturedImage} alt="Factura capturada" className="w-full h-full object-cover" />
+                  )}
                 </div>
               )}
             </div>
