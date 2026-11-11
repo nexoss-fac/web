@@ -68,6 +68,10 @@ export async function analyzeReceiptImage(
 ): Promise<ScannedReceiptData> {
   const { data, mimeType } = parseBase64Image(imageBase64);
 
+  if (!/^(image\\/(jpeg|png|webp)|application\\/pdf)$/i.test(mimeType)) {
+    throw new Error('Formato no compatible. Envía una imagen JPG, PNG, WEBP o un PDF.');
+  }
+
   if (!data || data.length < 50) {
     throw new Error('La imagen de la factura no contiene datos válidos.');
   }
@@ -181,7 +185,10 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
         logger.info(`[Gemini Receipt AI] Escaneando factura con ${model} (intento ${attempt})...`);
         const imagePart = {
           inlineData: {
-            mimeType: mimeType.includes('png')
+            // Gemini debe recibir el MIME original: PDF no puede etiquetarse como JPEG.
+            mimeType: mimeType === 'application/pdf'
+              ? 'application/pdf'
+              : mimeType.includes('png')
               ? 'image/png'
               : mimeType.includes('webp')
               ? 'image/webp'
