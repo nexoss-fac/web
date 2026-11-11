@@ -324,3 +324,105 @@ IMPORTANTE: Responde ÚNICAMENTE con un JSON válido sin bloques markdown, con e
   logger.error('[Gemini Receipt AI] Error general:', friendlyMsg);
   throw new Error(friendlyMsg);
 }
+
+
+export interface ScannedCurrencyOperation {
+  success: boolean;
+  fecha: string;
+  monto_bs: number;
+  monto_usd: number;
+  tasa: number;
+  referencia: string;
+  metodo: string;
+  detalles: string;
+  confianza: 'alta' | 'media' | 'baja';
+  tipo_evidencia: 'comprobante' | 'efectivo' | 'mixto' | 'otro';
+}
+
+/**
+ * Lee comprobantes P2P/transferencias o fotografías de efectivo para operaciones
+ * de compra y venta de divisas. Los importes no visibles se devuelven como cero.
+ */
+export async function analyzeCurrencyOperation(
+  imageBase64: string,
+  operation: 'compra' | 'venta',
+  currentRate = 0
+): Promise<ScannedCurrencyOperation> {
+  const { data, mimeType } = parseBase64Image(imageBase64);
+  if (!/^(image\/(jpeg|png|webp)|application\/pdf)$/i.test(mimeType)) {
+    throw new Error('Formato no compatible. Envía JPG, PNG, WEBP o PDF.');
+  }
+  if (!data || data.length < 50) throw new Error('El archivo no contiene datos válidos.');
+  const ai = getGenAI();
+  if (!ai) throw new Error('Servicio de IA no disponible: GEMINI_API_KEY no configurada.');
+
+  const prompt = `Eres un auditor experto en operaciones de cambio de divisas en Venezuela.
+Analiza esta evidencia para una operación de ${operation === 'compra' ? 'COMPRA DE USD (se entregan bolívares y se reciben dólares)' : 'VENTA DE USD (se entregan dólares y se reciben bolívares)'}.
+La evidencia puede ser: captura de Binance P2P/USDT, Zelle, transferencia bancaria, comprobante de pago, o fotografía de billetes en efectivo.
+
+REGLAS:
+- Extrae únicamente cifras que estén claramente visibles. No inventes importes, tasas, fechas, referencias ni comisiones.
+- En capturas de P2P identifica el importe fiat en Bs, el importe neto en USDT/USD, el precio/tasa y el ID/orden.
+- En comprobantes bancarios identifica el monto, moneda, fecha, referencia y contraparte si aparece.
+- En fotos de efectivo, cuenta los billetes visibles y suma sus denominaciones SOLO si se distinguen y todos los billetes están completos. No supongas billetes ocultos ni valores por el tamaño del montón.
+- Si aparecen billetes USD, calcula monto_usd; si aparecen bolívares, calcula monto_bs. En efectivo no inventes una tasa: tasa=0 salvo que esté impresa en la evidencia.
+- Si hay dos importes y una tasa claramente visible, comprueba coherencia. Si falta algún dato, devuelve 0 para ese campo.
+- Convierte fecha a YYYY-MM-DD solo si es legible; si no, usa cadena vacía.
+- metodo debe ser exactamente una de: "Binance P2P (USDT)", "Zelle", "Dólares Efectivo", "Transferencia USD". Si no se identifica, cadena vacía.
+- tipo_evidencia debe ser comprobante, efectivo, mixto u otro.
+- detalles debe explicar qué datos se pudieron leer, denominaciones/cantidad de billetes y cualquier incertidumbre. No uses datos externos.
+- confianza baja si el efectivo está parcialmente oculto, borroso o los importes no se distinguen.
+
+Devuelve SOLO JSON válido:
+{
+ "fecha":"YYYY-MM-DD o vacío",
+ "monto_bs":0,
+ "monto_usd":0,
+ "tasa":0,
+ "referencia":"",
+ "metodo":"",
+ "detalles":"",
+ "confianza":"alta|media|baja",
+ "tipo_evidencia":"comprobante|efectivo|mixto|otro"
+}
+Tasa actual del formulario (solo contexto, no asumir que es la tasa de la operación): ${currentRate > 0 ? currentRate : 'no indicada'}.`;
+
+  let lastError: any = null;
+  for (const model of ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']) {
+    try {
+      logger.info(`[Gemini Currency AI] Analizando ${operation} con ${model}...`);
+      const response = await ai.models.generateContent({
+        model,
+        contents: { parts: [
+          { inlineData: { mimeType, data } },
+          { text: prompt },
+        ] },
+        config: { responseMimeType: 'application/json', temperature: 0.1 },
+      });
+      const raw = (response.text || '').replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+      const parsed = JSON.parse(raw);
+      const validMethods = ['Binance P2P (USDT)', 'Zelle', 'Dólares Efectivo', 'Transferencia USD'];
+      const validConfidence = ['alta', 'media', 'baja'];
+      const validEvidence = ['comprobante', 'efectivo', 'mixto', 'otro'];
+      const fecha = typeof parsed.fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(parsed.fecha) ? parsed.fecha : '';
+      return {
+        success: true,
+        fecha,
+        monto_bs: Number.isFinite(Number(parsed.monto_bs)) && Number(parsed.monto_bs) > 0 ? Number(Number(parsed.monto_bs).toFixed(2)) : 0,
+        monto_usd: Number.isFinite(Number(parsed.monto_usd)) && Number(parsed.monto_usd) > 0 ? Number(Number(parsed.monto_usd).toFixed(2)) : 0,
+        tasa: Number.isFinite(Number(parsed.tasa)) && Number(parsed.tasa) > 0 ? Number(Number(parsed.tasa).toFixed(4)) : 0,
+        referencia: typeof parsed.referencia === 'string' ? parsed.referencia.trim() : '',
+        metodo: validMethods.includes(parsed.metodo) ? parsed.metodo : '',
+        detalles: typeof parsed.detalles === 'string' ? parsed.detalles.trim() : '',
+        confianza: validConfidence.includes(parsed.confianza) ? parsed.confianza : 'baja',
+        tipo_evidencia: validEvidence.includes(parsed.tipo_evidencia) ? parsed.tipo_evidencia : 'otro',
+      };
+    } catch (err: any) {
+      lastError = err;
+      const message = err?.message || String(err);
+      logger.warn('[Gemini Currency AI] Falló modelo', model, message);
+      if (!/503|high demand|UNAVAILABLE|429|RESOURCE_EXHAUSTED|DEADLINE_EXCEEDED|deadline expired|fetch failed|ECONNRESET|ETIMEDOUT|timeout|socket|network/i.test(message)) break;
+    }
+  }
+  throw new Error(lastError?.message || 'No se pudo leer el comprobante de divisas.');
+}
