@@ -18,6 +18,7 @@ export const HealthBilling: React.FC<{ patient: Patient }> = ({ patient }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { amount: string; currency: 'USD' | 'VES'; method: string; reference: string }>>({});
   const headers = useCallback(() => ({ 'Content-Type': 'application/json', 'x-company-id': localStorage.getItem('nexoss_active_company_id') || '' }), []);
   const load = useCallback(async () => {
     const response = await fetch('/api/health/invoices', { headers: headers() });
@@ -30,6 +31,29 @@ export const HealthBilling: React.FC<{ patient: Patient }> = ({ patient }) => {
   const tax = applyTax ? subtotal * Math.max(0, Number(taxRate) || 0) / 100 : 0;
   const total = subtotal + tax;
   const update = (index: number, field: keyof Line, value: string) => setLines((current) => current.map((line, i) => i === index ? { ...line, [field]: value } : line));
+  const updatePaymentDraft = (invoiceId: string, field: 'amount' | 'currency' | 'method' | 'reference', value: string) => {
+    setPaymentDrafts((current) => ({ ...current, [invoiceId]: { amount: '', currency: 'USD', method: 'Efectivo USD', reference: '', ...current[invoiceId], [field]: value } }));
+  };
+  const submitPayment = async (event: React.FormEvent, invoice: any) => {
+    event.preventDefault(); setError(''); setNotice('');
+    const draft = paymentDrafts[invoice.id] || { amount: '', currency: 'USD' as const, method: 'Efectivo USD', reference: '' };
+    if (!(Number(draft.amount) > 0)) return setError('Indica un monto de abono mayor que cero.');
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/health/invoices/${encodeURIComponent(invoice.id)}/payments`, {
+        method: 'POST', headers: headers(), body: JSON.stringify({
+          paymentId: crypto.randomUUID(), amount: Number(draft.amount), currency: draft.currency,
+          exchangeRate: Number(invoice.tasa_cambio), method: draft.method, reference: draft.reference,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo registrar el abono.');
+      setNotice(data.duplicate ? 'El abono ya estaba registrado.' : 'Abono registrado correctamente.');
+      setPaymentDrafts((current) => ({ ...current, [invoice.id]: { ...draft, amount: '', reference: '' } }));
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo registrar el abono.'); }
+    finally { setBusy(false); }
+  };
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setError(''); setNotice('');
     if (!patient) return setError('Selecciona primero un paciente en la sección Pacientes.');
@@ -67,6 +91,6 @@ export const HealthBilling: React.FC<{ patient: Patient }> = ({ patient }) => {
         <button type="submit" disabled={busy || !patient} className="rounded-lg bg-[#102b4c] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><FileText className="mr-1 inline h-4 w-4"/>{busy ? 'Emitiendo…' : 'Emitir factura NEXOSS'}</button>
       </form>
     </section>
-    <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Facturas de servicios y tratamientos</h2>{invoices.length ? <div className="mt-3 space-y-2">{invoices.map((invoice) => <article key={invoice.id} className="rounded-lg border p-3"><div className="flex flex-wrap justify-between gap-2"><strong>Factura {invoice.numero_factura}</strong><span className="text-sm">{new Date(invoice.fecha).toLocaleString('es-VE')}</span></div><p className="mt-1 text-sm">{invoice.cliente_nombre} {invoice.cliente_apellido} · ${money(Number(invoice.total_usd))} · {invoice.estado}</p><p className="mt-1 text-xs text-slate-500">{(invoice.items || []).map((item: any) => item.nombre_producto).join(' · ')}</p></article>)}</div> : <p className="mt-3 text-sm text-slate-500">Todavía no hay facturas clínicas.</p>}</section>
+    <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="font-semibold">Facturas de servicios y tratamientos</h2>{invoices.length ? <div className="mt-3 space-y-2">{invoices.map((invoice) => <article key={invoice.id} className="rounded-lg border p-3"><div className="flex flex-wrap justify-between gap-2"><strong>Factura {invoice.numero_factura}</strong><span className="text-sm">{new Date(invoice.fecha).toLocaleString('es-VE')}</span></div><p className="mt-1 text-sm">{invoice.cliente_nombre} {invoice.cliente_apellido} · ${money(Number(invoice.total_usd))} · {invoice.estado}</p><p className="mt-1 text-xs text-slate-500">{(invoice.items || []).map((item: any) => item.nombre_producto).join(' · ')}</p><p className="mt-1 text-sm">Abonado: <strong>${money(Number(invoice.total_positivo_inmediato_usd || 0))}</strong> · Saldo: <strong>${money(Math.max(0, Number(invoice.total_usd) - Number(invoice.total_positivo_inmediato_usd || 0)))}</strong></p>{Number(invoice.total_usd) - Number(invoice.total_positivo_inmediato_usd || 0) > 0.005 && <form onSubmit={(e) => void submitPayment(e, invoice)} className="mt-3 grid gap-2 rounded-lg bg-slate-50 p-3 sm:grid-cols-2"><input aria-label="Monto del nuevo abono" type="number" min="0.01" step="0.01" required placeholder="Monto del abono" value={paymentDrafts[invoice.id]?.amount || ''} onChange={(e) => updatePaymentDraft(invoice.id, 'amount', e.target.value)} className="rounded-lg border p-2 text-sm"/><select aria-label="Moneda del abono" value={paymentDrafts[invoice.id]?.currency || 'USD'} onChange={(e) => updatePaymentDraft(invoice.id, 'currency', e.target.value)} className="rounded-lg border p-2 text-sm"><option value="USD">USD</option><option value="VES">Bolívares</option></select><select aria-label="Método del abono" value={paymentDrafts[invoice.id]?.method || 'Efectivo USD'} onChange={(e) => updatePaymentDraft(invoice.id, 'method', e.target.value)} className="rounded-lg border p-2 text-sm"><option>Efectivo USD</option><option>Efectivo Bs</option><option>Pago Móvil</option><option>Punto de Venta</option><option>Transferencia</option><option>Zelle</option><option>Otro</option></select><input aria-label="Referencia del abono" placeholder="Referencia (opcional)" value={paymentDrafts[invoice.id]?.reference || ''} onChange={(e) => updatePaymentDraft(invoice.id, 'reference', e.target.value)} className="rounded-lg border p-2 text-sm"/><button type="submit" disabled={busy} className="rounded-lg bg-[#102b4c] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2">Registrar abono</button></form>}</article>)}</div> : <p className="mt-3 text-sm text-slate-500">Todavía no hay facturas clínicas.</p>}</section>
   </div>;
 };
