@@ -855,12 +855,19 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
                 {/* Photo Thumbnail + Monto Row */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {/* Photo Preview Thumbnail */}
-                  <div className="col-span-1 rounded-xl overflow-hidden border border-slate-200 relative group aspect-4/3 sm:aspect-auto">
-                    <img
-                      src={capturedImage}
-                      alt="Factura"
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="col-span-1 rounded-xl overflow-hidden border border-slate-200 relative group aspect-4/3 sm:aspect-auto flex items-center justify-center bg-white">
+                    {capturedImage.startsWith('data:application/pdf') ? (
+                      <div className="text-center text-rose-700">
+                        <FileText className="w-12 h-12 mx-auto" />
+                        <span className="text-xs font-bold">Factura PDF adjunta</span>
+                      </div>
+                    ) : (
+                      <img
+                        src={capturedImage}
+                        alt="Factura"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
                     <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[11px] font-semibold">
                       Factura adjunta
                     </div>
