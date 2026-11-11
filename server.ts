@@ -123,7 +123,14 @@ function notifyInBackground(build: (company: string) => Notice) {
 }
 
 function usePostgresControlPlane(): boolean {
-  return process.env.NEXOSS_PLATFORM_STORAGE === 'postgres';
+  const mode = process.env.NEXOSS_PLATFORM_STORAGE?.trim().toLowerCase();
+  if (process.env.NODE_ENV === 'production' && mode !== 'postgres') {
+    throw new Error('En producción NEXOSS_PLATFORM_STORAGE=postgres es obligatorio; no se permite usar el control plane local.');
+  }
+  if (mode === 'postgres' && !process.env.CONTROL_PLANE_DATABASE_URL?.trim()) {
+    throw new Error('CONTROL_PLANE_DATABASE_URL es obligatoria cuando NEXOSS_PLATFORM_STORAGE=postgres.');
+  }
+  return mode === 'postgres';
 }
 
 function isSamePostgresDatabase(left: string, right: string): boolean {
