@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   DollarSign,
   ArrowRightLeft,
@@ -8,6 +8,12 @@ import {
   HelpCircle,
   TrendingDown,
   TrendingUp,
+  Camera,
+  Upload,
+  Sparkles,
+  RotateCw,
+  FileText,
+  Loader2,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { CurrencyPurchaseMethod } from '../../types';
@@ -37,6 +43,171 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
   const [referencia, setReferencia] = useState('');
   const [notas, setNotas] = useState('');
   const [error, setError] = useState('');
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [evidenceImage, setEvidenceImage] = useState<string | null>(null);
+  const [evidenceName, setEvidenceName] = useState('');
+  const [evidenceIsPdf, setEvidenceIsPdf] = useState(false);
+  const [isReadingEvidence, setIsReadingEvidence] = useState(false);
+  const [evidenceError, setEvidenceError] = useState('');
+  const [evidenceDetails, setEvidenceDetails] = useState('');
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const evidenceInputRef = useRef<HTMLInputElement | null>(null);
+
+  const stopEvidenceCamera = () => {
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+    setCameraActive(false);
+  };
+
+  useEffect(() => {
+    if (!isOpen || !cameraOpen) {
+      stopEvidenceCamera();
+      return;
+    }
+    let cancelled = false;
+    const open = async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Este navegador no permite acceder a la cámara. Puedes subir una foto o captura.');
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        streamRef.current = stream;
+        setCameraError('');
+        setCameraActive(true);
+      } catch (err: any) {
+        setCameraError(err?.message || 'No se pudo activar la cámara. Revisa los permisos del navegador.');
+        setCameraActive(false);
+      }
+    };
+    void open();
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+      setCameraActive(false);
+    };
+  }, [isOpen, cameraOpen]);
+
+  useEffect(() => {
+    if (!cameraActive || !videoRef.current || !streamRef.current) return;
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    video.srcObject = stream;
+    const play = async () => {
+      try { await video.play(); }
+      catch { setCameraError('La cámara se activó, pero no se pudo mostrar el video. Revisa los permisos o vuelve a intentarlo.'); }
+    };
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) void play();
+    else video.onloadedmetadata = () => { void play(); };
+    return () => {
+      video.onloadedmetadata = null;
+      if (video.srcObject === stream) video.srcObject = null;
+    };
+  }, [cameraActive]);
+
+  const readCurrencyEvidence = async (dataUrl: string) => {
+    setIsReadingEvidence(true);
+    setEvidenceError('');
+    setEvidenceDetails('');
+    try {
+      const response = await fetch('/api/currency/scan-evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(65000),
+        body: JSON.stringify({ imageBase64: dataUrl, operation, currentRate: Number(tasaCompra) || 0 }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || `No se pudo analizar la evidencia (HTTP ${response.status}).`);
+      }
+
+      const bs = Number(data.monto_bs) > 0 ? Number(data.monto_bs) : 0;
+      const usd = Number(data.monto_usd) > 0 ? Number(data.monto_usd) : 0;
+      const rate = Number(data.tasa) > 0 ? Number(data.tasa) : 0;
+      const usableRate = rate || (Number(tasaCompra) > 0 ? Number(tasaCompra) : 0);
+
+      if (bs > 0) setMontoBs(bs.toFixed(2));
+      if (usd > 0) setMontoUsd(usd.toFixed(2));
+      if (rate > 0) setTasaCompra(rate.toString());
+      else if (bs > 0 && usd > 0) setTasaCompra((bs / usd).toFixed(4));
+      else if (usableRate > 0 && bs > 0 && !usd) setMontoUsd((bs / usableRate).toFixed(2));
+      else if (usableRate > 0 && usd > 0 && !bs) setMontoBs((usd * usableRate).toFixed(2));
+
+      if (data.fecha) setFecha(data.fecha);
+      if (data.referencia) setReferencia(data.referencia);
+      if (data.metodo) setMetodo(data.metodo as CurrencyPurchaseMethod);
+      setEvidenceDetails(data.detalles || 'La IA no encontró detalles adicionales.');
+      if (!bs && !usd) {
+        setEvidenceError('La IA no pudo identificar un importe con suficiente claridad. Puedes completar los campos manualmente; la evidencia se conserva.');
+      }
+    } catch (err: any) {
+      setEvidenceError(err?.message || 'No se pudo leer la evidencia. Inténtalo de nuevo.');
+    } finally {
+      setIsReadingEvidence(false);
+    }
+  };
+
+  const handleEvidenceFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setEvidenceError('Formato no compatible. Selecciona JPG, PNG, WEBP o PDF.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 18 * 1024 * 1024) {
+      setEvidenceError('El archivo supera 18 MB. Reduce su tamaño e inténtalo de nuevo.');
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      if (!result) return;
+      setEvidenceImage(result);
+      setEvidenceName(file.name);
+      setEvidenceIsPdf(isPdf);
+      setCameraOpen(false);
+      await readCurrencyEvidence(result);
+    };
+    reader.onerror = () => setEvidenceError('No se pudo abrir el archivo seleccionado.');
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  const captureCurrencyEvidence = async () => {
+    const video = videoRef.current;
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+      setCameraError('La cámara todavía está iniciando. Espera un momento.');
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = canvas.toDataURL('image/jpeg', 0.86);
+    setEvidenceImage(imageData);
+    setEvidenceName('Captura de cámara');
+    setEvidenceIsPdf(false);
+    setCameraOpen(false);
+    stopEvidenceCamera();
+    await readCurrencyEvidence(imageData);
+  };
+
 
   // Update calculated USD when Bs or Rate changes
   const handleBsChange = (val: string) => {
@@ -155,6 +326,52 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
               <span>{error}</span>
             </div>
           )}
+          <section className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold text-indigo-950 flex items-center gap-1.5"><Sparkles className="w-4 h-4" /> Lector inteligente de divisas</p>
+                <p className="text-[10px] text-slate-600">Lee comprobantes P2P, transferencias o billetes en efectivo.</p>
+              </div>
+              {isReadingEvidence && <span className="text-[10px] text-indigo-700 flex items-center gap-1"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analizando</span>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => { setEvidenceError(''); setCameraOpen(v => !v); }} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700">
+                <Camera className="w-4 h-4" /> {cameraOpen ? 'Cerrar cámara' : 'Tomar foto'}
+              </button>
+              <button type="button" onClick={() => evidenceInputRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-bold text-indigo-800 hover:bg-indigo-50">
+                <Upload className="w-4 h-4" /> Subir capture / archivo
+              </button>
+              {evidenceImage && (
+                <button type="button" onClick={() => { setEvidenceImage(null); setEvidenceName(''); setEvidenceDetails(''); setEvidenceError(''); }} className="rounded-lg px-2 py-2 text-xs font-semibold text-slate-600 hover:bg-white">Quitar evidencia</button>
+              )}
+            </div>
+            <input ref={evidenceInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" className="hidden" onChange={handleEvidenceFile} />
+            {cameraOpen && (
+              <div className="space-y-2">
+                <div className="relative overflow-hidden rounded-xl bg-slate-950 aspect-video flex items-center justify-center">
+                  {cameraActive ? <video ref={videoRef} playsInline muted className="h-full w-full object-contain" /> : <p className="p-4 text-center text-xs text-slate-300">{cameraError || 'Activando cámara…'}</p>}
+                </div>
+                {cameraError && <p className="text-xs text-rose-700">{cameraError}</p>}
+                <div className="flex gap-2">
+                  <button type="button" disabled={!cameraActive} onClick={captureCurrencyEvidence} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"><Camera className="mr-1 inline h-4 w-4" /> Capturar y analizar</button>
+                  <button type="button" onClick={() => setCameraOpen(false)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Cancelar</button>
+                </div>
+              </div>
+            )}
+            {evidenceImage && (
+              <div className="flex items-center gap-3 rounded-lg border border-indigo-100 bg-white p-2">
+                {evidenceIsPdf ? <FileText className="h-9 w-9 shrink-0 text-rose-600" /> : <img src={evidenceImage} alt="Evidencia de operación" className="h-14 w-16 rounded object-cover" />}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-slate-800">{evidenceName}</p>
+                  <p className="text-[10px] text-slate-500">{isReadingEvidence ? 'La IA está leyendo la evidencia…' : 'Evidencia adjunta; revisa los datos extraídos.'}</p>
+                </div>
+                {!isReadingEvidence && <button type="button" onClick={() => evidenceImage && readCurrencyEvidence(evidenceImage)} className="text-xs font-bold text-indigo-700">Reintentar</button>}
+              </div>
+            )}
+            {evidenceError && <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{evidenceError}</p>}
+            {evidenceDetails && <p className="rounded-lg bg-white/80 p-2 text-[11px] leading-relaxed text-slate-600"><strong>Lectura IA:</strong> {evidenceDetails}</p>}
+            <p className="text-[10px] text-slate-500">La IA solo propone datos. Verifica montos, denominaciones y tasa antes de registrar; nunca contabiliza automáticamente.</p>
+          </section>
           <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
             <button type="button" onClick={() => { setOperation('compra'); setError(''); }} className={`rounded-lg px-3 py-2 text-sm font-bold ${operation === 'compra' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}>Comprar USD</button>
             <button type="button" onClick={() => { setOperation('venta'); setError(''); }} className={`rounded-lg px-3 py-2 text-sm font-bold ${operation === 'venta' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}>Vender USD</button>
@@ -216,7 +433,7 @@ export const CurrencyPurchaseModal: React.FC<CurrencyPurchaseModalProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Tasa de Compra (Bs/$)
+                  {operation === 'compra' ? 'Tasa de Compra (Bs/$)' : 'Tasa de Venta (Bs/$)'}
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">Bs.</span>
