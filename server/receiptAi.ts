@@ -388,7 +388,7 @@ Devuelve SOLO JSON válido:
 Tasa actual del formulario (solo contexto, no asumir que es la tasa de la operación): ${currentRate > 0 ? currentRate : 'no indicada'}.`;
 
   let lastError: any = null;
-  for (const model of ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']) {
+  for (const model of ['gemini-flash-latest', 'gemini-3.1-flash-lite']) {
     try {
       logger.info(`[Gemini Currency AI] Analizando ${operation} con ${model}...`);
       const response = await ai.models.generateContent({
