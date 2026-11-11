@@ -48,6 +48,9 @@ export function registerPurchaseInvoiceRoutes(app: Express, adminOnly: RequestHa
         return res.status(403).json({ success: false, error: 'No hay una empresa activa autorizada para esta operación.' });
       }
       const { draft, mappings, exchangeRate } = req.body || {};
+      if (tenant.industryTemplate === 'footwear' && draft && Array.isArray(draft.lines)) {
+        draft.lines = draft.lines.map((line: any) => ({ ...line, inventoryClassification: 'Mercancía' }));
+      }
       if (!draft || !Array.isArray(mappings)) {
         return res.status(400).json({ success: false, error: 'Faltan la factura revisada y sus relaciones con el inventario.' });
       }
