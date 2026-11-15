@@ -27,16 +27,17 @@ function getClient(): GoogleGenAI {
 }
 
 function parseImage(input: string) {
-  const match = input.match(/^data:([\w.+-]+\/[\w.+-]+);base64,(.+)$/s);
+  const match = input.match(/^data:([\\w.+-]+\\/[\\w.+-]+);base64,(.+)$/s);
   return match ? { mimeType: match[1], data: match[2] } : { mimeType: 'image/jpeg', data: input };
 }
 
-/** Reconocimiento visual de mercancía, productos terminados, insumos y materias primas. */
+/** Reconocimiento visual universal usando la API recomendada por Google. */
 export async function analyzeProductImage(
   imageBase64: string,
   userHint = '',
   industry = 'comercio general'
 ): Promise<ProductAnalysisResult> {
+  const startedAt = Date.now();
   const { mimeType, data } = parseImage(imageBase64);
   if (!data || data.length < 50) throw new Error('La imagen no contiene datos válidos.');
   const prompt = `Eres un especialista en identificación visual de inventario para un ERP multiempresa.
@@ -47,20 +48,27 @@ Si parece ingrediente, material de fabricación o empaque, marca es_materia_prim
 Pista del usuario: ${userHint || 'Ninguna'}.
 Devuelve SOLO JSON válido con: nombre, marca, modelo, categoria, tipo, color, material, descripcion_comercial, caracteristicas_clave (array), unidad_medida, es_materia_prima, precio_sugerido_usd.
 No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar hechos visibles de inferencias.`;
-  // Eliminar gemini-2.0-flash (retirado); mantener dos modelos vigentes como fallback.
-  const models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+
+  // Interactions API is Google's recommended interface for Gemini models and multimodal input.
+  // store:false keeps this single-image inventory request stateless.
+  const models = ['gemini-3.8-flash', 'gemini-3.5-flash'];
   let lastError: unknown;
   for (const model of models) {
     try {
-      const response = await getClient().models.generateContent({
+      logger.info(`[Gemini Product AI] Iniciando análisis con ${model}; imagen ${Math.round(data.length * 0.75 / 1024)} KB.`);
+      const interaction = await getClient().interactions.create({
         model,
-        contents: { parts: [{ text: prompt }, { inlineData: { mimeType: mimeType.startsWith('image/') ? mimeType : 'image/jpeg', data } }] },
-        config: { responseMimeType: 'application/json', temperature: 0.1 },
+        input: [
+          { type: 'image', data, mime_type: mimeType.startsWith('image/') ? mimeType : 'image/jpeg' },
+          { type: 'text', text: prompt },
+        ],
+        store: false,
       });
-      const raw = (response.text || '').replace(/\`\`\`json\s*/i, '').replace(/\`\`\`\s*$/i, '').trim();
+      const raw = (interaction.output_text || '').replace(/\`\`\`json\\s*/i, '').replace(/\`\`\`\\s*$/i, '').trim();
+      if (!raw) throw new Error(`Gemini no devolvió texto (estado: ${interaction.status || 'desconocido'}).`);
       const parsed = JSON.parse(raw);
       const clean = (v: unknown) => typeof v === 'string' ? v.trim() : '';
-      return {
+      const result: ProductAnalysisResult = {
         success: true,
         nombre: clean(parsed.nombre) || 'Producto por identificar',
         marca: clean(parsed.marca),
@@ -76,9 +84,11 @@ No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar
         precio_sugerido_usd: 0,
         modelo_ia_usado: model,
       };
+      logger.info(`[Gemini Product AI] Análisis completado con ${model} en ${Date.now() - startedAt} ms.`);
+      return result;
     } catch (error) {
       lastError = error;
-      logger.warn(`[Gemini Product AI] Falló ${model}:`, error instanceof Error ? error.message : error);
+      logger.error(`[Gemini Product AI] Falló ${model} tras ${Date.now() - startedAt} ms:`, error instanceof Error ? error.message : error);
     }
   }
   throw new Error(lastError instanceof Error ? lastError.message : 'No se pudo identificar el producto. Intenta con una foto más nítida.');
