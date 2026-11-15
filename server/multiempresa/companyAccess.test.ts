@@ -130,6 +130,8 @@ test('médico solo puede operar el expediente clínico y no puede cobrar ni acce
   }
   for (const [method, url] of [
     ['POST', '/api/health/patients/123/payments'],
+    ['GET', '/api/health/patients/123/payments'],
+    ['GET', '/api/health/patients/123/record/extra'],
     ['POST', '/api/health/payments/123/installments'],
     ['POST', '/api/health/providers'],
     ['POST', '/api/health/blog'],
