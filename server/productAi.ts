@@ -48,7 +48,7 @@ Pista del usuario: ${userHint || 'Ninguna'}.
 Devuelve SOLO JSON válido con: nombre, marca, modelo, categoria, tipo, color, material, descripcion_comercial, caracteristicas_clave (array), unidad_medida, es_materia_prima, precio_sugerido_usd.
 No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar hechos visibles de inferencias.`;
   // Eliminar gemini-2.0-flash (retirado); mantener dos modelos vigentes como fallback.
-  const models = ['gemini-2.5-flash', 'gemini-flash-latest'];
+  const models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
   let lastError: unknown;
   for (const model of models) {
     try {
