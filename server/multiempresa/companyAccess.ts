@@ -72,8 +72,8 @@ const ROLE_POLICY: Record<MembershipRole, RolePolicy> = {
   },
   doctor: {
     allow: [
-      { methods: 'read', route: /^\/health\/(?:patients(?:\/[^/]+\/record)?|providers|appointment-requests|blog)(?:\/|$)/ },
-      { methods: 'write', route: /^\/health\/(?:patients(?:\/[^/]+\/(?:appointments|consultations|prescriptions|exam-orders|reports|aesthetic-histories))?|appointment-requests(?:\/[^/]+)?)(?:\/|$)/ },
+      { methods: 'read', route: /^\/health\/(?:patients(?:\/[^/]+\/record)?|providers|appointment-requests|blog)$/ },
+      { methods: 'write', route: /^\/health\/(?:patients(?:\/[^/]+\/(?:appointments|consultations|prescriptions|exam-orders|reports|aesthetic-histories))?|appointment-requests(?:\/[^/]+)?)$/ },
     ],
   },
   cashier: {
@@ -135,6 +135,11 @@ function checkTenantPermissions(
   // zapatos). La autorización se aplica en el servidor aunque se invoque la API
   // directamente, sin depender de que la interfaz oculte el módulo.
   const footwearOnlyRoute = /^\/(?:layaways(?:\/|$)|(?:ai\/)?(?:analyze-shoe|shoe-ai|shoe)(?:\/|$))/;
+  const healthOnlyRoute = /^\/health(?:\/|$)/;
+  if (healthOnlyRoute.test(route) && industryTemplate !== 'health') {
+    res.status(403).json({ error: 'Las funciones clínicas solo están habilitadas para empresas del sector salud.' });
+    return false;
+  }
   if (footwearOnlyRoute.test(route) && industryTemplate !== 'footwear') {
     res.status(403).json({ error: 'Esta función solo está habilitada para empresas de calzado.' });
     return false;
