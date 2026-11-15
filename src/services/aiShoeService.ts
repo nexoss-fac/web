@@ -89,7 +89,8 @@ export async function analyzeShoeWithAi(
   for (const endpoint of endpoints) {
     try {
       const controller = new AbortController();
-      // La inferencia multimodal puede tardar más en redes móviles; evitar abortar a los 30 s.\n      const timeout = setTimeout(() => controller.abort(), 90000);
+      // La inferencia multimodal puede tardar más en redes móviles; ampliar el límite a 90 segundos.
+      const timeout = setTimeout(() => controller.abort(), 90000);
       let response: Response;
       try {
         response = await fetch(endpoint, {
