@@ -352,7 +352,6 @@ export const ShoeLabelModal: React.FC<ShoeLabelModalProps> = ({
                   <input
                     type="number"
                     min="1"
-                    max="100"
                     value={copies}
                     max={100}
                     onChange={(e) => setCopies(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
