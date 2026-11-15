@@ -89,7 +89,7 @@ No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar
       try { interaction = JSON.parse(responseText); }
       catch { throw new Error('Gemini devolvió una respuesta HTTP no válida (JSON incorrecto).'); }
 
-      const raw = extractText(interaction).replace(/\`\`\`json\\s*/i, '').replace(/\`\`\`\\s*$/i, '').trim();
+      const raw = extractText(interaction).replace(/```json\s*/i, '').replace(/```\s*$/i, '').trim();
       if (!raw) throw new Error(`Gemini no devolvió texto (estado: ${interaction?.status || 'desconocido'}).`);
 
       let parsed: any;
