@@ -2704,6 +2704,9 @@ async function startServer() {
 
   // 10. Gemini AI Shoe Image Recognition & Merchandising API
   const handleShoeAnalysis = async (req: express.Request, res: express.Response) => {
+    const requestStartedAt = Date.now();
+    // Log request metadata only; never log the image or API key.
+    logger.info(`[API analyze-product] Solicitud recibida: method=${req.method}, contentLength=${req.headers['content-length'] || 'unknown'}.`);
     // Enable CORS & Preflight headers
     res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -2726,10 +2729,11 @@ async function startServer() {
       const analysis = await analyzeProductImage(imageBase64, userHint, typeof industry === 'string' ? industry.slice(0, 120) : 'comercio general');
 
       // Response universal para inventarios de cualquier industria.
+      logger.info(`[API analyze-product] Respuesta lista en ${Date.now() - requestStartedAt} ms; modelo=${analysis.modelo_ia_usado}.`);
       res.json({ ...analysis, marcaModelo: [analysis.marca, analysis.modelo].filter(Boolean).join(' '), estiloCategoria: analysis.tipo, colores: analysis.color, materiales: analysis.material, tituloComercial: analysis.nombre, descripcionTienda: analysis.descripcion_comercial });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error('[API analyze-product error]:', msg);
+      logger.error(`[API analyze-product error] tras ${Date.now() - requestStartedAt} ms:`, msg);
       res.status(500).json({
         success: false,
         error: msg,
