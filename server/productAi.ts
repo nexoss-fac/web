@@ -27,7 +27,7 @@ function getClient(): GoogleGenAI {
 }
 
 function parseImage(input: string) {
-  const match = input.match(/^data:([\\w.+-]+\\/[\\w.+-]+);base64,(.+)$/s);
+  const match = input.match(/^data:([\w.+-]+\/[\w.+-]+);base64,(.+)$/s);
   return match ? { mimeType: match[1], data: match[2] } : { mimeType: 'image/jpeg', data: input };
 }
 
