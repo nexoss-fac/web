@@ -47,16 +47,17 @@ Si parece ingrediente, material de fabricación o empaque, marca es_materia_prim
 Pista del usuario: ${userHint || 'Ninguna'}.
 Devuelve SOLO JSON válido con: nombre, marca, modelo, categoria, tipo, color, material, descripcion_comercial, caracteristicas_clave (array), unidad_medida, es_materia_prima, precio_sugerido_usd.
 No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar hechos visibles de inferencias.`;
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  // Eliminar gemini-2.0-flash (retirado); mantener dos modelos vigentes como fallback.
+  const models = ['gemini-2.5-flash', 'gemini-flash-latest'];
   let lastError: unknown;
   for (const model of models) {
     try {
       const response = await getClient().models.generateContent({
         model,
-        contents: { parts: [{ inlineData: { mimeType: mimeType.startsWith('image/') ? mimeType : 'image/jpeg', data } }, { text: prompt }] },
+        contents: { parts: [{ text: prompt }, { inlineData: { mimeType: mimeType.startsWith('image/') ? mimeType : 'image/jpeg', data } }] },
         config: { responseMimeType: 'application/json', temperature: 0.1 },
       });
-      const raw = (response.text || '').replace(/```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      const raw = (response.text || '').replace(/\`\`\`json\s*/i, '').replace(/\`\`\`\s*$/i, '').trim();
       const parsed = JSON.parse(raw);
       const clean = (v: unknown) => typeof v === 'string' ? v.trim() : '';
       return {
