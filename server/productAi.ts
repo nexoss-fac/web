@@ -52,75 +52,91 @@ Pista del usuario: ${userHint || 'Ninguna'}.
 Devuelve SOLO JSON válido con: nombre, marca, modelo, categoria, tipo, color, material, descripcion_comercial, caracteristicas_clave (array), unidad_medida, es_materia_prima, precio_sugerido_usd.
 No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar hechos visibles de inferencias.`;
 
-  const models = ['gemini-3.8-flash', 'gemini-3.5-flash'];
+  // Modelos estables y alternativas de menor demanda. Los 503/429 son transitorios:
+  // se reintentan con espera creciente antes de pasar al siguiente modelo.
+  const models = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
   let lastError: unknown;
 
   for (const model of models) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
-    const attemptStarted = Date.now();
-    try {
-      logger.info(`[Gemini Product AI] REST Interactions: inicio ${model}; imagen ${Math.round(data.length * 0.75 / 1024)} KB.`);
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          input: [
-            { type: 'image', data, mime_type: mimeType.startsWith('image/') ? mimeType : 'image/jpeg' },
-            { type: 'text', text: prompt },
-          ],
-          store: false,
-        }),
-        signal: controller.signal,
-      });
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45000);
+      const attemptStarted = Date.now();
+      try {
+        logger.info(`[Gemini Product AI] REST Interactions: inicio ${model}, intento ${attempt}; imagen ${Math.round(data.length * 0.75 / 1024)} KB.`);
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            input: [
+              { type: 'image', data, mime_type: mimeType.startsWith('image/') ? mimeType : 'image/jpeg' },
+              { type: 'text', text: prompt },
+            ],
+            store: false,
+          }),
+          signal: controller.signal,
+        });
 
-      const responseText = await response.text();
-      if (!response.ok) {
-        let detail = responseText;
-        try {
-          const parsedError = JSON.parse(responseText);
-          detail = parsedError?.error?.message || responseText;
-        } catch { /* conservar respuesta de error original */ }
-        throw new Error(`Gemini HTTP ${response.status}: ${detail.slice(0, 700)}`);
+        const responseText = await response.text();
+        if (!response.ok) {
+          let detail = responseText;
+          try {
+            const parsedError = JSON.parse(responseText);
+            detail = parsedError?.error?.message || responseText;
+          } catch { /* conservar respuesta de error original */ }
+          const httpError = new Error(`Gemini HTTP ${response.status}: ${detail.slice(0, 700)}`);
+          lastError = httpError;
+          logger.error(`[Gemini Product AI] Falló ${model} intento ${attempt}: ${httpError.message}`);
+          if ([429, 500, 502, 503, 504].includes(response.status) && attempt < 2) {
+            await new Promise(resolve => setTimeout(resolve, 1200 * attempt));
+            continue;
+          }
+          break;
+        }
+
+        let interaction: any;
+        try { interaction = JSON.parse(responseText); }
+        catch { throw new Error('Gemini devolvió una respuesta HTTP no válida (JSON incorrecto).'); }
+
+        const raw = extractText(interaction).replace(/```json\s*/i, '').replace(/```\s*$/i, '').trim();
+        if (!raw) throw new Error(`Gemini no devolvió texto (estado: ${interaction?.status || 'desconocido'}).`);
+
+        let parsed: any;
+        try { parsed = JSON.parse(raw); }
+        catch { throw new Error(`Gemini devolvió texto que no es JSON: ${raw.slice(0, 300)}`); }
+
+        const clean = (v: unknown) => typeof v === 'string' ? v.trim() : '';
+        const result: ProductAnalysisResult = {
+          success: true,
+          nombre: clean(parsed.nombre) || 'Producto por identificar',
+          marca: clean(parsed.marca),
+          modelo: clean(parsed.modelo),
+          categoria: clean(parsed.categoria),
+          tipo: clean(parsed.tipo),
+          color: clean(parsed.color),
+          material: clean(parsed.material),
+          descripcion_comercial: clean(parsed.descripcion_comercial),
+          caracteristicas_clave: Array.isArray(parsed.caracteristicas_clave) ? parsed.caracteristicas_clave.filter((v: unknown) => typeof v === 'string').slice(0, 12) : [],
+          unidad_medida: clean(parsed.unidad_medida) || 'Unidad',
+          es_materia_prima: parsed.es_materia_prima === true,
+          precio_sugerido_usd: 0,
+          modelo_ia_usado: model,
+        };
+        logger.info(`[Gemini Product AI] OK ${model} en ${Date.now() - attemptStarted} ms; total ${Date.now() - startedAt} ms.`);
+        return result;
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(`[Gemini Product AI] Falló ${model} intento ${attempt} en ${Date.now() - attemptStarted} ms: ${message}`);
+        if (attempt < 2 && (message.includes('503') || message.includes('429') || message.includes('502') || message.includes('504'))) {
+          await new Promise(resolve => setTimeout(resolve, 1200 * attempt));
+          continue;
+        }
+        break;
+      } finally {
+        clearTimeout(timeout);
       }
-
-      let interaction: any;
-      try { interaction = JSON.parse(responseText); }
-      catch { throw new Error('Gemini devolvió una respuesta HTTP no válida (JSON incorrecto).'); }
-
-      const raw = extractText(interaction).replace(/```json\s*/i, '').replace(/```\s*$/i, '').trim();
-      if (!raw) throw new Error(`Gemini no devolvió texto (estado: ${interaction?.status || 'desconocido'}).`);
-
-      let parsed: any;
-      try { parsed = JSON.parse(raw); }
-      catch { throw new Error(`Gemini devolvió texto que no es JSON: ${raw.slice(0, 300)}`); }
-
-      const clean = (v: unknown) => typeof v === 'string' ? v.trim() : '';
-      const result: ProductAnalysisResult = {
-        success: true,
-        nombre: clean(parsed.nombre) || 'Producto por identificar',
-        marca: clean(parsed.marca),
-        modelo: clean(parsed.modelo),
-        categoria: clean(parsed.categoria),
-        tipo: clean(parsed.tipo),
-        color: clean(parsed.color),
-        material: clean(parsed.material),
-        descripcion_comercial: clean(parsed.descripcion_comercial),
-        caracteristicas_clave: Array.isArray(parsed.caracteristicas_clave) ? parsed.caracteristicas_clave.filter((v: unknown) => typeof v === 'string').slice(0, 12) : [],
-        unidad_medida: clean(parsed.unidad_medida) || 'Unidad',
-        es_materia_prima: parsed.es_materia_prima === true,
-        precio_sugerido_usd: 0,
-        modelo_ia_usado: model,
-      };
-      logger.info(`[Gemini Product AI] OK ${model} en ${Date.now() - attemptStarted} ms; total ${Date.now() - startedAt} ms.`);
-      return result;
-    } catch (error) {
-      lastError = error;
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error(`[Gemini Product AI] Falló ${model} en ${Date.now() - attemptStarted} ms: ${message}`);
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
