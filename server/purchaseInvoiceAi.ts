@@ -51,7 +51,7 @@ Devuelve JSON con este esquema:
  "lines":[{"description":"","sku":"","barcode":"","quantity":0,"unit":"","unitCost":0,"discount":0,"taxableBase":0,"taxRate":0,"taxAmount":0,"lineTotal":0,"inventoryClassification":"Materia prima|Mercancía|Productos en proceso|Productos terminados|Por clasificar","confidence":"alta|media|baja"}]
 }
 Responde solo JSON válido.`;
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+  const models = ['gemini-3.8-flash'];
   let lastError: unknown;
   for (const model of models) {
     try {
