@@ -6,7 +6,7 @@ let client: GoogleGenAI | null = null;
 function getClient(): GoogleGenAI {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new Error('Servicio de IA no disponible: GEMINI_API_KEY no está configurada.');
-  if (!client) client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 30000 } });
+  if (!client) client = new GoogleGenAI({ apiKey: key, httpOptions: { timeout: 120000 } });
   return client;
 }
 
