@@ -31,7 +31,7 @@ export function registerPurchaseInvoiceRoutes(app: Express, adminOnly: RequestHa
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error('[Purchase invoice scan] No se pudo analizar el documento:', message);
-      const retryable = /503|high demand|UNAVAILABLE|429|RESOURCE_EXHAUSTED|fetch failed|ECONNRESET|ETIMEDOUT|timeout|socket|network/i.test(message);
+      const retryable = /503|high demand|UNAVAILABLE|429|RESOURCE_EXHAUSTED|fetch failed|ECONNRESET|ETIMEDOUT|timeout|aborted|aborterror|socket|network/i.test(message);
       if (retryable) res.setHeader('Retry-After', '3');
       return res.status(retryable ? 503 : 400).json({
         success: false,
