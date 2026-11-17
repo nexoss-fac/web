@@ -50,7 +50,7 @@ export const AccountingManager: React.FC = () => {
   const [metodo,setMetodo]=useState('Efectivo Bs'); const [tasa,setTasa]=useState(''); const [obs,setObs]=useState('');
   const [lines,setLines]=useState<Line[]>([emptyLine(),emptyLine()]);
 
-  const load=async()=>{setLoading(true);try{const q=start&&end?`?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`:'';const r=await fetch('/api/accounting'+q);const j=await r.json();if(!r.ok)throw new Error(j.error||'No se pudo cargar contabilidad');setEntries(Array.isArray(j.data?.entries)?j.data.entries:[]);setLedgerData(Array.isArray(j.data?.ledger)?j.data.ledger:[]);}catch(e:any){alert(e?.message||'No se pudo cargar contabilidad');}finally{setLoading(false);}};
+  const load=async()=>{setLoading(true);try{const r=await fetch('/api/accounting');const j=await r.json();if(!r.ok)throw new Error(j.error||'No se pudo cargar contabilidad');setEntries(Array.isArray(j.data?.entries)?j.data.entries:[]);setLedgerData(Array.isArray(j.data?.ledger)?j.data.ledger:[]);}catch(e:any){alert(e?.message||'No se pudo cargar contabilidad');}finally{setLoading(false);}};
   useEffect(()=>{load();},[]);
 
   const accountOptions=useMemo(()=>Array.from(new Set(entries.map(e=>(e.lineas||[]).map(l=>safe(l.cuenta))).flat().filter(Boolean))).sort(),[entries]);
@@ -66,7 +66,19 @@ export const AccountingManager: React.FC = () => {
   const rateOf=(entry: Entry)=>Number(entry.tasa_dolar||0);
   const toBs=(amount: unknown, currency: unknown, entry: Entry)=>safe(currency).toLowerCase()==='usd' ? Number(amount||0)*rateOf(entry) : Number(amount||0);
   const toUsd=(amount: unknown, currency: unknown, entry: Entry)=>safe(currency).toLowerCase()==='usd' ? Number(amount||0) : (rateOf(entry)>0 ? Number(amount||0)/rateOf(entry) : 0);
-  const rows=useMemo(()=>filtered.flatMap(e=>(e.lineas||[]).map((l,i)=>({...l,entry:e,rowId:`${e.id}-${i}`,debeBs:toBs(l.debe,l.moneda,e),haberBs:toBs(l.haber,l.moneda,e),debeUsd:toUsd(l.debe,l.moneda,e),haberUsd:toUsd(l.haber,l.moneda,e)}))),[filtered]);
+  const rows=useMemo(()=>{
+    const chronological=[...entries].sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||String(a.numero_asiento||'').localeCompare(String(b.numero_asiento||'')));
+    const balances=new Map<string,number>();
+    const running=new Map<string,number>();
+    for(const e of chronological){
+      (e.lineas||[]).forEach((l,i)=>{
+        const key=safe(l.cuenta)||'Cuenta sin nombre';
+        const next=(running.get(key)||0)+toBs(l.debe,l.moneda,e)-toBs(l.haber,l.moneda,e);
+        running.set(key,next); balances.set(`${e.id}-${i}`,next);
+      });
+    }
+    return filtered.flatMap(e=>(e.lineas||[]).map((l,i)=>({...l,entry:e,rowId:`${e.id}-${i}`,debeBs:toBs(l.debe,l.moneda,e),haberBs:toBs(l.haber,l.moneda,e),debeUsd:toUsd(l.debe,l.moneda,e),haberUsd:toUsd(l.haber,l.moneda,e),saldoBs:balances.get(`${e.id}-${i}`)||0})));
+  },[entries,filtered]);
   const totals=useMemo(()=>rows.reduce((a,r)=>({debe:a.debe+Number(r.debeBs||0),haber:a.haber+Number(r.haberBs||0)}),{debe:0,haber:0}),[rows]);
   const opTotals=useMemo(()=>({ventas:rows.filter(r=>lower(r.venta_compra)==='venta').reduce((s,r)=>s+Number(r.haberBs||0),0),gastos:rows.filter(r=>/gasto|costo/.test(lower(r.venta_compra)+' '+lower(r.cuenta))).reduce((s,r)=>s+Number(r.debeBs||0),0),cashea:rows.filter(r=>lower(r.cuenta).includes('cashea')).reduce((s,r)=>s+Number(r.debeBs||r.haberBs||0),0)}),[rows]);
   const ledger=useMemo(()=>{const grouped=new Map<string,LedgerAccount>();for(const r of rows){const key=safe(r.cuenta)||'Cuenta sin nombre';const item=grouped.get(key)||{cuenta:key,debe:0,haber:0,saldo:0,movimientos:[]};item.debe=Number(item.debe||0)+Number(r.debeBs||0);item.haber=Number(item.haber||0)+Number(r.haberBs||0);item.saldo=Number(item.debe||0)-Number(item.haber||0);item.movimientos!.push({...r, debe:r.debeBs, haber:r.haberBs, debe_usd:r.debeUsd, haber_usd:r.haberUsd});grouped.set(key,item);}return [...grouped.values()].sort((a,b)=>a.cuenta.localeCompare(b.cuenta,'es'));},[rows]);
@@ -99,12 +111,12 @@ export const AccountingManager: React.FC = () => {
   };
   const exportExcel=()=>{
     if(!rows.length){alert('No hay movimientos contables para exportar con los filtros seleccionados.');return;}
-    const headers=['Nº','Registro','Fecha','Partida','Cuenta','SubCuenta','Clasificación','SubClasificación','Mes-Año','Método de pago','Nº documento','Tipo doc','Razón social / proveedor / cliente','RIF','Moneda','Tasa BCV del día','Debe (Bs)','Haber (Bs)','Debe (USD)','Haber (USD)','Venta / Compra','Total Compra/Venta','No Gravadas','Gravadas','Crédito / Débito Fiscal','Ingresos Brutos','Retención IVA','Retención ISLR','Retención Municipal','Descripción'];
+    const headers=['Nº','Registro','Fecha','Partida','Cuenta','SubCuenta','Clasificación','SubClasificación','Mes-Año','Método de pago','Nº documento','Tipo doc','Razón social / proveedor / cliente','RIF','Moneda','Tasa BCV del día','Debe (Bs)','Haber (Bs)','Saldo acumulado (Bs)','Debe (USD)','Haber (USD)','Venta / Compra','Total Compra/Venta','No Gravadas','Gravadas','Crédito / Débito Fiscal','Ingresos Brutos','Retención IVA','Retención ISLR','Retención Municipal','Descripción'];
     const data=rows.map(r=>[
       r.entry?.numero_asiento||'',r.entry?.id||'',dateOnly(r.entry?.fecha),r.partida||'',r.cuenta||'',r.subcuenta||'',
       r.clasificacion||'',r.subclasificacion||'',mesAno(r.entry?.fecha),r.entry?.metodo_pago||'',r.entry?.documento||'',
       r.entry?.tipo_documento||'',r.entry?.sujeto||'',r.entry?.rif||'',r.moneda||'Bs',rateOf(r.entry),
-      Number(r.debeBs||0),Number(r.haberBs||0),Number(r.debeUsd||0),Number(r.haberUsd||0),r.venta_compra||'',
+      Number(r.debeBs||0),Number(r.haberBs||0),Number(r.saldoBs||0),Number(r.debeUsd||0),Number(r.haberUsd||0),r.venta_compra||'',
       Number(r.debeBs||r.haberBs||0),Number(r.entry?.compras_no_gravadas||0),Number(r.entry?.compras_gravadas||0),
       Number(r.entry?.compras_gravadas||0)*Number(r.entry?.porcentaje_impuesto||0)/100,
       Number(r.entry?.ingresos_brutos||0),Number(r.entry?.retencion_iva||0),Number(r.entry?.retencion_islr||0),
@@ -165,8 +177,8 @@ export const AccountingManager: React.FC = () => {
     const body=`<h2 class="report-title">Libro Diario · Movimientos contables</h2>
       <p class="sub">Período: ${esc(start||'Todos')} al ${esc(end||'Actual')} · ${rows.length} renglones · Se aplican los filtros visibles</p>
       <div class="summary"><div><b>Total Debe (Bs)</b>${money(totals.debe)}</div><div><b>Total Haber (Bs)</b>${money(totals.haber)}</div><div><b>Ventas (Bs)</b>${money(opTotals.ventas)}</div><div><b>Gastos / Costos (Bs)</b>${money(opTotals.gastos)}</div></div>
-      <table><thead><tr><th>Nº</th><th>Registro</th><th>Fecha</th><th>Partida</th><th>Cuenta</th><th>Subcuenta</th><th>Clasificación</th><th>Subclasificación</th><th>Mes-Año</th><th>Método pago</th><th>Nº documento</th><th>Tipo doc</th><th>Razón social / proveedor / cliente</th><th>RIF</th><th>Moneda</th><th>Tasa BCV</th><th class="num">Debe Bs</th><th class="num">Haber Bs</th><th class="num">Debe USD</th><th class="num">Haber USD</th><th>Venta / Compra</th></tr></thead><tbody>
-      ${rows.map(r=>`<tr><td>${esc(r.entry?.numero_asiento||'')}</td><td>${esc(r.entry?.id||'')}</td><td>${dateOnly(r.entry?.fecha)}</td><td>${esc(r.partida||'')}</td><td>${esc(r.cuenta||'')}</td><td>${esc(r.subcuenta||'')}</td><td>${esc(r.clasificacion||'')}</td><td>${esc(r.subclasificacion||'')}</td><td>${mesAno(r.entry?.fecha)}</td><td>${esc(r.entry?.metodo_pago||'')}</td><td>${esc(r.entry?.documento||'')}</td><td>${esc(r.entry?.tipo_documento||'')}</td><td>${esc(r.entry?.sujeto||'')}</td><td>${esc(r.entry?.rif||'')}</td><td>${esc(r.moneda||'Bs')}</td><td class="num">${rateOf(r.entry)?money(rateOf(r.entry)):'—'}</td><td class="num">${money(r.debeBs)}</td><td class="num">${money(r.haberBs)}</td><td class="num">${money(r.debeUsd)}</td><td class="num">${money(r.haberUsd)}</td><td>${esc(r.venta_compra||'')}</td></tr>`).join('')}
+      <table><thead><tr><th>Nº</th><th>Registro</th><th>Fecha</th><th>Partida</th><th>Cuenta</th><th>Subcuenta</th><th>Clasificación</th><th>Subclasificación</th><th>Mes-Año</th><th>Método pago</th><th>Nº documento</th><th>Tipo doc</th><th>Razón social / proveedor / cliente</th><th>RIF</th><th>Moneda</th><th>Tasa BCV</th><th class="num">Debe Bs</th><th class="num">Haber Bs</th><th class="num">Saldo acumulado Bs</th><th class="num">Debe USD</th><th class="num">Haber USD</th><th>Venta / Compra</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr><td>${esc(r.entry?.numero_asiento||'')}</td><td>${esc(r.entry?.id||'')}</td><td>${dateOnly(r.entry?.fecha)}</td><td>${esc(r.partida||'')}</td><td>${esc(r.cuenta||'')}</td><td>${esc(r.subcuenta||'')}</td><td>${esc(r.clasificacion||'')}</td><td>${esc(r.subclasificacion||'')}</td><td>${mesAno(r.entry?.fecha)}</td><td>${esc(r.entry?.metodo_pago||'')}</td><td>${esc(r.entry?.documento||'')}</td><td>${esc(r.entry?.tipo_documento||'')}</td><td>${esc(r.entry?.sujeto||'')}</td><td>${esc(r.entry?.rif||'')}</td><td>${esc(r.moneda||'Bs')}</td><td class="num">${rateOf(r.entry)?money(rateOf(r.entry)):'—'}</td><td class="num">${money(r.debeBs)}</td><td class="num">${money(r.haberBs)}</td><td class="num">${money(r.saldoBs)}</td><td class="num">${money(r.debeUsd)}</td><td class="num">${money(r.haberUsd)}</td><td>${esc(r.venta_compra||'')}</td></tr>`).join('')}
       </tbody><tfoot><tr><th colspan="16">TOTALES</th><th class="num">${money(totals.debe)}</th><th class="num">${money(totals.haber)}</th><th class="num">${money(sum('debeUsd'))}</th><th class="num">${money(sum('haberUsd'))}</th><th></th></tr></tfoot></table>`;
     openPdfReport('Libro Diario',body,true);
   };
