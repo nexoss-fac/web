@@ -5,7 +5,7 @@ import { logger } from './logger.ts';
 import { EXPENSE_CUENTA, EXPENSE_PARTIDA, normalizeExpenseCategory } from '../src/domain/expenseChart.ts';
 
 const sqlClients = new Map<string, { fingerprint: string; client: NeonQueryFunction<false, false> }>();
-const initializedTenantSchemas = new Set<string>();
+const initializedTenantSchemas = new Map<string, Promise<void>>();
 
 // PostgreSQL (y por lo tanto Neon) devuelve las columnas NUMERIC/DECIMAL como
 // strings, no como números JS, para evitar pérdida de precisión. Nuestro
@@ -275,14 +275,37 @@ export async function checkDatabaseConnection(): Promise<{
   }
 }
 
-export async function initDatabaseSchema() {
+/**
+ * Inicializa una sola vez por empresa, conexión y plantilla industrial.
+ * Comparte la promesa entre peticiones concurrentes para impedir que una
+ * ruta consulte tablas mientras otra petición todavía está creando el esquema.
+ * Si falla, elimina la promesa para permitir un reintento seguro.
+ */
+export async function initDatabaseSchema(): Promise<void> {
+  const tenant = tenantStorageContext.getStore();
+  if (!tenant?.companyId || !tenant.connectionString) return;
+
+  const connectionFingerprint = createHash('sha256').update(tenant.connectionString).digest('hex');
+  const schemaKey = `${tenant.companyId}:${connectionFingerprint}:${tenant.industryTemplate}`;
+  const pending = initializedTenantSchemas.get(schemaKey);
+  if (pending) return pending;
+
+  const initialization = initializeTenantDatabaseSchema();
+  initializedTenantSchemas.set(schemaKey, initialization);
+  try {
+    await initialization;
+  } catch (error) {
+    if (initializedTenantSchemas.get(schemaKey) === initialization) {
+      initializedTenantSchemas.delete(schemaKey);
+    }
+    throw error;
+  }
+}
+
+async function initializeTenantDatabaseSchema(): Promise<void> {
   const sql = getNeonSql();
   const tenant = tenantStorageContext.getStore();
-  const tenantId = tenant?.companyId;
-  if (!sql || !tenantId || !tenant?.connectionString) return;
-  const connectionFingerprint = createHash('sha256').update(tenant.connectionString).digest('hex');
-  const schemaKey = `${tenantId}:${connectionFingerprint}`;
-  if (initializedTenantSchemas.has(schemaKey)) return;
+  if (!sql || !tenant?.companyId || !tenant.connectionString) return;
 
   try {
     // 1. Table for Shoe Products
@@ -744,7 +767,6 @@ export async function initDatabaseSchema() {
       await sql`CREATE UNIQUE INDEX IF NOT EXISTS health_payments_invoice_uidx ON health_payments (invoice_number) WHERE invoice_number IS NOT NULL`;
     }
 
-    initializedTenantSchemas.add(schemaKey);
     logger.info('✅ Esquema Neon PostgreSQL verificado e inicializado correctamente.');
   } catch (error) {
     logger.error('Error al inicializar tablas en Neon:', error);
