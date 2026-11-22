@@ -86,7 +86,7 @@ export async function verifyBdvPagoMovil(data: BdvVerificationData): Promise<Bdv
       telefono_origen: data.telefono_origen || '',
       cedula_cliente: data.cedula_cliente || '',
       banco_origen: data.banco_origen || 'Banco de Venezuela',
-      cuenta_receptora: 'Cuenta de demostración',
+      cuenta_receptora: '',
       fecha_transaccion: new Date().toISOString(),
       modo: 'PENDIENTE',
       mensaje: 'La referencia bancaria debe tener al menos 4 dígitos.',
@@ -103,7 +103,7 @@ export async function verifyBdvPagoMovil(data: BdvVerificationData): Promise<Bdv
       telefono_origen: data.telefono_origen || '',
       cedula_cliente: data.cedula_cliente || '',
       banco_origen: data.banco_origen || 'Banco de Venezuela',
-      cuenta_receptora: 'Cuenta de demostración',
+      cuenta_receptora: '',
       fecha_transaccion: new Date().toISOString(),
       modo: 'PENDIENTE',
       mensaje: 'El monto en Bolívares debe ser mayor a 0.',
@@ -124,7 +124,7 @@ export async function verifyBdvPagoMovil(data: BdvVerificationData): Promise<Bdv
       }
     }
   } catch (err: any) {
-    console.warn('API BDV no disponible en el backend, usando verificación asistida en cliente:', err);
+    console.warn('API BDV no disponible en el backend; el pago permanece pendiente:', err);
   }
 
   return {
@@ -146,11 +146,12 @@ export async function verifyBdvPagoMovil(data: BdvVerificationData): Promise<Bdv
 export async function getBdvConfig() {
   const fallback = {
     isConfigured: false,
-    mode: 'DISABLED_LOCAL',
+    mode: 'PENDIENTE_CONFIGURACION',
     banco: 'Banco de Venezuela S.A. (0102)',
     comercioRif: '',
     comercioTelefono: '',
     cuentaReceptora: '',
+    apiKeyConfigured: false,
   };
 
   try {
