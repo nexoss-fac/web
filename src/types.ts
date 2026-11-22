@@ -184,6 +184,7 @@ export interface BdvVerificationData {
   banco_origen: string;
   monto_bs: number;
   monto_usd?: number;
+  fecha?: string;
 }
 
 export interface BdvVerificationResponse {
