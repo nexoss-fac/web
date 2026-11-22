@@ -51,7 +51,7 @@ function makeResult(data: BdvVerificationRequest, ref: string, amount: number, c
     cedula_cliente: data.cedula_cliente, banco_origen: data.banco_origen || '',
     cuenta_receptora: env('BDV_CUENTA_RECEPTORA', 'BDV_CUENTA_DESTINO'),
     fecha_transaccion: new Date().toISOString(), modo: approved ? 'PRODUCCION' : 'PENDIENTE',
-    mensaje, ...(details ? { detalles_tecnicos: details } : {}),
+    mensaje: message, ...(details ? { detalles_tecnicos: details } : {}),
   };
 }
 export async function verifyBdvPayment(data: BdvVerificationRequest): Promise<BdvVerificationResult> {
