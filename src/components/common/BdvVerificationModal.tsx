@@ -430,10 +430,10 @@ export const BdvVerificationModal: React.FC<BdvVerificationModalProps> = ({
         <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex items-center justify-between">
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>API Conciliación Banco de Venezuela Activa</span>
+            <span>Validación bancaria mediante servidor seguro</span>
           </span>
           <span className="text-[10px] text-slate-400 font-mono">
-            {result?.modo === 'PRODUCCION' ? 'Modo Producción' : 'Modo Asistido / Sandbox'}
+            {result?.modo === 'PRODUCCION' ? 'Modo Producción' : 'Pendiente de confirmación'}
           </span>
         </div>
 
