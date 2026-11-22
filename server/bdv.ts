@@ -84,6 +84,16 @@ export async function verifyBdvPayment(data: BdvVerificationRequest): Promise<Bd
 
   const apiUrlRaw = env('BDV_API_URL', 'BDV_BASE_URL');
   const config = getBdvApiConfig();
+  // Do not call the bank again for a reference already credited in this tenant.
+  const sql = getNeonSql();
+  if (sql) {
+    const previous = await sql`SELECT id FROM bdv_verifications WHERE referencia = ${ref} AND estado = 'APROBADO' LIMIT 1`;
+    if (previous.length) {
+      return makeResult(data, ref, amount, false, 'BDV_REFERENCIA_DUPLICADA',
+        'Esta referencia ya fue acreditada anteriormente en esta empresa. No se registró un segundo pago.',
+        'PENDIENTE');
+    }
+  }
   if (!config.isConfigured || !apiUrlRaw) {
     const pending = makeResult(data, ref, amount, false, 'BDV_NO_CONFIGURADO',
       'La API de conciliación BDV no está completamente configurada. El pago queda pendiente; no se confirmó.', 'PENDIENTE');
