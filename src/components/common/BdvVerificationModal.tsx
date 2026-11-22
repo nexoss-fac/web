@@ -296,7 +296,7 @@ export const BdvVerificationModal: React.FC<BdvVerificationModalProps> = ({
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
                 <Hash className="w-3.5 h-3.5 text-indigo-600" />
-                <span>N° Referencia (4 a 8 dígitos)</span>
+                <span>N° Referencia (4 a 20 dígitos)</span>
               </label>
               <input
                 type="text"
