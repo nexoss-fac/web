@@ -35,7 +35,7 @@ export function getBdvApiConfig() {
   const destinationPhone = env('BDV_TELEFONO_DESTINO', 'BDV_COMERCIO_TELEFONO');
   return {
     isConfigured: apiKeyConfigured && Boolean(destinationPhone),
-    mode: apiKeyConfigured && destinationPhone ? 'PRODUCCION' : 'PENDIENTE_CONFIGURACION',
+    mode: apiKeyConfigured && destinationPhone ? 'CONFIGURADO' : 'PENDIENTE_CONFIGURACION',
     banco: 'Banco de Venezuela S.A. (0102)',
     comercioRif: env('BDV_COMERCIO_RIF'),
     comercioTelefono: destinationPhone,
