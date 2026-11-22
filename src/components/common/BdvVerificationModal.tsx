@@ -53,9 +53,13 @@ export const BdvVerificationModal: React.FC<BdvVerificationModalProps> = ({
   const { exchangeRate } = useStore();
 
   const [referencia, setReferencia] = useState('');
-  const [bancoOrigen, setBancoOrigen] = useState('0102 - Banco de Venezuela (BDV)');
-  const [telefono, setTelefono] = useState(initialCustomerPhone || '0414-1234567');
-  const [cedula, setCedula] = useState(initialCustomerRif || 'V-18900123');
+  const [bancoOrigen, setBancoOrigen] = useState('0102');
+  const [telefono, setTelefono] = useState(initialCustomerPhone);
+  const [cedula, setCedula] = useState(initialCustomerRif);
+  const [fechaPago, setFechaPago] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
 
   // Editable Amount State (Default/Suggested amount is expectedAmountBs)
   const [montoBs, setMontoBs] = useState<number>(expectedAmountBs || 0);
@@ -114,6 +118,14 @@ export const BdvVerificationModal: React.FC<BdvVerificationModalProps> = ({
       setErrorMsg('El monto a verificar en Bs debe ser mayor a 0.');
       return;
     }
+    if (telefono.replace(/\\D/g, '').length < 10 || !cedula.trim()) {
+      setErrorMsg('Completa el teléfono y la cédula/RIF del pagador.');
+      return;
+    }
+    if (!fechaPago) {
+      setErrorMsg('Indica la fecha en que se realizó el Pago Móvil.');
+      return;
+    }
 
     setIsLoading(true);
     setErrorMsg(null);
@@ -127,6 +139,7 @@ export const BdvVerificationModal: React.FC<BdvVerificationModalProps> = ({
         cedula_cliente: cedula.trim(),
         monto_bs: montoBs,
         monto_usd: equivalentUsd,
+        fecha: fechaPago,
       });
 
       setResult(response);
@@ -307,7 +320,7 @@ export const BdvVerificationModal: React.FC<BdvVerificationModalProps> = ({
                 className="w-full px-2.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-red-500 focus:bg-white"
               >
                 {VENEZUELAN_BANKS.map((b) => (
-                  <option key={b.code} value={b.name}>
+                  <option key={b.code} value={b.code}>
                     {b.name}
                   </option>
                 ))}
@@ -343,6 +356,17 @@ export const BdvVerificationModal: React.FC<BdvVerificationModalProps> = ({
                 onChange={(e) => setCedula(e.target.value)}
                 placeholder="Ej. V-18900123"
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:border-red-500 focus:bg-white"
+              />
+            </div>
+            {/* Fecha del pago, requerida por el contrato BDV */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha del Pago Móvil</label>
+              <input
+                type="date"
+                required
+                value={fechaPago}
+                onChange={(e) => setFechaPago(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-red-500 focus:bg-white"
               />
             </div>
           </div>
