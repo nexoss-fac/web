@@ -26,6 +26,9 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
     transfer: payments.some((method) => method.includes('transferencia') || method.includes('zelle') || method.includes('binance')),
   };
   const subtotalBs = sale.items.reduce((sum, item) => sum + Number(item.subtotal || 0), 0) * Number(sale.tasa_cambio || 0);
+  const discountBs = Number(sale.descuento_usd || 0) * Number(sale.tasa_cambio || 0);
+  const ivaBs = Number(sale.iva_monto_usd || 0) * Number(sale.tasa_cambio || 0);
+  const displaySubtotalBs = sale.aplica_iva && sale.iva_incluido ? Number(sale.total_bs || 0) - ivaBs : subtotalBs - discountBs;
   const dense = sale.items.length > 8;
 
   return (
@@ -91,9 +94,9 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
               <div className="pt-3 text-center text-[8px]">________________________________ Firma</div>
             </div>
             <div className="min-w-[2.25in] space-y-1 text-[9px]">
-              <div className="flex justify-between gap-4"><strong>SUB-TOTAL Bs.</strong><span className="tabular-nums">{money(subtotalBs - Number(sale.descuento_usd || 0) * sale.tasa_cambio)}</span></div>
+              <div className="flex justify-between gap-4"><strong>SUB-TOTAL Bs.</strong><span className="tabular-nums">{money(displaySubtotalBs)}</span></div>
               {sale.descuento_usd > 0 && <div className="flex justify-between gap-4"><strong>Descuento Bs.</strong><span>{money(sale.descuento_usd * sale.tasa_cambio)}</span></div>}
-              {sale.aplica_iva && <div className="flex justify-between gap-4"><strong>IVA {sale.porcentaje_iva || 16}% Bs.</strong><span className="tabular-nums">{money(Number(sale.iva_monto_usd || 0) * sale.tasa_cambio)}</span></div>}
+              {sale.aplica_iva && <div className="flex justify-between gap-4"><strong>IVA {sale.porcentaje_iva || 16}% Bs.</strong><span className="tabular-nums">{money(ivaBs)}</span></div>}
               <div className="flex justify-between gap-4 border-t border-slate-500 pt-1 text-[11px] font-black"><strong>TOTAL Bs.</strong><span className="tabular-nums">{money(sale.total_bs)}</span></div>
             </div>
           </div>
