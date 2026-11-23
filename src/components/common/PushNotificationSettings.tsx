@@ -126,7 +126,7 @@ export const PushNotificationSettings: React.FC<Props> = ({ mode = 'prompt' }) =
       </div>
       <div className="min-w-[180px] flex-1">
         <p className="text-sm font-semibold text-slate-900">Notificaciones de la empresa</p>
-        <p className="text-xs text-slate-500">Avisos de ventas y gastos en este dispositivo.</p>
+        <p className="text-xs text-slate-500">Avisos de cobranza, despachos y visitas en este dispositivo.</p>
         {!configured && <p role="alert" className="mt-1 text-xs text-amber-700">Falta configurar las claves Web Push en el servidor.</p>}
         {message && <p role="status" className="mt-1 text-xs text-slate-600">{message}</p>}
       </div>
