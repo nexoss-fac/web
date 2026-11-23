@@ -3,7 +3,7 @@ import { BellRing, CalendarClock, CheckCircle2, ClipboardList, RefreshCw, Store,
 import { PushNotificationSettings } from '../common/PushNotificationSettings';
 
 type Member = { userId: string; email: string; displayName: string; role: string };
-type Client = { document: string; name: string; phone: string; invoices: number; collectorUid: string };
+type Client = { document: string; name: string; phone: string; address: string; invoices: number; collectorUid: string };
 type SaleOption = { id: string; numero_factura: string; cliente_nombre: string; cliente_apellido: string; cliente_rif: string; total_usd: number; fecha: string };
 type Task = { sale_id: string; invoice_number: string; client_name: string; client_document: string; due_at: string; dispatched_at: string; visit_due_at: string; visit_completed_at: string | null; status: string; total: number; paid: number; balance: number };
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -53,7 +53,7 @@ export const CollectionsPanel: React.FC<{ companyId: string; role: string }> = (
     setBusy(true); setError(''); setNotice('');
     try {
       if (!collectorUid) await request(`/api/collections/assignments/${encodeURIComponent(client.document)}`, { method: 'DELETE' });
-      else await request(`/api/collections/assignments/${encodeURIComponent(client.document)}`, { method: 'PUT', body: JSON.stringify({ collectorUid, clientName: client.name }) });
+      else await request(`/api/collections/assignments/${encodeURIComponent(client.document)}`, { method: 'PUT', body: JSON.stringify({ collectorUid, clientName: client.name, clientAddress: client.address || '' }) });
       setNotice('Asignación actualizada.'); await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo guardar la asignación.'); }
     finally { setBusy(false); }
@@ -113,7 +113,7 @@ export const CollectionsPanel: React.FC<{ companyId: string; role: string }> = (
           {members.length === 0 && <p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Todavía no hay cobradores. Invita primero a un usuario con el rol «Cobrador» desde Administración → Equipo.</p>}
           <div className="divide-y divide-slate-100">
             {clients.map((client) => <div key={client.document} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div><p className="font-semibold text-slate-800">{client.name}</p><p className="text-xs text-slate-500">{client.document} · {client.invoices} factura(s)</p></div>
+              <div className="min-w-0 flex-1"><p className="font-semibold text-slate-800">{client.name}</p><p className="text-xs text-slate-500">{client.document} · {client.invoices} factura(s)</p><input aria-label="Dirección del cliente" value={client.address || ""} onChange={(event) => setClients((old) => old.map((item) => item.document === client.document ? { ...item, address: event.target.value } : item))} onBlur={() => { const current = clients.find((item) => item.document === client.document); if (client.collectorUid && current) void assign(current, client.collectorUid); }} placeholder="Dirección del cliente / supermercado" className="mt-2 w-full max-w-xl rounded-lg border border-slate-300 px-3 py-2 text-sm" /></div>
               <select disabled={busy || members.length === 0} value={client.collectorUid} onChange={(event) => void assign(client, event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
                 <option value="">Sin asignar</option>{members.map((member) => <option key={member.userId} value={member.userId}>{member.displayName || member.email}</option>)}
               </select>
@@ -139,7 +139,7 @@ export const CollectionsPanel: React.FC<{ companyId: string; role: string }> = (
         <div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><CalendarClock className="h-5 w-5 text-indigo-600" /><h2 className="font-bold text-slate-900">{isAdmin ? 'Todas las cuentas y visitas' : 'Mis cobranzas asignadas'}</h2></div><button type="button" onClick={() => void load()} className="rounded-lg border border-slate-200 p-2 text-slate-600" aria-label="Actualizar"><RefreshCw className="h-4 w-4" /></button></div>
         <div className="space-y-3">
           {tasks.map((task) => <article key={task.sale_id} className="rounded-xl border border-slate-200 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold text-slate-900">{task.client_name}</p><p className="text-xs text-slate-500">Factura {task.invoice_number} · {task.client_document}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${task.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : new Date(task.due_at) < new Date() ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>{task.status === 'paid' ? 'Pagada' : new Date(task.due_at) < new Date() ? 'Vencida' : 'Pendiente'}</span></div>
+            <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold text-slate-900">{task.client_name}</p><p className="text-xs text-slate-500">Factura {task.invoice_number} · {task.client_document}</p><p className="mt-1 text-xs text-slate-600">Dirección: {(task as any).client_address || "Pendiente de registrar"}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${task.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : new Date(task.due_at) < new Date() ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>{task.status === 'paid' ? 'Pagada' : new Date(task.due_at) < new Date() ? 'Vencida' : 'Pendiente'}</span></div>
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4"><div><p className="text-xs text-slate-500">Total</p><p className="font-semibold">${task.total.toFixed(2)}</p></div><div><p className="text-xs text-slate-500">Abonado</p><p className="font-semibold">${task.paid.toFixed(2)}</p></div><div><p className="text-xs text-slate-500">Saldo</p><p className="font-bold text-rose-700">${task.balance.toFixed(2)}</p></div><div><p className="text-xs text-slate-500">Vence</p><p className="font-semibold">{new Date(task.due_at).toLocaleDateString()}</p></div></div>
             {task.status !== 'paid' && <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
               <input aria-label="Abono en dólares" type="number" min="0.01" step="0.01" max={task.balance} value={amounts[task.sale_id] || ''} onChange={(event) => setAmounts((old) => ({ ...old, [task.sale_id]: event.target.value }))} placeholder="Abono USD" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
