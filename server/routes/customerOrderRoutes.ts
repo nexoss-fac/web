@@ -43,6 +43,8 @@ async function ensureOrdersSchema(sql: Sql) {
     visit_note TEXT NOT NULL DEFAULT '', visit_reminder_sent_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
+  await sql`ALTER TABLE nexoss_client_collection_assignments ADD COLUMN IF NOT EXISTS client_address TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS client_address TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_customer_orders_status_idx ON nexoss_customer_orders(status, requested_delivery_date)`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_customer_orders_customer_idx ON nexoss_customer_orders(customer_document)`;
 }
