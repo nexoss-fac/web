@@ -78,8 +78,8 @@ const ROLE_POLICY: Record<MembershipRole, RolePolicy> = {
   },
   collector: {
     allow: [
-      { methods: 'read', route: /^\/collections(?:\\/|$)/ },
-      { methods: 'write', route: /^\/collections\\/(?:payments|visits)(?:\\/|$)/ },
+      { methods: 'read', route: /^\/(?:collections|push)(?:\/|$)/ },
+      { methods: 'write', route: /^\/(?:collections\/(?:payments|visits)|push\/(?:subscribe|unsubscribe|test))(?:\/|$)/ },
     ],
   },
   cashier: {
