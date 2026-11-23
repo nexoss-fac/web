@@ -897,7 +897,7 @@ export async function insertSale(sale: any): Promise<boolean> {
   await sql`
     INSERT INTO sales_transactions (
       id, numero_factura, cliente_nombre, cliente_apellido, cliente_rif,
-      cliente_telefono, cliente_correo, subtotal_usd, descuento_usd, aplica_iva, iva_incluido,
+      cliente_telefono, cliente_correo, cliente_direccion, orden_entrega, condicion_pago, subtotal_usd, descuento_usd, aplica_iva, iva_incluido,
       porcentaje_iva, iva_monto_usd, total_usd, total_bs, costo_total_usd,
       ganancia_neta_usd, tasa_cambio, items, pagos, fecha, usuario, notas, estado,
       total_positivo_inmediato_usd, total_cashea_pendiente_usd, estado_cashea
@@ -916,6 +916,9 @@ export async function insertSale(sale: any): Promise<boolean> {
     )
     ON CONFLICT (id) DO UPDATE SET
       pagos = EXCLUDED.pagos,
+      cliente_direccion = EXCLUDED.cliente_direccion,
+      orden_entrega = EXCLUDED.orden_entrega,
+      condicion_pago = EXCLUDED.condicion_pago,
       total_positivo_inmediato_usd = EXCLUDED.total_positivo_inmediato_usd,
       total_cashea_pendiente_usd = EXCLUDED.total_cashea_pendiente_usd,
       estado_cashea = EXCLUDED.estado_cashea,
