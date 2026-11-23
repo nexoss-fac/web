@@ -31,7 +31,7 @@ interface ReceiptModalProps {
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => {
   const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
   const activeCompanyName = localStorage.getItem('nexoss_active_company_name') || '';
-  const isMacizoNatural = /macizo\s*natural/i.test(activeCompanyName);
+  const isMacizoNatural = /macizo\s*natural|fitgurt/i.test(activeCompanyName);
   const isFootwear = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry')) === 'footwear';
   const { updateSaleDate } = useStore();
   const [activeView, setActiveView] = useState<'thermal' | 'digital' | 'macizo'>('thermal');
