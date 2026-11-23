@@ -86,7 +86,7 @@ export async function sendWebPushTest(sql: Sql, uid: string) {
 export async function sendWebPushToCompanyAdmins(sql: Sql, payload: { title: string; body: string; url?: string }) {
   if (!isWebPushConfigured()) return;
   await ensureTable(sql);
-  const rows = await sql`SELECT id, uid, subscription FROM nexoss_web_push_subscriptions`;
+  const rows = await sql`SELECT id, uid, subscription FROM nexoss_web_push_subscriptions WHERE role IN ('owner', 'admin')`;
   if (!rows.length) return;
   const webPush = await getWebPush();
   const message = JSON.stringify({
