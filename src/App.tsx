@@ -28,6 +28,7 @@ import { LayawaysManager } from './components/layaways/LayawaysManager';
 const AccountingManager = lazy(() => import('./components/accounting/AccountingManager').then((m) => ({ default: m.AccountingManager })));
 const ReceiptScannerModal = lazy(() => import('./components/expenses/ReceiptScannerModal').then((m) => ({ default: m.ReceiptScannerModal })));
 const CompanyAdminPanel = lazy(() => import('./components/admin/CompanyAdminPanel').then((m) => ({ default: m.CompanyAdminPanel })));
+const CollectionsPanel = lazy(() => import('./components/collections/CollectionsPanel').then((m) => ({ default: m.CollectionsPanel })));
 
 function ViewFallback() {
   return (
@@ -52,12 +53,19 @@ function AppContent() {
   const isClinicStaff = isCompanyAdmin || companyRole === 'doctor';
   // Producción y trazabilidad solo corresponden a empresas que transforman/fabrican productos.
   const isManufacturingIndustry = companyIndustry === 'manufacturing' || companyIndustry === 'food_manufacturing';
+
+  // Al entrar a una empresa, el servidor arma el ciclo de recordatorios aunque
+  // el usuario no abra manualmente el módulo de cobranza.
+  useEffect(() => {
+    if (!activeCompanyId || !['owner', 'admin', 'collector'].includes(companyRole)) return;
+    void fetch('/api/collections/tasks').catch(() => undefined);
+  }, [activeCompanyId, companyRole]);
   useEffect(() => {
     const syncRole = () => {
       setCompanyRole(localStorage.getItem('nexoss_active_company_role') || '');
       const industry = localStorage.getItem('nexoss_active_company_industry') || 'other';
       setCompanyIndustry(industry);
-      setActiveTab(industry === 'health' ? 'health' : 'pos');
+      setActiveTab(localStorage.getItem('nexoss_active_company_role') === 'collector' ? 'collections' : industry === 'health' ? 'health' : 'pos');
     };
     window.addEventListener('nexoss:company-selected', syncRole);
     return () => window.removeEventListener('nexoss:company-selected', syncRole);
@@ -75,7 +83,7 @@ function AppContent() {
   useEffect(() => {
     if ((userRole === 'cajera' || !isCompanyAdmin) && activeTab === 'admin') setActiveTab(companyIndustry === 'health' ? 'health' : 'pos');
     if (!isManufacturingIndustry && activeTab === 'production') setActiveTab('pos');
-    if (((userRole === 'cajera' && companyRole !== 'doctor') || companyRole === 'cashier') && activeTab !== 'pos' && activeTab !== 'fiscal') setActiveTab('pos');
+    if (((userRole === 'cajera' && !['doctor', 'collector'].includes(companyRole)) || companyRole === 'cashier') && activeTab !== 'pos' && activeTab !== 'fiscal' && activeTab !== 'collections') setActiveTab('pos');
     if (activeTab === 'health' && companyIndustry === 'health' && !isClinicStaff) setActiveTab('pos');
   }, [userRole, companyRole, isCompanyAdmin, isClinicStaff, isManufacturingIndustry, companyIndustry, activeTab]);
   const handleCompanySelect = (companyId: string) => {
@@ -83,7 +91,7 @@ function AppContent() {
     setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
     setCompanyRole(localStorage.getItem('nexoss_active_company_role') || '');
     setCompanyIndustry(localStorage.getItem('nexoss_active_company_industry') || 'other');
-    setActiveTab(localStorage.getItem('nexoss_active_company_industry') === 'health' ? 'health' : 'pos');
+    setActiveTab(localStorage.getItem('nexoss_active_company_role') === 'collector' ? 'collections' : localStorage.getItem('nexoss_active_company_industry') === 'health' ? 'health' : 'pos');
   };
 
   return (
@@ -93,6 +101,7 @@ function AppContent() {
       setCompanyRole(role);
       setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
       setCompanyIndustry(localStorage.getItem('nexoss_active_company_industry') || 'other');
+      if (role === 'collector') setActiveTab('collections');
     }} onLogout={logoutUserAction}>
     <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-500 selection:text-white">
       
@@ -137,6 +146,7 @@ function AppContent() {
             {activeTab === 'conciliacion' && <BankReconciliationView />}
             {activeTab === 'contabilidad' && (companyIndustry === 'health' ? isCompanyAdmin : userRole === 'admin') && <AccountingManager />}
             {activeTab === 'admin' && isCompanyAdmin && <CompanyAdminPanel companyId={activeCompanyId} />}
+            {activeTab === 'collections' && <CollectionsPanel key={activeCompanyId} companyId={activeCompanyId} role={companyRole} />}
             {activeTab === 'firmaContable' && isCompanyAdmin && <AccountingFirmDashboard companyId={activeCompanyId} companyName={selectedCompanyName} onOpenBilling={() => setActiveTab('pos')} onOpenAccounting={() => setActiveTab('contabilidad')} />}
             {activeTab === 'fiscal' && <FiscalFolder key={activeCompanyId} companyId={activeCompanyId} companyName={selectedCompanyName} />}
             {activeTab === 'health' && companyIndustry === 'health' && isClinicStaff && <HealthWorkspace key={activeCompanyId} canManagePayments={isCompanyAdmin} canManageInventory={isCompanyAdmin} />}

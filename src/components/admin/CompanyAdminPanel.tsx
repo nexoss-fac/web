@@ -7,7 +7,7 @@ import {
 import { COMPANY_INDUSTRIES, INDUSTRY_WORKFLOWS, resolveIndustryTemplate, type IndustryTemplate } from '../../domain/companyIndustries';
 import { PushNotificationSettings } from '../common/PushNotificationSettings';
 
-type AdminTab = 'company' | 'team' | 'categories' | 'notifications';
+type AdminTab = 'company' | 'team' | 'categories' | 'notifications' | 'collections';
 type CompanyProfile = {
   legalName: string; tradeName: string; taxId: string; activity: string; address: string;
   phone: string; email: string; industryTemplate: IndustryTemplate; logoUrl: string;
@@ -23,6 +23,7 @@ const roleOptions = [
   { value: 'auditor', label: 'Auditor' },
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'cashier', label: 'Cajera / Ventas' },
+  { value: 'collector', label: 'Cobrador · clientes asignados' },
   { value: 'doctor', label: 'Médico · acceso clínico' },
 ];
 

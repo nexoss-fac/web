@@ -6,6 +6,7 @@ import fs from 'fs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { addMoney, subtractMoney } from './server/money.ts';
 import { registerSalesRoutes } from './server/routes/salesRoutes.ts';
+import { registerCollectionsRoutes } from './server/routes/collectionsRoutes.ts';
 import { registerPurchaseInvoiceRoutes } from './server/routes/purchaseInvoiceRoutes.ts';
 import { registerAccountingFirmRoutes } from './server/routes/accountingFirmRoutes.ts';
 import { registerSharedContactsRoutes } from './server/routes/sharedContactsRoutes.ts';
@@ -63,7 +64,7 @@ import { assertProductionRuntimeSupported } from './server/productionRuntime.ts'
 import { logger } from './server/logger.ts';
 import { sendMail } from './server/mail/mailer.ts';
 import { buildExpenseNotice, buildSaleNotice, sendNotice, type Notice } from './server/notify/notifier.ts';
-import { isWebPushConfigured, saveWebPushSubscription, removeWebPushSubscription, sendWebPushToCompanyAdmins, hasWebPushSubscription, sendWebPushTest } from './server/notify/webPush.ts';
+import { isWebPushConfigured, saveWebPushSubscription, removeWebPushSubscription, sendWebPushToCompanyAdmins, sendWebPushToUsers, hasWebPushSubscription, sendWebPushTest } from './server/notify/webPush.ts';
 import { buildInvitationEmail } from './server/mail/invitationEmail.ts';
 import type { AccountBalance, Sale, ShoeProduct } from './src/types.ts';
 
@@ -921,7 +922,7 @@ async function startServer() {
     const identity = (req as any).firebaseIdentity;
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     const role = req.body?.role;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !['admin', 'accountant', 'auditor', 'supervisor', 'cashier'].includes(role)) return res.status(400).json({ error: 'Correo o rol inválido.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !['admin', 'accountant', 'auditor', 'supervisor', 'cashier', 'collector'].includes(role)) return res.status(400).json({ error: 'Correo o rol inválido.' });
     if (usePostgresControlPlane()) {
       try {
         const invitation = await getPostgresControlPlane().createInvitation(
@@ -992,6 +993,7 @@ async function startServer() {
     : createCompanyAccessMiddleware(PLATFORM_STORE));
 
   const adminOnly = requireTenantRole('owner', 'admin');
+  const pushDeviceAccess = requireTenantRole('owner', 'admin', 'collector');
   registerSharedContactsRoutes(app);
   registerHealthRoutes(app, adminOnly);
 
@@ -1115,13 +1117,13 @@ async function startServer() {
   });
 
   // Web Push: solo propietarios/administradores con membresía activa pueden registrar dispositivos.
-  app.get('/api/push/public-key', adminOnly, (_req, res) => {
+  app.get('/api/push/public-key', pushDeviceAccess, (_req, res) => {
     const key = (process.env.WEB_PUSH_VAPID_PUBLIC_KEY || '').trim();
     if (!key || !isWebPushConfigured()) return res.status(503).json({ configured: false, error: 'Las notificaciones push aún no están configuradas en el servidor.' });
     return res.json({ configured: true, publicKey: key });
   });
 
-  app.get('/api/push/status', adminOnly, async (req, res) => {
+  app.get('/api/push/status', pushDeviceAccess, async (req, res) => {
     const tenant = (req as TenantAuthenticatedRequest).tenant;
     const sql = getNeonSql();
     if (!tenant?.uid || !sql) return res.status(503).json({ configured: isWebPushConfigured(), active: false, error: 'No hay una base de datos disponible para esta empresa.' });
@@ -1133,7 +1135,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/push/test', adminOnly, async (req, res) => {
+  app.post('/api/push/test', pushDeviceAccess, async (req, res) => {
     const tenant = (req as TenantAuthenticatedRequest).tenant;
     const sql = getNeonSql();
     if (!tenant?.uid || !sql) return res.status(503).json({ error: 'No hay una base de datos disponible para esta empresa.' });
@@ -1146,14 +1148,14 @@ async function startServer() {
     }
   });
 
-  app.post('/api/push/subscribe', adminOnly, async (req, res) => {
+  app.post('/api/push/subscribe', pushDeviceAccess, async (req, res) => {
     const identity = (req as any).firebaseIdentity;
     const sql = getNeonSql();
     if (!identity?.uid) return res.status(401).json({ error: 'Sesión no válida.' });
     if (!sql) return res.status(503).json({ error: 'La base de datos de la empresa no está disponible.' });
     if (!isWebPushConfigured()) return res.status(503).json({ error: 'Las notificaciones push no están configuradas.' });
     try {
-      await saveWebPushSubscription(sql, identity.uid, req.body?.subscription);
+      await saveWebPushSubscription(sql, identity.uid, req.body?.subscription, (req as TenantAuthenticatedRequest).tenant?.role || 'admin');
       return res.json({ saved: true });
     } catch (error) {
       logger.warn('[Web Push] No se pudo guardar la suscripción:', error instanceof Error ? error.message : 'error');
@@ -1161,7 +1163,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/push/unsubscribe', adminOnly, async (req, res) => {
+  app.post('/api/push/unsubscribe', pushDeviceAccess, async (req, res) => {
     const identity = (req as any).firebaseIdentity;
     const sql = getNeonSql();
     const endpoint = req.body?.endpoint;
@@ -1333,7 +1335,7 @@ async function startServer() {
   app.put('/api/company/members/:userId', adminOnly, async (req, res) => {
     const tenant = (req as TenantAuthenticatedRequest).tenant!;
     const role = req.body?.role;
-    if (!['admin', 'accountant', 'auditor', 'supervisor', 'cashier'].includes(role)) {
+    if (!['admin', 'accountant', 'auditor', 'supervisor', 'cashier', 'collector'].includes(role)) {
       return res.status(400).json({ error: 'El rol seleccionado no es válido.' });
     }
     if (usePostgresControlPlane()) {
@@ -2221,6 +2223,20 @@ async function startServer() {
 
   // 5. Sales API (Neon or Local JSON persistence)
   registerSalesRoutes(app, { readServerStore, writeServerStore, readLocalSales, getNeonSql, normalizeSales, updateSale, voidSale, onSaleRegistered: (sale) => notifyInBackground((company) => buildSaleNotice(sale, company)) });
+
+  registerCollectionsRoutes(app, {
+    getNeonSql,
+    adminOnly,
+    isActiveCollector: async (companyId, uid, actorUid) => {
+      if (usePostgresControlPlane()) {
+        const result = await getPostgresControlPlane().listForIdentity({ uid: actorUid });
+        return result.managedMembers.some((member) => member.companyId === companyId && member.userId === uid && member.role === 'collector');
+      }
+      const state = PLATFORM_STORE.readState();
+      const user = state.users.find((item) => item.subject === uid);
+      return Boolean(user && state.memberships.some((item) => item.companyId === companyId && item.userId === user.id && item.role === 'collector' && item.status === 'active'));
+    },
+  });
 
   // Reserva atómica del siguiente correlativo de factura en la base del tenant.
   // La secuencia evita que dos terminales de la misma empresa reciban el mismo número.
