@@ -125,7 +125,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
       `Fecha: ${new Date(sale.fecha).toLocaleString('es-VE')}\n` +
       `Total USD: $${sale.total_usd.toFixed(2)}\n` +
       `Total Bs: ${sale.total_bs.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs (Tasa: ${sale.tasa_cambio.toFixed(2)})\n\n` +
-      `${isFootwear ? "*Calzados Comprados:*" : "*Productos Comprados:*"}\n` +
+      `*Productos comprados:*\n` +
       sale.items.map((it) => `• ${it.nombre_producto} (${industry.variantLabel} ${it.talla}) x${it.cantidad} = $${it.subtotal.toFixed(2)}`).join('\n') +
       `\n\n*Formas de Pago:*\n` +
       sale.pagos.map((p) => `• ${p.cuenta}: ${p.moneda === 'Bs' ? `${p.monto.toFixed(2)} Bs` : `$${p.monto.toFixed(2)}`}`).join('\n') +
@@ -369,6 +369,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
                     <span className="text-stone-900">{sale.cliente_telefono}</span>
                   </div>
                 )}
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-stone-500 shrink-0">DIRECCIÓN:</span>
+                  <span className="text-stone-900 text-right break-words">{sale.cliente_direccion || 'No indicada'}</span>
+                </div>
                 <div className="flex justify-between items-baseline gap-2">
                   <span className="text-stone-500 shrink-0">CAJERO / TURNO:</span>
                   <span className="text-stone-900 font-semibold">{sale.usuario || 'Cajero Principal'}</span>
@@ -587,12 +591,16 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
                       <span className="text-slate-800">{sale.cliente_telefono}</span>
                     </div>
                   )}
+                  <div className="flex justify-between items-start gap-3">
+                    <span className="text-slate-500 font-medium shrink-0">Dirección:</span>
+                    <span className="text-slate-800 text-right break-words">{sale.cliente_direccion || 'No indicada'}</span>
+                  </div>
                 </div>
 
                 {/* Items */}
                 <div className="space-y-2">
                   <span className="text-xs font-black uppercase text-slate-500 tracking-wider block">
-                    {isFootwear ? "Calzados adquiridos (" : "Productos adquiridos ("}{sale.items.reduce((acc, it) => acc + it.cantidad, 0)} {industry.unitLabel})
+                    Productos adquiridos ({sale.items.reduce((acc, it) => acc + it.cantidad, 0)} {industry.unitLabel})
                   </span>
 
                   <div className="space-y-2">
