@@ -25,6 +25,7 @@ const CashClosure = lazy(() => import('./components/cash/CashClosure').then((m) 
 const ExpensesManager = lazy(() => import('./components/expenses/ExpensesManager').then((m) => ({ default: m.ExpensesManager })));
 const BankReconciliationView = lazy(() => import('./components/banking/BankReconciliationView').then((m) => ({ default: m.BankReconciliationView })));
 import { LayawaysManager } from './components/layaways/LayawaysManager';
+import { CustomerOrdersManager } from './components/orders/CustomerOrdersManager';
 const AccountingManager = lazy(() => import('./components/accounting/AccountingManager').then((m) => ({ default: m.AccountingManager })));
 const ReceiptScannerModal = lazy(() => import('./components/expenses/ReceiptScannerModal').then((m) => ({ default: m.ReceiptScannerModal })));
 const CompanyAdminPanel = lazy(() => import('./components/admin/CompanyAdminPanel').then((m) => ({ default: m.CompanyAdminPanel })));
@@ -139,7 +140,7 @@ function AppContent() {
             {activeTab === 'inventory' && <InventoryManager />}
             {activeTab === 'production' && isCompanyAdmin && isManufacturingIndustry && <ProductionManager key={activeCompanyId} />}
             {activeTab === 'inventoryReport' && <InventoryMovementReport />}
-            {activeTab === 'layaways' && <LayawaysManager />}
+            {activeTab === 'layaways' && (selectedCompanyName.toLowerCase().includes('macizo') ? <CustomerOrdersManager /> : <LayawaysManager />)}
                     {activeTab === 'reports' && <SalesReports />}
             {activeTab === 'cash' && <CashClosure />}
             {activeTab === 'expenses' && <ExpensesManager isManufacturingIndustry={isManufacturingIndustry} />}
