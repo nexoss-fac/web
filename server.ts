@@ -2227,9 +2227,9 @@ async function startServer() {
   registerCollectionsRoutes(app, {
     getNeonSql,
     adminOnly,
-    isActiveCollector: async (companyId, uid) => {
+    isActiveCollector: async (companyId, uid, actorUid) => {
       if (usePostgresControlPlane()) {
-        const result = await getPostgresControlPlane().listForIdentity({ uid: tenantStorageContext.getStore()?.uid || '' });
+        const result = await getPostgresControlPlane().listForIdentity({ uid: actorUid });
         return result.managedMembers.some((member) => member.companyId === companyId && member.userId === uid && member.role === 'collector');
       }
       const state = PLATFORM_STORE.readState();
