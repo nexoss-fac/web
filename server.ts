@@ -63,7 +63,7 @@ import { assertProductionRuntimeSupported } from './server/productionRuntime.ts'
 import { logger } from './server/logger.ts';
 import { sendMail } from './server/mail/mailer.ts';
 import { buildExpenseNotice, buildSaleNotice, sendNotice, type Notice } from './server/notify/notifier.ts';
-import { isWebPushConfigured, saveWebPushSubscription, removeWebPushSubscription, sendWebPushToCompanyAdmins, hasWebPushSubscription, sendWebPushTest } from './server/notify/webPush.ts';
+import { isWebPushConfigured, saveWebPushSubscription, removeWebPushSubscription, sendWebPushToCompanyAdmins, sendWebPushToUsers, hasWebPushSubscription, sendWebPushTest } from './server/notify/webPush.ts';
 import { buildInvitationEmail } from './server/mail/invitationEmail.ts';
 import type { AccountBalance, Sale, ShoeProduct } from './src/types.ts';
 
@@ -992,6 +992,7 @@ async function startServer() {
     : createCompanyAccessMiddleware(PLATFORM_STORE));
 
   const adminOnly = requireTenantRole('owner', 'admin');
+  const pushDeviceAccess = requireTenantRole('owner', 'admin', 'collector');
   registerSharedContactsRoutes(app);
   registerHealthRoutes(app, adminOnly);
 
@@ -1115,13 +1116,13 @@ async function startServer() {
   });
 
   // Web Push: solo propietarios/administradores con membresía activa pueden registrar dispositivos.
-  app.get('/api/push/public-key', adminOnly, (_req, res) => {
+  app.get('/api/push/public-key', pushDeviceAccess, (_req, res) => {
     const key = (process.env.WEB_PUSH_VAPID_PUBLIC_KEY || '').trim();
     if (!key || !isWebPushConfigured()) return res.status(503).json({ configured: false, error: 'Las notificaciones push aún no están configuradas en el servidor.' });
     return res.json({ configured: true, publicKey: key });
   });
 
-  app.get('/api/push/status', adminOnly, async (req, res) => {
+  app.get('/api/push/status', pushDeviceAccess, async (req, res) => {
     const tenant = (req as TenantAuthenticatedRequest).tenant;
     const sql = getNeonSql();
     if (!tenant?.uid || !sql) return res.status(503).json({ configured: isWebPushConfigured(), active: false, error: 'No hay una base de datos disponible para esta empresa.' });
@@ -1133,7 +1134,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/push/test', adminOnly, async (req, res) => {
+  app.post('/api/push/test', pushDeviceAccess, async (req, res) => {
     const tenant = (req as TenantAuthenticatedRequest).tenant;
     const sql = getNeonSql();
     if (!tenant?.uid || !sql) return res.status(503).json({ error: 'No hay una base de datos disponible para esta empresa.' });
@@ -1146,14 +1147,14 @@ async function startServer() {
     }
   });
 
-  app.post('/api/push/subscribe', adminOnly, async (req, res) => {
+  app.post('/api/push/subscribe', pushDeviceAccess, async (req, res) => {
     const identity = (req as any).firebaseIdentity;
     const sql = getNeonSql();
     if (!identity?.uid) return res.status(401).json({ error: 'Sesión no válida.' });
     if (!sql) return res.status(503).json({ error: 'La base de datos de la empresa no está disponible.' });
     if (!isWebPushConfigured()) return res.status(503).json({ error: 'Las notificaciones push no están configuradas.' });
     try {
-      await saveWebPushSubscription(sql, identity.uid, req.body?.subscription);
+      await saveWebPushSubscription(sql, identity.uid, req.body?.subscription, (req as TenantAuthenticatedRequest).tenant?.role || 'admin');
       return res.json({ saved: true });
     } catch (error) {
       logger.warn('[Web Push] No se pudo guardar la suscripción:', error instanceof Error ? error.message : 'error');
@@ -1161,7 +1162,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/push/unsubscribe', adminOnly, async (req, res) => {
+  app.post('/api/push/unsubscribe', pushDeviceAccess, async (req, res) => {
     const identity = (req as any).firebaseIdentity;
     const sql = getNeonSql();
     const endpoint = req.body?.endpoint;
