@@ -109,14 +109,15 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
           const statements = [sql`
             INSERT INTO sales_transactions (
               id, numero_factura, cliente_nombre, cliente_apellido,
-              cliente_rif, cliente_telefono, cliente_correo, subtotal_usd, descuento_usd,
-              aplica_iva, porcentaje_iva, iva_monto_usd, total_usd, total_bs,
+              cliente_rif, cliente_telefono, cliente_correo, cliente_direccion, orden_entrega, condicion_pago,
+              subtotal_usd, descuento_usd, aplica_iva, porcentaje_iva, iva_monto_usd, total_usd, total_bs,
               costo_total_usd, ganancia_neta_usd, tasa_cambio, items, pagos,
               fecha, usuario, notas, estado,
               total_positivo_inmediato_usd, total_cashea_pendiente_usd, estado_cashea
             ) VALUES (
               ${s.id}, ${s.numero_factura}, ${s.cliente_nombre || ''}, ${s.cliente_apellido || ''},
               ${s.cliente_rif || null}, ${s.cliente_telefono || null}, ${s.cliente_correo || null},
+              ${s.cliente_direccion || null}, ${s.orden_entrega || null}, ${s.condicion_pago || 'contado'},
               ${s.subtotal_usd}, ${s.descuento_usd || 0}, ${Boolean(s.aplica_iva)},
               ${s.porcentaje_iva || 0}, ${s.iva_monto_usd || 0}, ${s.total_usd}, ${s.total_bs},
               ${s.costo_total_usd || 0}, ${s.ganancia_neta_usd || 0}, ${s.tasa_cambio},

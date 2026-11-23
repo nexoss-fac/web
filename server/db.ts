@@ -320,6 +320,9 @@ export async function initDatabaseSchema() {
         cliente_apellido VARCHAR(120),
         cliente_rif VARCHAR(50),
         cliente_telefono VARCHAR(50),
+        cliente_direccion TEXT,
+        orden_entrega VARCHAR(120),
+        condicion_pago VARCHAR(20) DEFAULT 'contado',
         subtotal_usd NUMERIC(12, 2) NOT NULL,
         descuento_usd NUMERIC(12, 2) DEFAULT 0,
         aplica_iva BOOLEAN DEFAULT FALSE,
@@ -412,6 +415,9 @@ export async function initDatabaseSchema() {
 
     await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS iva_incluido BOOLEAN DEFAULT FALSE`;
     await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS cliente_correo VARCHAR(150)`;
+    await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS cliente_direccion TEXT`;
+    await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS orden_entrega VARCHAR(120)`;
+    await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS condicion_pago VARCHAR(20) DEFAULT 'contado'`;
     await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS notas TEXT`;
     await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS estado VARCHAR(20) DEFAULT 'completada'`;
     await sql`ALTER TABLE sales_transactions ADD COLUMN IF NOT EXISTS motivo_anulacion TEXT`;
@@ -824,7 +830,7 @@ export async function saveSaleAndDeductStock(sale: any): Promise<{
        ), inserted AS (
          INSERT INTO sales_transactions (
            id, numero_factura, cliente_nombre, cliente_apellido, cliente_rif,
-           cliente_telefono, cliente_correo, subtotal_usd, descuento_usd, aplica_iva, iva_incluido,
+           cliente_telefono, cliente_correo, cliente_direccion, orden_entrega, condicion_pago, subtotal_usd, descuento_usd, aplica_iva, iva_incluido,
            porcentaje_iva, iva_monto_usd, total_usd, total_bs, costo_total_usd,
            ganancia_neta_usd, tasa_cambio, items, pagos, fecha, usuario, notas, estado,
            total_positivo_inmediato_usd, total_cashea_pendiente_usd, estado_cashea
@@ -833,6 +839,7 @@ export async function saveSaleAndDeductStock(sale: any): Promise<{
            sale->>'id', sale->>'numero_factura', COALESCE(sale->>'cliente_nombre',''),
            COALESCE(sale->>'cliente_apellido',''), COALESCE(sale->>'cliente_rif',''),
            COALESCE(sale->>'cliente_telefono',''), COALESCE(sale->>'cliente_correo',''),
+           COALESCE(sale->>'cliente_direccion',''), COALESCE(sale->>'orden_entrega',''), COALESCE(sale->>'condicion_pago','contado'),
            COALESCE((sale->>'subtotal_usd')::numeric,0), COALESCE((sale->>'descuento_usd')::numeric,0),
            COALESCE((sale->>'aplica_iva')::boolean,FALSE), COALESCE((sale->>'iva_incluido')::boolean,FALSE), COALESCE((sale->>'porcentaje_iva')::numeric,0),
            COALESCE((sale->>'iva_monto_usd')::numeric,0), COALESCE((sale->>'total_usd')::numeric,0),
@@ -890,13 +897,14 @@ export async function insertSale(sale: any): Promise<boolean> {
   await sql`
     INSERT INTO sales_transactions (
       id, numero_factura, cliente_nombre, cliente_apellido, cliente_rif,
-      cliente_telefono, cliente_correo, subtotal_usd, descuento_usd, aplica_iva, iva_incluido,
+      cliente_telefono, cliente_correo, cliente_direccion, orden_entrega, condicion_pago, subtotal_usd, descuento_usd, aplica_iva, iva_incluido,
       porcentaje_iva, iva_monto_usd, total_usd, total_bs, costo_total_usd,
       ganancia_neta_usd, tasa_cambio, items, pagos, fecha, usuario, notas, estado,
       total_positivo_inmediato_usd, total_cashea_pendiente_usd, estado_cashea
     ) VALUES (
       ${sale.id}, ${sale.numero_factura}, ${sale.cliente_nombre || ''}, ${sale.cliente_apellido || ''},
       ${sale.cliente_rif || ''}, ${sale.cliente_telefono || ''}, ${sale.cliente_correo || ''},
+      ${sale.cliente_direccion || ''}, ${sale.orden_entrega || ''}, ${sale.condicion_pago || 'contado'},
       ${sale.subtotal_usd || 0}, ${sale.descuento_usd || 0}, ${!!sale.aplica_iva}, ${!!sale.iva_incluido},
       ${sale.porcentaje_iva || 0}, ${sale.iva_monto_usd || 0}, ${sale.total_usd || 0},
       ${sale.total_bs || 0}, ${sale.costo_total_usd || 0}, ${sale.ganancia_neta_usd || 0},
@@ -908,6 +916,9 @@ export async function insertSale(sale: any): Promise<boolean> {
     )
     ON CONFLICT (id) DO UPDATE SET
       pagos = EXCLUDED.pagos,
+      cliente_direccion = EXCLUDED.cliente_direccion,
+      orden_entrega = EXCLUDED.orden_entrega,
+      condicion_pago = EXCLUDED.condicion_pago,
       total_positivo_inmediato_usd = EXCLUDED.total_positivo_inmediato_usd,
       total_cashea_pendiente_usd = EXCLUDED.total_cashea_pendiente_usd,
       estado_cashea = EXCLUDED.estado_cashea,
@@ -1026,6 +1037,7 @@ export async function updateSale(id: string, updates: Record<string, any>): Prom
   const allowed: Record<string, true> = {
     numero_factura: true, fecha: true, notas: true, cliente_nombre: true, cliente_apellido: true,
     cliente_rif: true, cliente_telefono: true, cliente_correo: true,
+    cliente_direccion: true, orden_entrega: true, condicion_pago: true,
     pagos: true, total_positivo_inmediato_usd: true, total_cashea_pendiente_usd: true,
     estado_cashea: true, cashea_abonos: true, estado: true, motivo_anulacion: true,
   };

@@ -21,6 +21,7 @@ import { useStore } from '../../context/StoreContext';
 import { BarcodeSvg } from './BarcodeSvg';
 import { resolveIndustryTemplate, COMPANY_INDUSTRIES } from '../../domain/companyIndustries';
 import { MakdLogo } from './MakdLogo';
+import { MacizoPreprintedInvoice } from './MacizoPreprintedInvoice';
 
 interface ReceiptModalProps {
   sale: Sale | null;
@@ -29,9 +30,11 @@ interface ReceiptModalProps {
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => {
   const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
+  const activeCompanyName = localStorage.getItem('nexoss_active_company_name') || '';
+  const isMacizoNatural = /macizo\s*natural/i.test(activeCompanyName);
   const isFootwear = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry')) === 'footwear';
   const { updateSaleDate } = useStore();
-  const [activeView, setActiveView] = useState<'thermal' | 'digital'>('thermal');
+  const [activeView, setActiveView] = useState<'thermal' | 'digital' | 'macizo'>('thermal');
   const [thermalWidth, setThermalWidth] = useState<'80mm' | '58mm'>('80mm');
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [editDateValue, setEditDateValue] = useState(sale?.fecha ? sale.fecha.slice(0, 16) : '');
@@ -90,7 +93,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
 
   return (
     <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto backdrop-blur-xs print:p-0 print:bg-white print:static">
-      <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden print:border-none print:shadow-none print:bg-white print:text-black my-4 sm:my-8 flex flex-col">
+      <div className={`bg-white border border-slate-200 rounded-2xl ${activeView === 'macizo' ? 'max-w-6xl' : 'max-w-lg'} w-full shadow-2xl overflow-hidden print:border-none print:shadow-none print:bg-white print:text-black my-4 sm:my-8 flex flex-col`}>
         
         {/* Modal Top Header (Screen Only) */}
         <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex items-center justify-between print-hide">
@@ -143,6 +146,20 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
               <Smartphone className="w-3.5 h-3.5" />
               <span>Voucher Digital</span>
             </button>
+            {isMacizoNatural && (
+              <button
+                type="button"
+                onClick={() => setActiveView('macizo')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap ${
+                  activeView === 'macizo'
+                    ? 'bg-emerald-700 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>Factura preimpresa Macizo</span>
+              </button>
+            )}
           </div>
 
           {/* Width selector when in Thermal Mode */}
@@ -441,6 +458,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
             </div>
           )}
 
+          {activeView === 'macizo' && isMacizoNatural && (
+            <div className="w-full flex justify-center">
+              <MacizoPreprintedInvoice sale={sale} />
+            </div>
+          )}
+
           {/* ======================================================== */}
           {/* VIEW 2: VOUCHER DIGITAL MÓVIL (Elegante para WhatsApp) */}
           {/* ======================================================== */}
@@ -606,7 +629,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
             className="flex-1 min-w-[120px] py-2.5 sm:py-3 px-3 sm:px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition shadow-xs whitespace-nowrap shrink-0"
           >
             <Printer className="w-4 h-4 shrink-0" />
-            <span>Imprimir Ticket</span>
+            <span>{activeView === 'macizo' ? 'Imprimir factura Macizo' : 'Imprimir Ticket'}</span>
           </button>
 
           <button
