@@ -1,10 +1,12 @@
 import { GoogleGenAI } from '@google/genai';
 
-export type NexossAiMessage = { role: 'user' | 'assistant'; content: string };
+export type NexossAiMessage = { role: 'user' | 'assistant'; content: string; imageDataUrl?: string };
 export type NexossAiResult = { text: string; provider: 'gemini' | 'ollama'; model: string };
 
 const MAX_HISTORY = 12;
 const MAX_MESSAGE = 4000;
+const MAX_IMAGE_DATA_URL = 5 * 1024 * 1024;
+const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 function configuredProvider(): 'gemini' | 'ollama' | 'auto' {
   const value = (process.env.NEXOSS_AI_PROVIDER || 'auto').trim().toLowerCase();
@@ -26,16 +28,25 @@ function chooseProvider(): 'gemini' | 'ollama' {
   throw new Error('NEXOSS AI no está configurado. Define GEMINI_API_KEY o OLLAMA_BASE_URL y el modelo correspondiente.');
 }
 
-function systemPrompt(companyName: string, role: string): string {
+function parseImageDataUrl(value: string) {
+  if (value.length > MAX_IMAGE_DATA_URL) throw new Error('La imagen supera el límite de 5 MB.');
+  const match = value.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match || !IMAGE_MIME_TYPES.has(match[1])) throw new Error('Formato de imagen no permitido. Usa JPG, PNG o WebP.');
+  return { mimeType: match[1], data: match[2] };
+}
+
+function systemPrompt(companyName: string, role: string, industry: string): string {
   return [
     'Eres NEXOSS AI, asistente operativo de una plataforma de gestión empresarial multiempresa.',
     'Responde en español claro y conciso.',
-    'En esta primera versión solo puedes conversar, orientar y preparar borradores. No afirmes que has creado productos, modificado inventario, emitido facturas, cobrado ni cambiado datos: no tienes herramientas de escritura habilitadas.',
-    'No inventes precios, costos, códigos, datos fiscales ni información de la empresa. Distingue los datos proporcionados por el usuario de las sugerencias.',
+    'Puedes analizar imágenes adjuntas para describir productos y preparar borradores de fichas. Distingue hechos visibles de inferencias y marca como desconocido todo dato no verificable.',
+    'No inventes precios, costos, códigos, datos fiscales, cantidades, inventario ni información de la empresa. Nunca deduzcas un precio comercial solo por la fotografía.',
+    'No tienes acceso directo a registros comerciales ni herramientas de escritura. No afirmes que has creado productos, modificado inventario, emitido facturas, cobrado ni cambiado datos.',
     'Si te piden ejecutar una operación, prepara los datos y explica que requiere revisión y confirmación en el módulo correspondiente.',
     'No solicites ni reveles contraseñas, tokens, claves API ni secretos.',
-    'Respeta siempre el aislamiento de la empresa y los permisos del usuario.',
+    'Respeta siempre el aislamiento de la empresa y los permisos del usuario. No intentes acceder a otra empresa.',
     `Empresa activa: ${companyName || 'No identificada'}.`,
+    `Sector: ${industry || 'No especificado'}.`,
     `Rol del usuario: ${role || 'miembro'}.`,
   ].join('\n');
 }
@@ -43,29 +54,34 @@ function systemPrompt(companyName: string, role: string): string {
 export async function askNexossAi(input: {
   companyName: string;
   role: string;
+  industry: string;
   messages: NexossAiMessage[];
 }): Promise<NexossAiResult> {
   const provider = chooseProvider();
   const messages = input.messages.slice(-MAX_HISTORY).map((message) => ({
     role: message.role,
     content: String(message.content || '').trim().slice(0, MAX_MESSAGE),
-  })).filter((message) => message.content);
+    ...(message.imageDataUrl ? { image: parseImageDataUrl(message.imageDataUrl) } : {}),
+  })).filter((message) => message.content || message.image);
   if (!messages.length || messages[messages.length - 1].role !== 'user') {
     throw new Error('Escribe un mensaje para iniciar la conversación.');
   }
-  const system = systemPrompt(input.companyName, input.role);
+  const system = systemPrompt(input.companyName, input.role, input.industry);
 
   if (provider === 'gemini') {
     const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY!.trim() });
     const contents = messages.map((message) => ({
       role: message.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: message.content }],
+      parts: [
+        ...(message.content ? [{ text: message.content }] : []),
+        ...(message.image ? [{ inlineData: { mimeType: message.image.mimeType, data: message.image.data } }] : []),
+      ],
     }));
     const response = await ai.models.generateContent({
       model,
-      contents: [{ role: 'user', parts: [{ text: system }] }, ...contents],
-      config: { temperature: 0.3, maxOutputTokens: 1200 },
+      contents,
+      config: { systemInstruction: system, temperature: 0.3, maxOutputTokens: 1400 },
     });
     const text = response.text?.trim();
     if (!text) throw new Error('El proveedor de IA no devolvió una respuesta.');
@@ -83,7 +99,11 @@ export async function askNexossAi(input: {
       stream: false,
       messages: [
         { role: 'system', content: system },
-        ...messages.map((message) => ({ role: message.role, content: message.content })),
+        ...messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+          ...(message.image ? { images: [message.image.data] } : {}),
+        })),
       ],
     }),
   });
@@ -111,5 +131,6 @@ export function getNexossAiStatus() {
       ...(geminiReady ? ['gemini'] : []),
       ...(ollamaReady ? ['ollama'] : []),
     ],
+    vision: ready,
   };
 }
