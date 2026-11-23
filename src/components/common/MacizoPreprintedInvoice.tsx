@@ -31,7 +31,7 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
   return (
     <>
       <style>{`
-        @page { size: 8.5in 5.5in landscape; margin: 0; }
+        @page { size: 8.5in 5.5in; margin: 0; }
         @media print {
           html, body, #root { width: 8.5in !important; height: 5.5in !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: transparent !important; }
           body * { visibility: hidden !important; }
@@ -52,11 +52,9 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
           Vista de impresión · Solo se imprimen los datos centrales; membrete y pie ya están preimpresos
         </div>
         <div className="macizo-content absolute left-[4%] right-[4%] top-[21%] bottom-[10%] flex flex-col text-[9px] leading-tight">
-          <div className="grid grid-cols-[auto_1fr_auto_1fr] items-end gap-x-2 border-b border-slate-300 pb-1">
+          <div className="grid grid-cols-[auto_1fr] items-end gap-x-2 border-b border-slate-300 pb-1">
             <strong className="uppercase tracking-wide">Fecha</strong>
             <span className="font-semibold">{date.toLocaleDateString('es-VE')}</span>
-            <strong className="uppercase tracking-wide">Factura</strong>
-            <span className="font-bold">{sale.numero_factura}</span>
           </div>
           <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
             <div className="min-w-0"><strong>Nombre o razón social: </strong><span className="font-semibold">{[sale.cliente_nombre, sale.cliente_apellido].filter(Boolean).join(' ') || 'Consumidor Final'}</span></div>
