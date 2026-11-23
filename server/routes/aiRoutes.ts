@@ -3,6 +3,8 @@ import { askNexossAi, getNexossAiStatus, type NexossAiMessage } from '../ai/prov
 import { tenantStorageContext } from '../multiempresa/companyAccess.ts';
 import { logger } from '../logger.ts';
 
+const MAX_IMAGE_DATA_URL = 5 * 1024 * 1024;
+
 export function registerNexossAiRoutes(app: Express, memberOnly: RequestHandler): void {
   app.get('/api/ai/status', memberOnly, (_req, res) => {
     return res.json(getNexossAiStatus());
@@ -20,14 +22,22 @@ export function registerNexossAiRoutes(app: Express, memberOnly: RequestHandler)
     const messages: NexossAiMessage[] = rawMessages.map((item: any) => ({
       role: item?.role === 'assistant' ? 'assistant' : 'user',
       content: typeof item?.content === 'string' ? item.content : '',
+      ...(typeof item?.imageDataUrl === 'string' ? { imageDataUrl: item.imageDataUrl } : {}),
     }));
     if (messages.some((item) => item.content.length > 4000)) {
       return res.status(413).json({ error: 'Cada mensaje admite un máximo de 4.000 caracteres.' });
     }
+    if (messages.some((item) => (item.imageDataUrl?.length || 0) > MAX_IMAGE_DATA_URL)) {
+      return res.status(413).json({ error: 'Cada imagen admite un máximo de 5 MB.' });
+    }
+    if (messages.filter((item) => item.imageDataUrl).length > 2) {
+      return res.status(400).json({ error: 'Adjunta como máximo 2 imágenes por conversación.' });
+    }
     try {
       const result = await askNexossAi({
-        companyName: String(req.headers['x-nexoss-company-name'] || '').slice(0, 160),
+        companyName: 'Empresa activa autorizada',
         role: tenant.role,
+        industry: tenant.industryTemplate,
         messages,
       });
       return res.json({ success: true, ...result });
