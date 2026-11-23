@@ -76,6 +76,12 @@ const ROLE_POLICY: Record<MembershipRole, RolePolicy> = {
       { methods: 'write', route: /^\/health\/(?:patients(?:\/[^/]+\/(?:appointments|consultations|prescriptions|exam-orders|reports|aesthetic-histories))?|appointment-requests(?:\/[^/]+)?)$/ },
     ],
   },
+  collector: {
+    allow: [
+      { methods: 'read', route: /^\\/collections(?:\\/|$)/ },
+      { methods: 'write', route: /^\\/collections\\/(?:payments|visits)(?:\\/|$)/ },
+    ],
+  },
   cashier: {
     allow: [
       { methods: 'read', route: /^\/pos\/(?:state|version)$/ },
