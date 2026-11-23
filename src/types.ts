@@ -184,6 +184,7 @@ export interface BdvVerificationData {
   banco_origen: string;
   monto_bs: number;
   monto_usd?: number;
+  fecha?: string;
 }
 
 export interface BdvVerificationResponse {
@@ -197,7 +198,7 @@ export interface BdvVerificationResponse {
   banco_origen: string;
   cuenta_receptora: string;
   fecha_transaccion: string;
-  modo: 'PRODUCCION' | 'SANDBOX_VERIFICADO';
+  modo: 'PRODUCCION' | 'PENDIENTE';
   mensaje: string;
 }
 
