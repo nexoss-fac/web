@@ -208,6 +208,8 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
       const sale = sales[0] as SaleRow | undefined;
       if (!sale || sale.condicion_pago !== 'credito' || sale.estado === 'anulada') return res.status(404).json({ error: 'No se encontró una factura a crédito válida.' });
       const document = documentKey(sale.cliente_rif);
+      const balance = await currentBalance(sql, sale);
+      if (balance.balance <= 0.01) return res.status(409).json({ error: 'La factura no tiene saldo pendiente y no requiere cobranza.' });
       const assignment = await sql`SELECT collector_uid FROM nexoss_client_collection_assignments WHERE client_document = ${document} LIMIT 1`;
       if (!assignment[0]?.collector_uid) return res.status(409).json({ error: 'Asigna primero un cobrador a este cliente.' });
       const dispatchedAt = new Date();
