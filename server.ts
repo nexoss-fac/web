@@ -2384,7 +2384,7 @@ async function startServer() {
 
   app.post('/api/bdv/verificar', async (req, res) => {
     try {
-      const { referencia, telefono_origen, cedula_cliente, banco_origen, monto_bs, monto_usd } = req.body;
+      const { referencia, telefono_origen, cedula_cliente, banco_origen, monto_bs, monto_usd, fecha } = req.body;
       const result = await verifyBdvPayment({
         referencia,
         telefono_origen,
@@ -2392,6 +2392,7 @@ async function startServer() {
         banco_origen,
         monto_bs,
         monto_usd,
+        fecha,
       });
       res.json(result);
     } catch (err: unknown) {
