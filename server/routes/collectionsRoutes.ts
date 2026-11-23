@@ -63,7 +63,7 @@ async function ensureCollectionsSchema(sql: Sql) {
 }
 
 function documentKey(value: unknown): string {
-  return String(value || '').normalize('NFKC').trim().toUpperCase().replace(/[.\\s-]/g, '').slice(0, 40);
+  return String(value || '').normalize('NFKC').trim().toUpperCase().replace(/[.\s-]/g, '').slice(0, 40);
 }
 function displayName(sale: SaleRow): string {
   return [sale.cliente_nombre, sale.cliente_apellido].filter(Boolean).join(' ').trim() || 'Cliente sin nombre';
