@@ -7,6 +7,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { addMoney, subtractMoney } from './server/money.ts';
 import { registerSalesRoutes } from './server/routes/salesRoutes.ts';
 import { registerCollectionsRoutes } from './server/routes/collectionsRoutes.ts';
+import { registerCustomerOrderRoutes } from './server/routes/customerOrderRoutes.ts';
 import { registerPurchaseInvoiceRoutes } from './server/routes/purchaseInvoiceRoutes.ts';
 import { registerAccountingFirmRoutes } from './server/routes/accountingFirmRoutes.ts';
 import { registerSharedContactsRoutes } from './server/routes/sharedContactsRoutes.ts';
@@ -2223,6 +2224,8 @@ async function startServer() {
 
   // 5. Sales API (Neon or Local JSON persistence)
   registerSalesRoutes(app, { readServerStore, writeServerStore, readLocalSales, getNeonSql, normalizeSales, updateSale, voidSale, onSaleRegistered: (sale) => notifyInBackground((company) => buildSaleNotice(sale, company)) });
+
+  registerCustomerOrderRoutes(app, { getNeonSql, adminOnly });
 
   registerCollectionsRoutes(app, {
     getNeonSql,
