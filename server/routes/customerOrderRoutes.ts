@@ -99,6 +99,14 @@ export function registerCustomerOrderRoutes(app: Express, deps: { getNeonSql: ()
       if (!allowed[order.status]?.includes(nextStatus)) return res.status(409).json({ error: 'Transición no permitida para el estado actual.' });
       const items = body.items ? normalizeItems(body.items) : normalizeItems(order.items);
       if (!items.length && nextStatus !== 'cancelled') return res.status(400).json({ error: 'El pedido debe conservar al menos un producto.' });
+      if (['partial','dispatched'].includes(nextStatus)) {
+        const invalidDelivery = items.some((item) => item.deliveredQuantity > item.approvedQuantity);
+        const delivered = items.reduce((sum, item) => sum + item.deliveredQuantity, 0);
+        const approved = items.reduce((sum, item) => sum + item.approvedQuantity, 0);
+        if (invalidDelivery || delivered <= 0) return res.status(400).json({ error: 'Indica cantidades entregadas válidas para cada producto.' });
+        if (nextStatus === 'dispatched' && delivered !== approved) return res.status(409).json({ error: 'El despacho total requiere que las cantidades entregadas coincidan con las aprobadas.' });
+        if (nextStatus === 'partial' && delivered >= approved) return res.status(409).json({ error: 'Las cantidades entregadas corresponden a un despacho total, no parcial.' });
+      }
       const invoiceSaleId = body.invoiceSaleId === undefined ? order.invoice_sale_id : clean(body.invoiceSaleId, 120);
       if (['dispatched','partial'].includes(nextStatus)) {
         if (!invoiceSaleId) return res.status(409).json({ error: 'Registra primero la factura en Ventas y vincúlala al pedido antes de confirmar el despacho.' });
