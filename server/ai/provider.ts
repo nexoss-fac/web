@@ -89,7 +89,7 @@ export async function askNexossAi(input: {
   }
 
   const baseUrl = process.env.OLLAMA_BASE_URL!.trim().replace(/\/+$/, '');
-  const model = process.env.OLLAMA_MODEL?.trim() || 'qwen2.5:7b';
+  const model = process.env.OLLAMA_MODEL?.trim() || 'qwen2.5vl:7b';
   const response = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -126,11 +126,11 @@ export function getNexossAiStatus() {
     mode: selected,
     model: active === 'gemini'
       ? process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash'
-      : active === 'ollama' ? process.env.OLLAMA_MODEL?.trim() || 'qwen2.5:7b' : null,
+      : active === 'ollama' ? process.env.OLLAMA_MODEL?.trim() || 'qwen2.5vl:7b' : null,
     availableProviders: [
       ...(geminiReady ? ['gemini'] : []),
       ...(ollamaReady ? ['ollama'] : []),
     ],
-    vision: ready && (active === 'gemini' || (active === 'ollama' && modelSupportsVision(process.env.OLLAMA_MODEL?.trim() || 'qwen2.5vl:7b')),
+    vision: ready && (active === 'gemini' || (active === 'ollama' && modelSupportsVision(process.env.OLLAMA_MODEL?.trim() || 'qwen2.5vl:7b'))),
   };
 }
