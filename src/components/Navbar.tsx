@@ -57,7 +57,8 @@ export const Sidebar: React.FC<{
   isHealthIndustry?: boolean;
   companyRole?: string;
   isManufacturingIndustry?: boolean;
-}> = ({ activeTab, setActiveTab, mobileOpen, setMobileOpen, isCompanyAdmin = false, isHealthIndustry = false, companyRole = '', isManufacturingIndustry = false }) => {
+  companyName?: string;
+}> = ({ activeTab, setActiveTab, mobileOpen, setMobileOpen, isCompanyAdmin = false, isHealthIndustry = false, companyRole = '', isManufacturingIndustry = false, companyName = '' }) => {
   const { criticalStockProducts, userRole, layaways, logoutSession } = useStore();
   const activeLayawaysCount = layaways ? layaways.filter((l) => l.estado === 'activo').length : 0;
   const navGroups = [
@@ -67,7 +68,7 @@ export const Sidebar: React.FC<{
       icon: ShoppingCart,
       items: [
         { id: 'pos' as const, label: 'Ventas', subtitle: 'Inventario / Salida', icon: ShoppingCart, count: null },
-        { id: 'layaways' as const, label: 'Crédito', icon: BookmarkCheck, count: activeLayawaysCount || null },
+        { id: 'layaways' as const, label: companyName.toLowerCase().includes('macizo') ? 'Créditos y Pedidos' : 'Crédito', icon: BookmarkCheck, count: activeLayawaysCount || null },
         { id: 'collections' as const, label: 'Cobranza y anaqueles', icon: ClipboardList, count: null },
         { id: 'cash' as const, label: 'Caja & Arqueo', icon: Wallet, count: null },
       ],

@@ -9,14 +9,17 @@ type SaleRow = { id: string; numero_factura: string; cliente_nombre: string; cli
 const reminderTimers = new Map<string, ReturnType<typeof setInterval>>();
 
 async function ensureCollectionsSchema(sql: Sql) {
+  await sql`CREATE TABLE IF NOT EXISTS nexoss_customer_addresses (client_document TEXT PRIMARY KEY, client_address TEXT NOT NULL DEFAULT '', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`;
   await sql`CREATE TABLE IF NOT EXISTS nexoss_client_collection_assignments (
     client_document TEXT PRIMARY KEY,
     client_name TEXT NOT NULL DEFAULT '',
+    client_address TEXT NOT NULL DEFAULT '',
     collector_uid TEXT NOT NULL,
     assigned_by_uid TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
+  await sql`ALTER TABLE nexoss_client_collection_assignments ADD COLUMN IF NOT EXISTS client_address TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_collection_assignments_collector_idx ON nexoss_client_collection_assignments (collector_uid)`;
   await sql`CREATE TABLE IF NOT EXISTS nexoss_dispatch_followups (
     id TEXT PRIMARY KEY,
@@ -40,6 +43,8 @@ async function ensureCollectionsSchema(sql: Sql) {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
   await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS visit_completed_by_uid TEXT`;
+  await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS client_address TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS client_phone TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_dispatch_followups_due_idx ON nexoss_dispatch_followups (status, due_at)`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_dispatch_followups_collector_idx ON nexoss_dispatch_followups (collector_uid, status)`;
   await sql`CREATE TABLE IF NOT EXISTS nexoss_collection_payments (
@@ -58,7 +63,7 @@ async function ensureCollectionsSchema(sql: Sql) {
 }
 
 function documentKey(value: unknown): string {
-  return String(value || '').normalize('NFKC').trim().toUpperCase().replace(/[.\\s-]/g, '').slice(0, 40);
+  return String(value || '').normalize('NFKC').trim().toUpperCase().replace(/[.\s-]/g, '').slice(0, 40);
 }
 function displayName(sale: SaleRow): string {
   return [sale.cliente_nombre, sale.cliente_apellido].filter(Boolean).join(' ').trim() || 'Cliente sin nombre';
@@ -165,13 +170,27 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     try {
       await ensureCollectionsSchema(sql);
       const rows = await sql`SELECT cliente_rif AS document, MAX(TRIM(CONCAT(COALESCE(cliente_nombre,''), ' ', COALESCE(cliente_apellido,'')))) AS name,
-        MAX(cliente_telefono) AS phone, COUNT(*)::int AS invoices
-        FROM sales_transactions WHERE COALESCE(cliente_rif,'') <> '' AND COALESCE(estado,'completada') <> 'anulada'
-        GROUP BY cliente_rif ORDER BY name`;
-      const assignments = await sql`SELECT client_document, collector_uid FROM nexoss_client_collection_assignments`;
+        MAX(cliente_telefono) AS phone, COALESCE(MAX(a.client_address), MAX(cliente_direccion), '') AS address, COUNT(*)::int AS invoices
+        FROM sales_transactions s LEFT JOIN nexoss_customer_addresses a ON a.client_document = regexp_replace(upper(trim(s.cliente_rif)), '[.\\s-]', '', 'g') WHERE COALESCE(s.cliente_rif,'') <> '' AND COALESCE(s.estado,'completada') <> 'anulada'
+        GROUP BY s.cliente_rif ORDER BY name`;
+      const assignments = await sql`SELECT client_document, collector_uid, client_address FROM nexoss_client_collection_assignments`;
       const byDocument = new Map((assignments as any[]).map((a) => [a.client_document, a.collector_uid]));
-      return res.json({ clients: (rows as any[]).map((row) => ({ ...row, collectorUid: byDocument.get(documentKey(row.document)) || '' })) });
+      return res.json({ clients: (rows as any[]).map((row) => ({ ...row, collectorUid: byDocument.get(documentKey(row.document)) || '', address: (assignments as any[]).find((a) => a.client_document === documentKey(row.document))?.client_address || row.address || '' })) });
     } catch (error) { return res.status(503).json({ error: 'No se pudo cargar la cartera de clientes.' }); }
+  });
+
+  app.put('/api/collections/clients/:document/address', adminOnly, async (req, res) => {
+    const sql = getNeonSql(); const document = documentKey(req.params.document);
+    const address = String(req.body?.address || '').trim().slice(0, 500);
+    if (!sql || !document) return res.status(400).json({ error: 'Cliente inválido.' });
+    try {
+      await ensureCollectionsSchema(sql);
+      await sql`INSERT INTO nexoss_customer_addresses (client_document, client_address) VALUES (${document}, ${address})
+        ON CONFLICT (client_document) DO UPDATE SET client_address = EXCLUDED.client_address, updated_at = NOW()`;
+      await sql`UPDATE nexoss_client_collection_assignments SET client_address = ${address}, updated_at = NOW() WHERE client_document = ${document}`;
+      await sql`UPDATE nexoss_dispatch_followups SET client_address = ${address}, updated_at = NOW() WHERE client_document = ${document}`;
+      return res.json({ saved: true });
+    } catch { return res.status(503).json({ error: 'No se pudo guardar la dirección.' }); }
   });
 
   app.get('/api/collections/assignments', async (req, res) => {
@@ -190,13 +209,14 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     const context = tenant(req); const sql = getNeonSql();
     const document = documentKey(req.params.document); const collectorUid = String(req.body?.collectorUid || '').trim();
     const clientName = String(req.body?.clientName || '').trim().slice(0, 180);
+    const clientAddress = String(req.body?.clientAddress || '').trim().slice(0, 500);
     if (!context || !sql || !document || !collectorUid) return res.status(400).json({ error: 'Selecciona un cliente y un cobrador.' });
     try {
       if (!await isActiveCollector(context.companyId, collectorUid, context.uid)) return res.status(400).json({ error: 'El usuario seleccionado no es cobrador activo de esta empresa.' });
       await ensureCollectionsSchema(sql);
-      await sql`INSERT INTO nexoss_client_collection_assignments (client_document, client_name, collector_uid, assigned_by_uid)
-        VALUES (${document}, ${clientName}, ${collectorUid}, ${context.uid})
-        ON CONFLICT (client_document) DO UPDATE SET client_name = EXCLUDED.client_name, collector_uid = EXCLUDED.collector_uid, assigned_by_uid = EXCLUDED.assigned_by_uid, updated_at = NOW()`;
+      await sql`INSERT INTO nexoss_client_collection_assignments (client_document, client_name, client_address, collector_uid, assigned_by_uid)
+        VALUES (${document}, ${clientName}, ${clientAddress}, ${collectorUid}, ${context.uid})
+        ON CONFLICT (client_document) DO UPDATE SET client_name = EXCLUDED.client_name, client_address = EXCLUDED.client_address, collector_uid = EXCLUDED.collector_uid, assigned_by_uid = EXCLUDED.assigned_by_uid, updated_at = NOW()`;
       return res.json({ saved: true });
     } catch { return res.status(503).json({ error: 'No se pudo guardar la asignación.' }); }
   });
@@ -225,8 +245,8 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
       const dueAt = new Date(dispatchedAt.getTime() + 15 * 86400000);
       const visitDueAt = new Date(dispatchedAt.getTime() + 3 * 86400000);
       await sql`INSERT INTO nexoss_dispatch_followups
-        (id, sale_id, invoice_number, client_document, client_name, collector_uid, dispatched_at, due_at, visit_due_at)
-        VALUES (${randomUUID()}, ${sale.id}, ${sale.numero_factura}, ${document}, ${displayName(sale)}, ${assignment[0].collector_uid}, ${dispatchedAt.toISOString()}, ${dueAt.toISOString()}, ${visitDueAt.toISOString()})
+        (id, sale_id, invoice_number, client_document, client_name, client_address, client_phone, collector_uid, dispatched_at, due_at, visit_due_at)
+        VALUES (${randomUUID()}, ${sale.id}, ${sale.numero_factura}, ${document}, ${displayName(sale)}, COALESCE((SELECT client_address FROM nexoss_customer_addresses WHERE client_document = ${document}), (SELECT client_address FROM nexoss_client_collection_assignments WHERE client_document = ${document}), ''), ${sale.cliente_telefono || ''}, ${assignment[0].collector_uid}, ${dispatchedAt.toISOString()}, ${dueAt.toISOString()}, ${visitDueAt.toISOString()})
         ON CONFLICT (sale_id) DO UPDATE SET collector_uid = EXCLUDED.collector_uid, updated_at = NOW()`;
       await sendWebPushToRoles(sql, ['owner', 'admin'], { title: 'Macizo · Despacho a crédito', body: `Factura ${sale.numero_factura} despachada. Cobro en 15 días y visita de anaqueles programada.`, url: '/?tab=collections', tag: `dispatch-${sale.id}` });
       await sendWebPushToUsers(sql, [assignment[0].collector_uid], { title: 'Macizo · Nueva cobranza asignada', body: `Cliente ${displayName(sale)} · Factura ${sale.numero_factura}. Vence en 15 días.`, url: '/?tab=collections', tag: `dispatch-${sale.id}` });
@@ -248,7 +268,8 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
         const saleRows = await sql`SELECT id, total_usd, pagos FROM sales_transactions WHERE id = ${(row as any).sale_id} LIMIT 1`;
         if (!saleRows[0]) continue;
         const balance = await currentBalance(sql, { ...(row as any), ...(saleRows[0] as any) });
-        tasks.push({ ...row, ...balance });
+        const paymentHistory = await sql`SELECT id, amount_usd, amount_bs, exchange_rate, method, reference, paid_at, recorded_by_uid FROM nexoss_collection_payments WHERE sale_id = ${(row as any).sale_id} ORDER BY paid_at ASC`;
+        tasks.push({ ...row, ...balance, payments: paymentHistory });
       }
       return res.json({ tasks });
     } catch { return res.status(503).json({ error: 'No se pudieron cargar las tareas de cobranza.' }); }

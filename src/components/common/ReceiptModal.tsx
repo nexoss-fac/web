@@ -56,7 +56,64 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
   };
 
   const handlePrint = () => {
-    window.print();
+    if (activeView !== 'macizo') {
+      window.print();
+      return;
+    }
+
+    // La factura preimpresa de Macizo se imprime en un documento aislado.
+    // Así evitamos que los estilos de visibilidad del modal oculten el contenido
+    // cuando el navegador genera la vista previa.
+    const invoice = document.getElementById('macizo-preprinted-invoice');
+    if (!invoice) {
+      window.print();
+      return;
+    }
+
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWindow) {
+      window.alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para NEXOSS e inténtalo de nuevo.');
+      return;
+    }
+
+    const stylesheets = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
+      .map((link) => `<link rel="stylesheet" href="${link.href}">`)
+      .join('');
+    const invoiceMarkup = invoice.outerHTML;
+
+    printWindow.addEventListener('load', () => {
+      printWindow.focus();
+      printWindow.print();
+    }, { once: true });
+
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html lang="es">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Factura Macizo</title>
+          ${stylesheets}
+          <style>
+            @page { size: 8.5in 5.5in; margin: 0; }
+            html, body { width: 8.5in; height: 5.5in; margin: 0; padding: 0; overflow: hidden; background: transparent; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            #macizo-preprinted-invoice {
+              display: block; position: relative; box-sizing: border-box;
+              width: 8.5in; height: 5.5in; max-width: none; aspect-ratio: auto;
+              margin: 0; padding: 0; overflow: hidden; border: 0; box-shadow: none;
+              background: transparent; color: #111;
+            }
+            #macizo-preprinted-invoice .macizo-content {
+              position: absolute; left: .34in; right: .34in; top: 1.12in;
+              height: 3.55in; bottom: auto;
+            }
+            #macizo-preprinted-invoice .macizo-screen-hint { display: none; }
+          </style>
+        </head>
+        <body>${invoiceMarkup}</body>
+      </html>`);
+    printWindow.document.close();
   };
 
   const getReceiptSummaryText = () => {
