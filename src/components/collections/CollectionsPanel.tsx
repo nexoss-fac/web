@@ -21,6 +21,8 @@ export const CollectionsPanel: React.FC<{ companyId: string; role: string }> = (
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedSale, setSelectedSale] = useState('');
   const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [amountsBs, setAmountsBs] = useState<Record<string, string>>({});
+  const [rates, setRates] = useState<Record<string, string>>({});
   const [methods, setMethods] = useState<Record<string, string>>({});
   const [references, setReferences] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -68,16 +70,18 @@ export const CollectionsPanel: React.FC<{ companyId: string; role: string }> = (
   };
 
   const registerPayment = async (task: Task) => {
-    const amountUsd = Number(amounts[task.sale_id] || 0);
+    const amountBs = Number(amountsBs[task.sale_id] || 0);
+    const exchangeRate = Number(rates[task.sale_id] || 1);
+    const amountUsd = Number(amounts[task.sale_id] || 0) || (amountBs > 0 && exchangeRate > 0 ? amountBs / exchangeRate : 0);
     if (!(amountUsd > 0)) { setError('Indica un monto de abono mayor que cero.'); return; }
     setBusy(true); setError(''); setNotice('');
     try {
       const result = await request<{ remaining: number }>(`/api/collections/payments/${encodeURIComponent(task.sale_id)}`, {
         method: 'POST',
-        body: JSON.stringify({ amountUsd, method: methods[task.sale_id] || 'Transferencia', reference: references[task.sale_id] || '' }),
+        body: JSON.stringify({ amountUsd, amountBs, exchangeRate, method: methods[task.sale_id] || 'Transferencia', reference: references[task.sale_id] || '' }),
       });
       setNotice(result.remaining <= 0.01 ? 'Factura pagada. Se cerró su seguimiento de cobranza.' : `Abono registrado. Saldo restante: $${result.remaining.toFixed(2)}.`);
-      setAmounts((old) => ({ ...old, [task.sale_id]: '' })); setReferences((old) => ({ ...old, [task.sale_id]: '' }));
+      setAmounts((old) => ({ ...old, [task.sale_id]: '' })); setAmountsBs((old) => ({ ...old, [task.sale_id]: '' })); setReferences((old) => ({ ...old, [task.sale_id]: '' }));
       await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar el abono.'); }
     finally { setBusy(false); }
@@ -137,8 +141,10 @@ export const CollectionsPanel: React.FC<{ companyId: string; role: string }> = (
           {tasks.map((task) => <article key={task.sale_id} className="rounded-xl border border-slate-200 p-4">
             <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold text-slate-900">{task.client_name}</p><p className="text-xs text-slate-500">Factura {task.invoice_number} · {task.client_document}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${task.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : new Date(task.due_at) < new Date() ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>{task.status === 'paid' ? 'Pagada' : new Date(task.due_at) < new Date() ? 'Vencida' : 'Pendiente'}</span></div>
             <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4"><div><p className="text-xs text-slate-500">Total</p><p className="font-semibold">${task.total.toFixed(2)}</p></div><div><p className="text-xs text-slate-500">Abonado</p><p className="font-semibold">${task.paid.toFixed(2)}</p></div><div><p className="text-xs text-slate-500">Saldo</p><p className="font-bold text-rose-700">${task.balance.toFixed(2)}</p></div><div><p className="text-xs text-slate-500">Vence</p><p className="font-semibold">{new Date(task.due_at).toLocaleDateString()}</p></div></div>
-            {task.status !== 'paid' && <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+            {task.status !== 'paid' && <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
               <input aria-label="Abono en dólares" type="number" min="0.01" step="0.01" max={task.balance} value={amounts[task.sale_id] || ''} onChange={(event) => setAmounts((old) => ({ ...old, [task.sale_id]: event.target.value }))} placeholder="Abono USD" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <input aria-label="Abono en bolívares" type="number" min="0" step="0.01" value={amountsBs[task.sale_id] || ''} onChange={(event) => setAmountsBs((old) => ({ ...old, [task.sale_id]: event.target.value }))} placeholder="Abono Bs (opcional)" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <input aria-label="Tasa de cambio del abono" type="number" min="0.0001" step="0.0001" value={rates[task.sale_id] || ''} onChange={(event) => setRates((old) => ({ ...old, [task.sale_id]: event.target.value }))} placeholder="Tasa Bs/USD" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
               <select aria-label="Método de cobro" value={methods[task.sale_id] || 'Transferencia'} onChange={(event) => setMethods((old) => ({ ...old, [task.sale_id]: event.target.value }))} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option>Efectivo USD</option><option>Efectivo Bs</option><option>Pago Móvil</option><option>Transferencia</option><option>Punto de Venta</option></select>
               <input aria-label="Referencia del cobro" value={references[task.sale_id] || ''} onChange={(event) => setReferences((old) => ({ ...old, [task.sale_id]: event.target.value }))} placeholder="Referencia" className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
               <button type="button" disabled={busy} onClick={() => void registerPayment(task)} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">Registrar abono</button>
