@@ -148,6 +148,9 @@ export interface Sale {
   cliente_rif?: string;
   cliente_telefono?: string;
   cliente_correo?: string;
+  cliente_direccion?: string;
+  orden_entrega?: string;
+  condicion_pago?: 'credito' | 'contado';
   items: SaleItem[];
   subtotal_usd: number;
   descuento_usd: number;
