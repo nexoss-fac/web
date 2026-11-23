@@ -132,6 +132,35 @@ test('cobrador solo accede a cobranza asignada y a sus propias notificaciones', 
   }
 });
 
+test('cobrador solo accede a cobranza asignada y a sus propias notificaciones', () => {
+  for (const [method, url] of [
+    ['GET', '/api/collections/tasks'],
+    ['GET', '/api/collections/assignments'],
+    ['POST', '/api/collections/payments/sale-1'],
+    ['GET', '/api/push/status'],
+    ['GET', '/api/push/public-key'],
+    ['POST', '/api/push/subscribe'],
+    ['POST', '/api/push/unsubscribe'],
+    ['POST', '/api/push/test'],
+  ]) {
+    assert.equal(run('collector', method, url).nextCalled, true, `${method} ${url}`);
+  }
+  for (const [method, url] of [
+    ['GET', '/api/sales'],
+    ['POST', '/api/sales'],
+    ['GET', '/api/collections/clients'],
+    ['PUT', '/api/collections/assignments/V123'],
+    ['POST', '/api/collections/dispatch'],
+    ['POST', '/api/collections/visits/sale-1'],
+    ['GET', '/api/expenses'],
+    ['GET', '/api/products'],
+  ]) {
+    const result = run('collector', method, url);
+    assert.equal(result.status, 403, `${method} ${url}`);
+    assert.equal(result.nextCalled, false, `${method} ${url}`);
+  }
+});
+
 test('un rol desconocido no tiene ningún permiso', () => {
   assert.equal(run('invitado' as MembershipRole, 'GET', '/api/sales').status, 403);
 });
