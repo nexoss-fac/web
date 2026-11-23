@@ -34,9 +34,9 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
   return (
     <>
       <style>{`
-        @page { size: 8.5in 5.5in; margin: 0; }
+        @page { size: letter portrait; margin: 0; }
         @media print {
-          html, body, #root { width: 8.5in !important; height: 5.5in !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: transparent !important; }
+          html, body, #root { width: 8.5in !important; min-height: 11in !important; height: 11in !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: transparent !important; }
           body * { visibility: hidden !important; }
           #macizo-preprinted-invoice, #macizo-preprinted-invoice * { visibility: visible !important; }
           #macizo-preprinted-invoice {
