@@ -6,6 +6,7 @@ import fs from 'fs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { addMoney, subtractMoney } from './server/money.ts';
 import { registerSalesRoutes } from './server/routes/salesRoutes.ts';
+import { registerCollectionsRoutes } from './server/routes/collectionsRoutes.ts';
 import { registerPurchaseInvoiceRoutes } from './server/routes/purchaseInvoiceRoutes.ts';
 import { registerAccountingFirmRoutes } from './server/routes/accountingFirmRoutes.ts';
 import { registerSharedContactsRoutes } from './server/routes/sharedContactsRoutes.ts';
@@ -2222,6 +2223,20 @@ async function startServer() {
 
   // 5. Sales API (Neon or Local JSON persistence)
   registerSalesRoutes(app, { readServerStore, writeServerStore, readLocalSales, getNeonSql, normalizeSales, updateSale, voidSale, onSaleRegistered: (sale) => notifyInBackground((company) => buildSaleNotice(sale, company)) });
+
+  registerCollectionsRoutes(app, {
+    getNeonSql,
+    adminOnly,
+    isActiveCollector: async (companyId, uid) => {
+      if (usePostgresControlPlane()) {
+        const result = await getPostgresControlPlane().listForIdentity({ uid: tenantStorageContext.getStore()?.uid || '' });
+        return result.managedMembers.some((member) => member.companyId === companyId && member.userId === uid && member.role === 'collector');
+      }
+      const state = PLATFORM_STORE.readState();
+      const user = state.users.find((item) => item.subject === uid);
+      return Boolean(user && state.memberships.some((item) => item.companyId === companyId && item.userId === user.id && item.role === 'collector' && item.status === 'active'));
+    },
+  });
 
   // Reserva atómica del siguiente correlativo de factura en la base del tenant.
   // La secuencia evita que dos terminales de la misma empresa reciban el mismo número.
