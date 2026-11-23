@@ -80,11 +80,12 @@ async function processReminders(sql: Sql) {
   await ensureCollectionsSchema(sql);
   const now = new Date();
   const rows = await sql`SELECT * FROM nexoss_dispatch_followups
-    WHERE status IN ('open', 'partial')
+    WHERE ((status IN ('open', 'partial')
       AND ((reminder_10_sent_at IS NULL AND due_at <= NOW() + INTERVAL '5 days' AND due_at > NOW())
         OR (reminder_due_sent_at IS NULL AND due_at <= NOW() AND due_at > NOW() - INTERVAL '1 day')
         OR (reminder_overdue_sent_at IS NULL AND due_at <= NOW() - INTERVAL '1 day')
-        OR (visit_completed_at IS NULL AND visit_reminder_sent_at IS NULL AND visit_due_at <= NOW()))
+        OR (visit_completed_at IS NULL AND visit_reminder_sent_at IS NULL AND visit_due_at <= NOW())))
+      OR (visit_completed_at IS NULL AND visit_reminder_sent_at IS NULL AND visit_due_at <= NOW())
     ORDER BY due_at ASC LIMIT 100`;
   for (const row of rows as any[]) {
     const due = new Date(row.due_at);
@@ -233,7 +234,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
       await ensureCollectionsSchema(sql); armReminderScheduler(context, sql);
       const rows = context.role === 'collector'
         ? await sql`SELECT * FROM nexoss_dispatch_followups WHERE collector_uid = ${context.uid} AND status IN ('open','partial') ORDER BY due_at`
-        : await sql`SELECT * FROM nexoss_dispatch_followups WHERE status IN ('open','partial') ORDER BY due_at`;
+        : await sql`SELECT * FROM nexoss_dispatch_followups WHERE status IN ('open','partial') OR (status = 'paid' AND visit_completed_at IS NULL) ORDER BY due_at`;
       const tasks = [];
       for (const row of rows as SaleRow[]) {
         const saleRows = await sql`SELECT id, total_usd, pagos FROM sales_transactions WHERE id = ${(row as any).sale_id} LIMIT 1`;
@@ -248,9 +249,9 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
   app.post('/api/collections/payments/:saleId', async (req, res) => {
     const context = tenant(req); const sql = getNeonSql();
     const saleId = String(req.params.saleId || '').trim();
-    const amountUsd = Number(req.body?.amountUsd);
     const amountBs = Number(req.body?.amountBs || 0);
     const rate = Number(req.body?.exchangeRate || 1);
+    const amountUsd = Number(req.body?.amountUsd) || (amountBs > 0 && rate > 0 ? amountBs / rate : 0);
     const method = String(req.body?.method || '').trim().slice(0, 80);
     const reference = String(req.body?.reference || '').trim().slice(0, 100);
     if (!context || !sql || !saleId || !method || !(amountUsd > 0) || !Number.isFinite(amountUsd) || !(rate > 0)) return res.status(400).json({ error: 'Datos del cobro inválidos.' });
