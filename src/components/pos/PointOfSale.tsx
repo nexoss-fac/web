@@ -1109,13 +1109,13 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                   : 'grid-cols-1 2xl:grid-cols-12 items-start'
               }`}>
                 
-                {/* Left Section: Calzados a Facturar & Descuentos */}
+                {/* Left Section: Productos a Facturar & Descuentos */}
                 <div className={`${billingViewMode === 'split' ? 'space-y-4' : '2xl:col-span-7 space-y-4'}`}>
                   
                   <div className="flex items-center justify-between text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wider pb-1.5 border-b border-slate-200">
                     <span className="flex items-center gap-2">
                       <ShoppingBag className="w-4 h-4 text-indigo-600" />
-                      <span>Calzados a Facturar ({cart.length})</span>
+                      <span>Productos a Facturar ({cart.length})</span>
                     </span>
                     <span className="text-slate-500 font-semibold lowercase">precios en USD y Bs</span>
                   </div>
@@ -1958,7 +1958,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                   {/* TOTAL A FACTURAR (NÚMEROS Y LETRAS AJUSTADOS AL CONTENEDOR) */}
                   <div className="bg-gradient-to-br from-white via-indigo-50/30 to-indigo-100/40 p-4 sm:p-5 rounded-2xl border-2 border-indigo-600/40 shadow-sm space-y-3">
                     <div className="flex justify-between items-center text-xs sm:text-sm text-slate-700 font-bold">
-                      <span>Subtotal Calzados:</span>
+                      <span>Subtotal productos:</span>
                       <span className="font-mono font-bold text-slate-900 text-sm sm:text-base">${subtotalUsd.toFixed(2)}</span>
                     </div>
                     {discountUsd > 0 && (
