@@ -35,7 +35,7 @@ async function ensureOrdersSchema(sql: Sql) {
   )`;
   await sql`CREATE TABLE IF NOT EXISTS nexoss_dispatch_followups (
     id TEXT PRIMARY KEY, sale_id TEXT NOT NULL UNIQUE, invoice_number TEXT NOT NULL, client_document TEXT NOT NULL,
-    client_name TEXT NOT NULL, client_address TEXT NOT NULL DEFAULT '', collector_uid TEXT NOT NULL,
+    client_name TEXT NOT NULL, client_address TEXT NOT NULL DEFAULT '', client_phone TEXT NOT NULL DEFAULT '', collector_uid TEXT NOT NULL,
     dispatched_at TIMESTAMPTZ NOT NULL, due_at TIMESTAMPTZ NOT NULL,
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','partial','paid','cancelled')),
     reminder_10_sent_at TIMESTAMPTZ, reminder_due_sent_at TIMESTAMPTZ, reminder_overdue_sent_at TIMESTAMPTZ,
@@ -45,6 +45,7 @@ async function ensureOrdersSchema(sql: Sql) {
   )`;
   await sql`ALTER TABLE nexoss_client_collection_assignments ADD COLUMN IF NOT EXISTS client_address TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS client_address TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS client_phone TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_customer_orders_status_idx ON nexoss_customer_orders(status, requested_delivery_date)`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_customer_orders_customer_idx ON nexoss_customer_orders(customer_document)`;
 }
@@ -110,7 +111,7 @@ export function registerCustomerOrderRoutes(app: Express, deps: { getNeonSql: ()
       const invoiceSaleId = body.invoiceSaleId === undefined ? order.invoice_sale_id : clean(body.invoiceSaleId, 120);
       if (['dispatched','partial'].includes(nextStatus)) {
         if (!invoiceSaleId) return res.status(409).json({ error: 'Registra primero la factura en Ventas y vincúlala al pedido antes de confirmar el despacho.' });
-        const invoice = await sql`SELECT id, numero_factura, cliente_rif, cliente_nombre, cliente_apellido, condicion_pago, total_usd, estado FROM sales_transactions WHERE id = ${invoiceSaleId} LIMIT 1`;
+        const invoice = await sql`SELECT id, numero_factura, cliente_rif, cliente_nombre, cliente_apellido, cliente_telefono, condicion_pago, total_usd, estado FROM sales_transactions WHERE id = ${invoiceSaleId} LIMIT 1`;
         if (!invoice.length || invoice[0].estado === 'anulada') return res.status(404).json({ error: 'La factura vinculada no existe o está anulada en esta empresa.' });
         if (invoice[0].condicion_pago === 'credito') {
           const document = clean(order.customer_document || invoice[0].cliente_rif, 60).toUpperCase().replace(/[.\\s-]/g, '');
@@ -121,9 +122,9 @@ export function registerCustomerOrderRoutes(app: Express, deps: { getNeonSql: ()
           const visitDueAt = new Date(dispatchedAt.getTime() + 3 * 86400000);
           const name = [invoice[0].cliente_nombre, invoice[0].cliente_apellido].filter(Boolean).join(' ').trim() || order.customer_name;
           await sql`INSERT INTO nexoss_dispatch_followups
-            (id, sale_id, invoice_number, client_document, client_name, client_address, collector_uid, dispatched_at, due_at, visit_due_at)
-            VALUES (${randomUUID()}, ${invoiceSaleId}, ${invoice[0].numero_factura}, ${document}, ${name}, ${order.branch_address || order.customer_address || ''}, ${assignment[0].collector_uid}, ${dispatchedAt.toISOString()}, ${dueAt.toISOString()}, ${visitDueAt.toISOString()})
-            ON CONFLICT (sale_id) DO UPDATE SET collector_uid = EXCLUDED.collector_uid, client_address = EXCLUDED.client_address, updated_at = NOW()`;
+            (id, sale_id, invoice_number, client_document, client_name, client_address, client_phone, collector_uid, dispatched_at, due_at, visit_due_at)
+            VALUES (${randomUUID()}, ${invoiceSaleId}, ${invoice[0].numero_factura}, ${document}, ${name}, ${order.branch_address || order.customer_address || ''}, ${invoice[0].cliente_telefono || order.customer_phone || ''}, ${assignment[0].collector_uid}, ${dispatchedAt.toISOString()}, ${dueAt.toISOString()}, ${visitDueAt.toISOString()})
+            ON CONFLICT (sale_id) DO UPDATE SET collector_uid = EXCLUDED.collector_uid, client_address = EXCLUDED.client_address, client_phone = EXCLUDED.client_phone, updated_at = NOW()`;
         }
       }
       const rows = await sql`UPDATE nexoss_customer_orders SET
