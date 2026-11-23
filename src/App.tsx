@@ -116,6 +116,7 @@ function AppContent() {
         isHealthIndustry={companyIndustry === 'health'}
         companyRole={companyRole}
         isManufacturingIndustry={isManufacturingIndustry}
+        companyName={selectedCompanyName}
       />
 
       {/* Main Content Area */}
@@ -204,7 +205,7 @@ function AppContent() {
             <div className={`p-1 rounded-lg ${activeTab === 'layaways' ? 'bg-indigo-50' : ''}`}>
               <span className="text-lg">🔖</span>
             </div>
-            <span className="text-[10px] tracking-tight mt-0.5 font-bold">Crédito</span>
+            <span className="text-[10px] tracking-tight mt-0.5 font-bold">{selectedCompanyName.toLowerCase().includes('macizo') ? 'Pedidos' : 'Crédito'}</span>
           </button>}
 
           {userRole !== 'cajera' && <button
