@@ -39,7 +39,7 @@ import { MakdLogo } from './common/MakdLogo';
 import { UserWindowModal } from './common/UserWindowModal';
 import { CompanyProfileId, CompanyProfileSelector } from './companies/CompanyProfileSelector';
 
-export type NavigationTab = 'pos' | 'health' | 'inventory' | 'layaways' | 'reports' | 'cash' | 'expenses' | 'conciliacion' | 'contabilidad' | 'inventoryReport' | 'fiscal' | 'production' | 'admin' | 'firmaContable';
+export type NavigationTab = 'pos' | 'health' | 'inventory' | 'layaways' | 'reports' | 'cash' | 'expenses' | 'conciliacion' | 'contabilidad' | 'inventoryReport' | 'fiscal' | 'production' | 'admin' | 'firmaContable' | 'collections';
 
 interface NavbarProps {
   activeTab: NavigationTab;
@@ -68,6 +68,7 @@ export const Sidebar: React.FC<{
       items: [
         { id: 'pos' as const, label: 'Ventas', subtitle: 'Inventario / Salida', icon: ShoppingCart, count: null },
         { id: 'layaways' as const, label: 'Crédito', icon: BookmarkCheck, count: activeLayawaysCount || null },
+        { id: 'collections' as const, label: 'Cobranza y anaqueles', icon: ClipboardList, count: null },
         { id: 'cash' as const, label: 'Caja & Arqueo', icon: Wallet, count: null },
       ],
     },
@@ -100,7 +101,9 @@ export const Sidebar: React.FC<{
       { id: 'fiscal' as const, label: 'Cartelera fiscal', subtitle: 'Recaudos y documentos', icon: FolderOpen, count: null },
     ] },
   ];
-  const visibleNavGroups = isHealthIndustry && companyRole === 'doctor'
+  const visibleNavGroups = companyRole === 'collector'
+    ? [{ id: 'collections', label: 'Cobranza', icon: ClipboardList, items: [{ id: 'collections' as const, label: 'Mis cobranzas', subtitle: 'Clientes asignados', icon: ClipboardList, count: null }] }]
+    : isHealthIndustry && companyRole === 'doctor'
     ? healthNavGroups.slice(0, 1)
     : isHealthIndustry && companyRole === 'cashier'
       ? navGroups.slice(0, 1).map((group) => ({ ...group, items: group.items.filter((item) => item.id === 'pos') }))
