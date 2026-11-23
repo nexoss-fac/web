@@ -136,7 +136,7 @@ export const CompanyWorkspaceGate: React.FC<Props> = ({ user, loading, onTenantS
       if (selected?.status === 'active' && subscriptionIsActive) {
         setActiveCompany(selected);
         const resolvedIndustry = resolveIndustryTemplate(selected.industryTemplate, selected.activity || '');
-        localStorage.setItem('nexoss_active_company_name', selected.tradeName || selected.legalName);
+        localStorage.setItem('nexoss_active_company_name', [selected.legalName, selected.tradeName].filter(Boolean).join(' '));
         localStorage.setItem('nexoss_active_company_industry', resolvedIndustry);
         window.dispatchEvent(new Event('nexoss:company-profile-updated'));
         setMode('list');
@@ -281,7 +281,7 @@ export const CompanyWorkspaceGate: React.FC<Props> = ({ user, loading, onTenantS
 
     localStorage.setItem('nexoss_active_company_id', company.id);
 
-    localStorage.setItem('nexoss_active_company_name', company.tradeName || company.legalName);
+    localStorage.setItem('nexoss_active_company_name', [company.legalName, company.tradeName].filter(Boolean).join(' '));
 
 localStorage.setItem('nexoss_active_company_role', company.role);
     localStorage.setItem('nexoss_active_company_industry', resolveIndustryTemplate(company.industryTemplate, company.activity || ''));
