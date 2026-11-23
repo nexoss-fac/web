@@ -20,7 +20,6 @@ async function ensureCollectionsSchema(sql: Sql) {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
   await sql`ALTER TABLE nexoss_client_collection_assignments ADD COLUMN IF NOT EXISTS client_address TEXT NOT NULL DEFAULT ''`;
-  await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS client_address TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_collection_assignments_collector_idx ON nexoss_client_collection_assignments (collector_uid)`;
   await sql`CREATE TABLE IF NOT EXISTS nexoss_dispatch_followups (
     id TEXT PRIMARY KEY,
@@ -44,6 +43,7 @@ async function ensureCollectionsSchema(sql: Sql) {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
   await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS visit_completed_by_uid TEXT`;
+  await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS client_address TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_dispatch_followups_due_idx ON nexoss_dispatch_followups (status, due_at)`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_dispatch_followups_collector_idx ON nexoss_dispatch_followups (collector_uid, status)`;
   await sql`CREATE TABLE IF NOT EXISTS nexoss_collection_payments (
