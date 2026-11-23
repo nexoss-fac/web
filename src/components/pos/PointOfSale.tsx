@@ -102,6 +102,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   const [customerLastName, setCustomerLastName] = useState('');
   const [customerRif, setCustomerRif] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [deliveryOrder, setDeliveryOrder] = useState('');
   const [customerContactStatus, setCustomerContactStatus] = useState('');
 
   // Effective exchange rate for this sale (matches invoice date or custom rate)
@@ -567,6 +569,9 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       cliente_apellido: customerLastName.trim() || '',
       cliente_rif: customerRif.trim() || undefined,
       cliente_telefono: customerPhone.trim() || undefined,
+      cliente_direccion: customerAddress.trim() || undefined,
+      orden_entrega: deliveryOrder.trim() || undefined,
+      condicion_pago: finalPayments.some((payment) => (payment.cuenta || '').toLowerCase().includes('cashea') || (payment.cuenta || '').toLowerCase().includes('crédito') || (payment.cuenta || '').toLowerCase().includes('credito')) ? 'credito' : 'contado',
       items: saleItems,
       subtotal_usd: subtotalUsd,
       descuento_usd: discountUsd,
@@ -1461,6 +1466,17 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                           placeholder="0414-1234567"
                           className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 font-mono font-bold shadow-2xs"
                         />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Dirección del cliente</label>
+                        <input type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Dirección fiscal o comercial" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Orden de entrega</label>
+                        <input type="text" value={deliveryOrder} onChange={(e) => setDeliveryOrder(e.target.value)} placeholder="N.º de orden (opcional)" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
                       </div>
                     </div>
 
