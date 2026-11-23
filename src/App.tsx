@@ -58,7 +58,7 @@ function AppContent() {
       setCompanyRole(localStorage.getItem('nexoss_active_company_role') || '');
       const industry = localStorage.getItem('nexoss_active_company_industry') || 'other';
       setCompanyIndustry(industry);
-      setActiveTab(industry === 'health' ? 'health' : 'pos');
+      setActiveTab(localStorage.getItem('nexoss_active_company_role') === 'collector' ? 'collections' : industry === 'health' ? 'health' : 'pos');
     };
     window.addEventListener('nexoss:company-selected', syncRole);
     return () => window.removeEventListener('nexoss:company-selected', syncRole);
@@ -84,7 +84,7 @@ function AppContent() {
     setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
     setCompanyRole(localStorage.getItem('nexoss_active_company_role') || '');
     setCompanyIndustry(localStorage.getItem('nexoss_active_company_industry') || 'other');
-    setActiveTab(localStorage.getItem('nexoss_active_company_industry') === 'health' ? 'health' : 'pos');
+    setActiveTab(localStorage.getItem('nexoss_active_company_role') === 'collector' ? 'collections' : localStorage.getItem('nexoss_active_company_industry') === 'health' ? 'health' : 'pos');
   };
 
   return (
@@ -94,6 +94,7 @@ function AppContent() {
       setCompanyRole(role);
       setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
       setCompanyIndustry(localStorage.getItem('nexoss_active_company_industry') || 'other');
+      if (role === 'collector') setActiveTab('collections');
     }} onLogout={logoutUserAction}>
     <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-500 selection:text-white">
       
