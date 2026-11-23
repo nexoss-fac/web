@@ -374,6 +374,8 @@ export const Header: React.FC<{
         return 'Compras';
       case 'layaways':
         return 'Crédito';
+      case 'collections':
+        return 'Cobranza y supervisión de anaqueles';
       case 'reports':
         return 'Reportes';
       case 'inventoryReport':
