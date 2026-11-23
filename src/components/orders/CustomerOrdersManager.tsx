@@ -53,7 +53,7 @@ export const CustomerOrdersManager: React.FC = () => {
   const transition = async(order:CustomerOrder,status:string)=>{
     setBusy(true);setError('');setNotice('');
     try{
-      await api(`/api/customer-orders/${encodeURIComponent(order.id)}`,{method:'PATCH',body:JSON.stringify({status,invoiceSaleId:invoiceIds[order.id]||order.invoice_sale_id||undefined,items:items.map((item:OrderItem,index:number)=>({...item,approvedQuantity:Number(quantityEdits[`${order.id}-${index}-approved`]??item.approvedQuantity??item.quantity),deliveredQuantity:Number(quantityEdits[`${order.id}-${index}-delivered`]??item.deliveredQuantity??0),unitPrice:Number(priceEdits[`${order.id}-${index}`]??item.unitPrice??0)}))})});
+      await api(`/api/customer-orders/${encodeURIComponent(order.id)}`,{method:'PATCH',body:JSON.stringify({status,invoiceSaleId:invoiceIds[order.id]||order.invoice_sale_id||undefined,items:order.items.map((item:OrderItem,index:number)=>({...item,approvedQuantity:Number(quantityEdits[`${order.id}-${index}-approved`]??item.approvedQuantity??item.quantity),deliveredQuantity:Number(quantityEdits[`${order.id}-${index}-delivered`]??item.deliveredQuantity??0),unitPrice:Number(priceEdits[`${order.id}-${index}`]??item.unitPrice??0)}))})});
       setNotice(`Pedido ${order.order_number}: ${statusLabel[status]||status}.`);await load();
     }catch(e){setError(e instanceof Error?e.message:'No se pudo actualizar el pedido.');}finally{setBusy(false);}
   };
