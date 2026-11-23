@@ -92,7 +92,23 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto backdrop-blur-xs print:p-0 print:bg-white print:static">
+    <div id="nexoss-receipt-modal" className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto backdrop-blur-xs print:p-0 print:bg-white print:static">
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #nexoss-receipt-print-area, #nexoss-receipt-print-area * { visibility: visible !important; }
+          #nexoss-receipt-print-area {
+            position: fixed !important; left: 0 !important; top: 0 !important;
+            width: 100% !important; margin: 0 !important; padding: 0 !important;
+            overflow: visible !important; background: white !important;
+          }
+          #nexoss-receipt-modal .print-hide { display: none !important; }
+          #nexoss-receipt-print-area .print-receipt-container {
+            width: 80mm !important; max-width: 80mm !important;
+            margin: 0 auto !important; box-shadow: none !important;
+          }
+        }
+      `}</style>
       <div className={`bg-white border border-slate-200 rounded-2xl ${activeView === 'macizo' ? 'max-w-6xl' : 'max-w-lg'} w-full shadow-2xl overflow-hidden print:border-none print:shadow-none print:bg-white print:text-black my-4 sm:my-8 flex flex-col`}>
         
         {/* Modal Top Header (Screen Only) */}
@@ -193,7 +209,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
         </div>
 
         {/* Modal Scrollable Body */}
-        <div className="p-3 sm:p-5 bg-slate-100/60 overflow-y-auto max-h-[calc(85vh-180px)] flex justify-center print:p-0 print:bg-white print:max-h-none">
+        <div id="nexoss-receipt-print-area" className="p-3 sm:p-5 bg-slate-100/60 overflow-y-auto max-h-[calc(85vh-180px)] flex justify-center print:p-0 print:bg-white print:max-h-none">
           
           {/* ======================================================== */}
           {/* VIEW 1: TICKET TÉRMICO (Realista con corte dentado y POS) */}
