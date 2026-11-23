@@ -105,6 +105,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [deliveryOrder, setDeliveryOrder] = useState('');
+  const [paymentCondition, setPaymentCondition] = useState<'contado' | 'credito'>('contado');
   const [customerContactStatus, setCustomerContactStatus] = useState('');
 
   // Effective exchange rate for this sale (matches invoice date or custom rate)
@@ -572,7 +573,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       cliente_telefono: customerPhone.trim() || undefined,
       cliente_direccion: customerAddress.trim() || undefined,
       orden_entrega: deliveryOrder.trim() || undefined,
-      condicion_pago: finalPayments.some((payment) => (payment.cuenta || '').toLowerCase().includes('cashea') || (payment.cuenta || '').toLowerCase().includes('crédito') || (payment.cuenta || '').toLowerCase().includes('credito')) ? 'credito' : 'contado',
+      condicion_pago: finalPayments.some((payment) => (payment.cuenta || '').toLowerCase().includes('cashea')) ? 'credito' : paymentCondition,
       items: saleItems,
       subtotal_usd: subtotalUsd,
       descuento_usd: discountUsd,
@@ -1471,7 +1472,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                     </div>
 
                     {isMacizoNatural && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                         <div>
                           <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Dirección del cliente</label>
                           <input type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Dirección fiscal o comercial" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
@@ -1480,9 +1481,14 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                           <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Orden de entrega</label>
                           <input type="text" value={deliveryOrder} onChange={(e) => setDeliveryOrder(e.target.value)} placeholder="N.º de orden (opcional)" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
                         </div>
+                        <div>
+                          <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Condición de pago</label>
+                          <select value={paymentCondition} onChange={(e) => setPaymentCondition(e.target.value as 'contado' | 'credito')} className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20">
+                            <option value="contado">Contado</option>
+                            <option value="credito">Crédito</option>
+                          </select>
+                        </div>
                       </div>
-  
-  
                     )}
 
                     {customerContactStatus && <p role="status" aria-live="polite" className={`text-xs font-semibold ${customerContactStatus.startsWith('Cliente guardado') ? 'text-emerald-700' : customerContactStatus === 'Guardando cliente…' ? 'text-slate-500' : 'text-rose-600'}`}>{customerContactStatus}</p>}
