@@ -81,6 +81,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
       .join('');
     const invoiceMarkup = invoice.outerHTML;
 
+    printWindow.addEventListener('load', () => {
+      printWindow.focus();
+      printWindow.print();
+    }, { once: true });
+
     printWindow.document.open();
     printWindow.document.write(`<!doctype html>
       <html lang="es">
@@ -109,11 +114,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
         <body>${invoiceMarkup}</body>
       </html>`);
     printWindow.document.close();
-
-    printWindow.addEventListener('load', () => {
-      printWindow.focus();
-      printWindow.print();
-    }, { once: true });
   };
 
   const getReceiptSummaryText = () => {
