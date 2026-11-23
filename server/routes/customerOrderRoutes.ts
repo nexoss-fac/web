@@ -113,11 +113,11 @@ export function registerCustomerOrderRoutes(app: Express, deps: { getNeonSql: ()
         if (!invoiceSaleId) return res.status(409).json({ error: 'Registra primero la factura en Ventas y vincúlala al pedido antes de confirmar el despacho.' });
         const invoice = await sql`SELECT id, numero_factura, cliente_rif, cliente_nombre, cliente_apellido, cliente_telefono, condicion_pago, total_usd, estado FROM sales_transactions WHERE id = ${invoiceSaleId} LIMIT 1`;
         if (!invoice.length || invoice[0].estado === 'anulada') return res.status(404).json({ error: 'La factura vinculada no existe o está anulada en esta empresa.' });
-        const orderDocument = clean(order.customer_document, 60).toUpperCase().replace(/[.\\s-]/g, '');
-        const invoiceDocument = clean(invoice[0].cliente_rif, 60).toUpperCase().replace(/[.\\s-]/g, '');
+        const orderDocument = clean(order.customer_document, 60).toUpperCase().replace(/[.\s-]/g, '');
+        const invoiceDocument = clean(invoice[0].cliente_rif, 60).toUpperCase().replace(/[.\s-]/g, '');
         if (orderDocument && invoiceDocument && orderDocument !== invoiceDocument) return res.status(409).json({ error: 'La factura pertenece a otro cliente. Verifica el RIF antes de vincularla.' });
         if (invoice[0].condicion_pago === 'credito') {
-          const document = clean(order.customer_document || invoice[0].cliente_rif, 60).toUpperCase().replace(/[.\\s-]/g, '');
+          const document = clean(order.customer_document || invoice[0].cliente_rif, 60).toUpperCase().replace(/[.\s-]/g, '');
           const assignment = await sql`SELECT collector_uid FROM nexoss_client_collection_assignments WHERE client_document = ${document} LIMIT 1`;
           if (!assignment[0]?.collector_uid) return res.status(409).json({ error: 'Asigna un cobrador al cliente en Cobranza antes de confirmar el despacho a crédito.' });
           const dispatchedAt = new Date();
