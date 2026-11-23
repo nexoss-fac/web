@@ -17,7 +17,7 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
   });
   const date = new Date(sale.fecha);
   const payments = (sale.pagos || []).map((payment) => String(payment.cuenta || '').toLowerCase());
-  const isCredit = payments.some((method) => method.includes('cashea') || method.includes('crédito') || method.includes('credito'));
+  const isCredit = sale.condicion_pago ? sale.condicion_pago === 'credito' : payments.some((method) => method.includes('cashea') || method.includes('crédito') || method.includes('credito'));
   const paymentFlags = {
     cash: payments.some((method) => method.includes('efectivo')),
     mobile: payments.some((method) => method.includes('móvil') || method.includes('movil')),
