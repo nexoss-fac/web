@@ -78,7 +78,7 @@ const ROLE_POLICY: Record<MembershipRole, RolePolicy> = {
   },
   collector: {
     allow: [
-      { methods: 'read', route: /^\/(?:collections|push)(?:\/|$)/ },
+      { methods: 'read', route: /^\/(?:collections\/(?:tasks|assignments)|push)(?:\/|$)/ },
       { methods: 'write', route: /^\/(?:collections\/payments|push\/(?:subscribe|unsubscribe|test))(?:\/|$)/ },
     ],
   },
