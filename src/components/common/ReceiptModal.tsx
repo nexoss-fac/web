@@ -31,6 +31,11 @@ interface ReceiptModalProps {
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => {
   const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
   const activeCompanyName = localStorage.getItem('nexoss_active_company_name') || '';
+  const companyRif = localStorage.getItem('nexoss_active_company_rif') || '';
+  const companyPhone = localStorage.getItem('nexoss_active_company_phone') || '';
+  const companyEmail = localStorage.getItem('nexoss_active_company_email') || '';
+  const companyAddress = localStorage.getItem('nexoss_active_company_address') || '';
+  const companyLogo = localStorage.getItem('nexoss_active_company_logo') || '';
   const isMacizoNatural = /macizo\s*natural|fitgurt/i.test(activeCompanyName);
   const isFootwear = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry')) === 'footwear';
   const { updateSaleDate } = useStore();
@@ -225,24 +230,16 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
 
               {/* Receipt Header */}
               <div className="text-center pb-3 border-b border-dashed border-stone-400 space-y-0.5">
+                {companyLogo && <img src={companyLogo} alt="Logo de la empresa" className="mx-auto mb-1 max-h-12 max-w-28 object-contain" />}
                 <h2 className="text-base sm:text-lg font-black tracking-wider text-stone-950 uppercase">
-                  NEXOSS
+                  {activeCompanyName || 'NEXOSS'}
                 </h2>
                 <p className="text-[10px] font-bold text-stone-600 uppercase tracking-widest">
-                  Marcamos Tu Estilo
+                  {isMacizoNatural ? 'Más cerca de ti' : 'Comprobante de venta'}
                 </p>
-                <p className="text-[10px] text-stone-600 font-semibold">
-                  Razón Social: Empresa de demostración
-                </p>
-                <p className="text-[10px] text-stone-600 font-semibold">
-                  RIF: RIF de demostración
-                </p>
-                <p className="text-[9.5px] text-stone-500 leading-tight px-2">
-                  Datos de domicilio no configurados
-                </p>
-                <p className="text-[9.5px] text-stone-500">
-                  Tel: Teléfono de demostración • @nexossdemo
-                </p>
+                {companyRif && <p className="text-[10px] text-stone-600 font-semibold">RIF: {companyRif}</p>}
+                {companyAddress && <p className="text-[9.5px] text-stone-500 leading-tight px-2">{companyAddress}</p>}
+                {(companyPhone || companyEmail) && <p className="text-[9.5px] text-stone-500">{[companyPhone, companyEmail].filter(Boolean).join(' • ')}</p>}
 
                 {/* Invoice Tag */}
                 <div className="mt-2.5 inline-block px-3 py-1 bg-stone-200/90 text-stone-900 border border-stone-300 rounded font-black text-xs tracking-wider">
