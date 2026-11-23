@@ -921,7 +921,7 @@ async function startServer() {
     const identity = (req as any).firebaseIdentity;
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     const role = req.body?.role;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !['admin', 'accountant', 'auditor', 'supervisor', 'cashier'].includes(role)) return res.status(400).json({ error: 'Correo o rol inválido.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !['admin', 'accountant', 'auditor', 'supervisor', 'cashier', 'collector'].includes(role)) return res.status(400).json({ error: 'Correo o rol inválido.' });
     if (usePostgresControlPlane()) {
       try {
         const invitation = await getPostgresControlPlane().createInvitation(
@@ -1333,7 +1333,7 @@ async function startServer() {
   app.put('/api/company/members/:userId', adminOnly, async (req, res) => {
     const tenant = (req as TenantAuthenticatedRequest).tenant!;
     const role = req.body?.role;
-    if (!['admin', 'accountant', 'auditor', 'supervisor', 'cashier'].includes(role)) {
+    if (!['admin', 'accountant', 'auditor', 'supervisor', 'cashier', 'collector'].includes(role)) {
       return res.status(400).json({ error: 'El rol seleccionado no es válido.' });
     }
     if (usePostgresControlPlane()) {
