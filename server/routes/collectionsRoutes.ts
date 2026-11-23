@@ -138,6 +138,19 @@ export interface CollectionsRouteDeps {
 export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDeps) {
   const { getNeonSql, adminOnly, isActiveCollector } = deps;
 
+  app.get('/api/collections/eligible-sales', adminOnly, async (_req, res) => {
+    const sql = getNeonSql(); if (!sql) return res.status(503).json({ error: 'Base de datos de empresa no disponible.' });
+    try {
+      await ensureCollectionsSchema(sql);
+      const rows = await sql`SELECT s.id, s.numero_factura, s.cliente_nombre, s.cliente_apellido, s.cliente_rif, s.total_usd, s.fecha
+        FROM sales_transactions s
+        LEFT JOIN nexoss_dispatch_followups f ON f.sale_id = s.id
+        WHERE s.condicion_pago = 'credito' AND COALESCE(s.estado,'completada') <> 'anulada' AND f.sale_id IS NULL
+        ORDER BY s.fecha DESC LIMIT 200`;
+      return res.json({ sales: rows });
+    } catch { return res.status(503).json({ error: 'No se pudieron cargar las facturas pendientes de despacho.' }); }
+  });
+
   app.get('/api/collections/clients', adminOnly, async (_req, res) => {
     const sql = getNeonSql(); if (!sql) return res.status(503).json({ error: 'Base de datos de empresa no disponible.' });
     try {
