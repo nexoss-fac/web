@@ -64,6 +64,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   } = useStore();
   const industryKey = resolveIndustryTemplate(industryTemplate);
   const industry = COMPANY_INDUSTRIES[industryKey];
+  const isMacizoNatural = /macizo\\s*natural/i.test(localStorage.getItem('nexoss_active_company_name') || '');
   const isFootwear = industryKey === 'footwear';
 
   // Search & Filter State
@@ -1469,16 +1470,20 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      <div>
-                        <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Dirección del cliente</label>
-                        <input type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Dirección fiscal o comercial" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
+                    {isMacizoNatural && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Dirección del cliente</label>
+                          <input type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Dirección fiscal o comercial" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
+                        </div>
+                        <div>
+                          <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Orden de entrega</label>
+                          <input type="text" value={deliveryOrder} onChange={(e) => setDeliveryOrder(e.target.value)} placeholder="N.º de orden (opcional)" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
+                        </div>
                       </div>
-                      <div>
-                        <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Orden de entrega</label>
-                        <input type="text" value={deliveryOrder} onChange={(e) => setDeliveryOrder(e.target.value)} placeholder="N.º de orden (opcional)" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
-                      </div>
-                    </div>
+  
+  
+                    )}
 
                     {customerContactStatus && <p role="status" aria-live="polite" className={`text-xs font-semibold ${customerContactStatus.startsWith('Cliente guardado') ? 'text-emerald-700' : customerContactStatus === 'Guardando cliente…' ? 'text-slate-500' : 'text-rose-600'}`}>{customerContactStatus}</p>}
 
