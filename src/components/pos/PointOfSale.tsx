@@ -1381,7 +1381,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <span className="text-slate-800 font-black block">IVA (16% SENIAT):</span>
-                          <span className="text-xs text-slate-500">Puedes incluirlo dentro del precio del zapato.</span>
+                          <span className="text-xs text-slate-500">Puedes incluir el IVA dentro del precio de venta.</span>
                         </div>
                         <button
                           type="button"

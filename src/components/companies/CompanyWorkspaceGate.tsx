@@ -11,7 +11,7 @@ import { COMPANY_INDUSTRIES, INDUSTRY_WORKFLOWS, resolveIndustryTemplate } from 
 
 
 
-type Company = { id: string; slug: string; legalName: string; tradeName?: string; industryTemplate?: string; activity?: string; status: string; onboardingStep: number; role: string; subscription?: { status: string; currentPeriodEnd: string; plan: string } | null };
+type Company = { id: string; slug: string; legalName: string; tradeName?: string; rif?: string; phone?: string; email?: string; address?: string; logoUrl?: string; industryTemplate?: string; activity?: string; status: string; onboardingStep: number; role: string; subscription?: { status: string; currentPeriodEnd: string; plan: string } | null };
 type EmailCompanyMatch = { id: string; legalName: string; tradeName: string; status: string };
 
 type Invitation = { id: string; companyId: string; companyName: string; role: string; expiresAt: string; email?: string };
@@ -19,6 +19,17 @@ type Invitation = { id: string; companyId: string; companyName: string; role: st
 type Props = { user: FirebaseUser | null; loading: boolean; onTenantSelected: (id: string, role: string) => void; onLogout: () => Promise<void>; children: React.ReactNode };
 
 const headers = { 'Content-Type': 'application/json' };
+
+function persistActiveCompanyProfile(company: Company): void {
+  localStorage.setItem('nexoss_active_company_name', [company.legalName, company.tradeName].filter(Boolean).join(' '));
+  localStorage.setItem('nexoss_active_company_role', company.role);
+  localStorage.setItem('nexoss_active_company_industry', resolveIndustryTemplate(company.industryTemplate, company.activity || ''));
+  localStorage.setItem('nexoss_active_company_rif', company.rif || '');
+  localStorage.setItem('nexoss_active_company_phone', company.phone || '');
+  localStorage.setItem('nexoss_active_company_email', company.email || '');
+  localStorage.setItem('nexoss_active_company_address', company.address || '');
+  localStorage.setItem('nexoss_active_company_logo', company.logoUrl || '');
+}
 
 const fiscalRegimeOptions = [
   {
@@ -135,6 +146,8 @@ export const CompanyWorkspaceGate: React.FC<Props> = ({ user, loading, onTenantS
         && Date.parse(subscription.currentPeriodEnd) > Date.now());
       if (selected?.status === 'active' && subscriptionIsActive) {
         setActiveCompany(selected);
+        persistActiveCompanyProfile(selected);
+        window.dispatchEvent(new Event('nexoss:company-profile-updated'));
         setMode('list');
       } else {
         setActiveCompany(null);
@@ -276,11 +289,7 @@ export const CompanyWorkspaceGate: React.FC<Props> = ({ user, loading, onTenantS
     }
 
     localStorage.setItem('nexoss_active_company_id', company.id);
-
-    localStorage.setItem('nexoss_active_company_name', company.tradeName || company.legalName);
-
-localStorage.setItem('nexoss_active_company_role', company.role);
-    localStorage.setItem('nexoss_active_company_industry', resolveIndustryTemplate(company.industryTemplate, company.activity || ''));
+    persistActiveCompanyProfile(company);
 
 window.dispatchEvent(new Event('nexoss:company-selected'));
 

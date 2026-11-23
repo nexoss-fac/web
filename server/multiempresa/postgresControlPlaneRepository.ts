@@ -322,7 +322,8 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     const client = await this.pool.connect();
     try {
       const memberships = await client.query(
-        `SELECT c.id, c.slug, c.legal_name, c.trade_name, c.status, c.onboarding_step,
+        `SELECT c.id, c.slug, c.legal_name, c.trade_name, c.rif, c.phone, c.email,
+                c.address, c.logo_url, c.status, c.onboarding_step,
                 c.economic_activity, c.workspace, m.role,
                 s.status AS subscription_status, s.current_period_end, p.name AS plan_name
          FROM platform_users u
@@ -397,6 +398,8 @@ export class PostgresControlPlaneRepository implements TenantRepository {
       return {
         companies: memberships.rows.map((row) => ({
           id: row.id, slug: row.slug, legalName: row.legal_name, tradeName: row.trade_name || '',
+          rif: row.rif || '', phone: row.phone || '', email: row.email || '',
+          address: row.address || '', logoUrl: row.logo_url || '',
           industryTemplate: resolveIndustryTemplate(row.workspace?.industryTemplate, row.economic_activity || ''),
           status: row.status, onboardingStep: Number(row.onboarding_step), role: row.role,
           subscription: row.subscription_status ? {
