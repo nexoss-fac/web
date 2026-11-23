@@ -33,11 +33,13 @@ async function ensureCollectionsSchema(sql: Sql) {
     reminder_overdue_sent_at TIMESTAMPTZ,
     visit_due_at TIMESTAMPTZ NOT NULL,
     visit_completed_at TIMESTAMPTZ,
+    visit_completed_by_uid TEXT,
     visit_note TEXT NOT NULL DEFAULT '',
     visit_reminder_sent_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
+  await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS visit_completed_by_uid TEXT`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_dispatch_followups_due_idx ON nexoss_dispatch_followups (status, due_at)`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_dispatch_followups_collector_idx ON nexoss_dispatch_followups (collector_uid, status)`;
   await sql`CREATE TABLE IF NOT EXISTS nexoss_collection_payments (
@@ -133,7 +135,7 @@ function armReminderScheduler(context: any, sql: Sql) {
 export interface CollectionsRouteDeps {
   getNeonSql: () => Sql;
   adminOnly: RequestHandler;
-  isActiveCollector: (companyId: string, uid: string) => Promise<boolean>;
+  isActiveCollector: (companyId: string, uid: string, actorUid: string) => Promise<boolean>;
 }
 
 export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDeps) {
@@ -184,7 +186,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     const clientName = String(req.body?.clientName || '').trim().slice(0, 180);
     if (!context || !sql || !document || !collectorUid) return res.status(400).json({ error: 'Selecciona un cliente y un cobrador.' });
     try {
-      if (!await isActiveCollector(context.companyId, collectorUid)) return res.status(400).json({ error: 'El usuario seleccionado no es cobrador activo de esta empresa.' });
+      if (!await isActiveCollector(context.companyId, collectorUid, context.uid)) return res.status(400).json({ error: 'El usuario seleccionado no es cobrador activo de esta empresa.' });
       await ensureCollectionsSchema(sql);
       await sql`INSERT INTO nexoss_client_collection_assignments (client_document, client_name, collector_uid, assigned_by_uid)
         VALUES (${document}, ${clientName}, ${collectorUid}, ${context.uid})
@@ -254,7 +256,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     const amountUsd = Number(req.body?.amountUsd) || (amountBs > 0 && rate > 0 ? amountBs / rate : 0);
     const method = String(req.body?.method || '').trim().slice(0, 80);
     const reference = String(req.body?.reference || '').trim().slice(0, 100);
-    if (!context || !sql || !saleId || !method || !(amountUsd > 0) || !Number.isFinite(amountUsd) || !(rate > 0)) return res.status(400).json({ error: 'Datos del cobro inválidos.' });
+    if (!context || !sql || !saleId || !method || !(amountUsd > 0) || !Number.isFinite(amountUsd) || !Number.isFinite(amountBs) || amountBs < 0 || !(rate > 0) || !Number.isFinite(rate)) return res.status(400).json({ error: 'Datos del cobro inválidos.' });
     try {
       await ensureCollectionsSchema(sql);
       const cases = await sql`SELECT * FROM nexoss_dispatch_followups WHERE sale_id = ${saleId} AND status IN ('open','partial') LIMIT 1`;
@@ -280,7 +282,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     if (!sql || !saleId) return res.status(400).json({ error: 'Visita inválida.' });
     try {
       await ensureCollectionsSchema(sql);
-      const updated = await sql`UPDATE nexoss_dispatch_followups SET visit_completed_at = NOW(), visit_note = ${note}, updated_at = NOW()
+      const updated = await sql`UPDATE nexoss_dispatch_followups SET visit_completed_at = NOW(), visit_completed_by_uid = ${(tenant(req) as any)?.uid || ''}, visit_note = ${note}, updated_at = NOW()
         WHERE sale_id = ${saleId} AND visit_completed_at IS NULL RETURNING id`;
       return updated.length ? res.json({ saved: true }) : res.status(404).json({ error: 'La visita no existe o ya fue completada.' });
     } catch { return res.status(503).json({ error: 'No se pudo guardar la visita.' }); }
