@@ -28,6 +28,7 @@ import { LayawaysManager } from './components/layaways/LayawaysManager';
 const AccountingManager = lazy(() => import('./components/accounting/AccountingManager').then((m) => ({ default: m.AccountingManager })));
 const ReceiptScannerModal = lazy(() => import('./components/expenses/ReceiptScannerModal').then((m) => ({ default: m.ReceiptScannerModal })));
 const CompanyAdminPanel = lazy(() => import('./components/admin/CompanyAdminPanel').then((m) => ({ default: m.CompanyAdminPanel })));
+const CollectionsPanel = lazy(() => import('./components/collections/CollectionsPanel').then((m) => ({ default: m.CollectionsPanel })));
 
 function ViewFallback() {
   return (
@@ -137,6 +138,7 @@ function AppContent() {
             {activeTab === 'conciliacion' && <BankReconciliationView />}
             {activeTab === 'contabilidad' && (companyIndustry === 'health' ? isCompanyAdmin : userRole === 'admin') && <AccountingManager />}
             {activeTab === 'admin' && isCompanyAdmin && <CompanyAdminPanel companyId={activeCompanyId} />}
+            {activeTab === 'collections' && <CollectionsPanel key={activeCompanyId} companyId={activeCompanyId} role={companyRole} />}
             {activeTab === 'firmaContable' && isCompanyAdmin && <AccountingFirmDashboard companyId={activeCompanyId} companyName={selectedCompanyName} onOpenBilling={() => setActiveTab('pos')} onOpenAccounting={() => setActiveTab('contabilidad')} />}
             {activeTab === 'fiscal' && <FiscalFolder key={activeCompanyId} companyId={activeCompanyId} companyName={selectedCompanyName} />}
             {activeTab === 'health' && companyIndustry === 'health' && isClinicStaff && <HealthWorkspace key={activeCompanyId} canManagePayments={isCompanyAdmin} canManageInventory={isCompanyAdmin} />}
