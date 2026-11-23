@@ -53,6 +53,13 @@ function AppContent() {
   const isClinicStaff = isCompanyAdmin || companyRole === 'doctor';
   // Producción y trazabilidad solo corresponden a empresas que transforman/fabrican productos.
   const isManufacturingIndustry = companyIndustry === 'manufacturing' || companyIndustry === 'food_manufacturing';
+
+  // Al entrar a una empresa, el servidor arma el ciclo de recordatorios aunque
+  // el usuario no abra manualmente el módulo de cobranza.
+  useEffect(() => {
+    if (!activeCompanyId || !['owner', 'admin', 'collector'].includes(companyRole)) return;
+    void fetch('/api/collections/tasks').catch(() => undefined);
+  }, [activeCompanyId, companyRole]);
   useEffect(() => {
     const syncRole = () => {
       setCompanyRole(localStorage.getItem('nexoss_active_company_role') || '');
