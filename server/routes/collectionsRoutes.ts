@@ -109,14 +109,20 @@ async function processReminders(sql: Sql) {
       body = `Corresponde revisar los anaqueles de ${row.client_name} (factura ${row.invoice_number}).`; tag = `shelf-visit-${row.sale_id}`;
     }
     if (!field) continue;
+    let claimed: any[] = [];
+    if (field === 'reminder_10_sent_at') claimed = await sql`UPDATE nexoss_dispatch_followups SET reminder_10_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND reminder_10_sent_at IS NULL RETURNING id`;
+    else if (field === 'reminder_due_sent_at') claimed = await sql`UPDATE nexoss_dispatch_followups SET reminder_due_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND reminder_due_sent_at IS NULL RETURNING id`;
+    else if (field === 'reminder_overdue_sent_at') claimed = await sql`UPDATE nexoss_dispatch_followups SET reminder_overdue_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND reminder_overdue_sent_at IS NULL RETURNING id`;
+    else if (field === 'visit_reminder_sent_at') claimed = await sql`UPDATE nexoss_dispatch_followups SET visit_reminder_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND visit_reminder_sent_at IS NULL RETURNING id`;
+    if (!claimed.length) continue;
     const admins = await sendWebPushToRoles(sql, ['owner', 'admin'], { title, body, url: '/?tab=admin', tag });
     let collector = 0;
     if (field !== 'visit_reminder_sent_at') collector = await sendWebPushToUsers(sql, [row.collector_uid], { title, body, url: '/?tab=collections', tag });
-    if (admins + collector > 0) {
-      if (field === 'reminder_10_sent_at') await sql`UPDATE nexoss_dispatch_followups SET reminder_10_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND reminder_10_sent_at IS NULL`;
-      else if (field === 'reminder_due_sent_at') await sql`UPDATE nexoss_dispatch_followups SET reminder_due_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND reminder_due_sent_at IS NULL`;
-      else if (field === 'reminder_overdue_sent_at') await sql`UPDATE nexoss_dispatch_followups SET reminder_overdue_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND reminder_overdue_sent_at IS NULL`;
-      else if (field === 'visit_reminder_sent_at') await sql`UPDATE nexoss_dispatch_followups SET visit_reminder_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND visit_reminder_sent_at IS NULL`;
+    if (admins + collector === 0) {
+      if (field === 'reminder_10_sent_at') await sql`UPDATE nexoss_dispatch_followups SET reminder_10_sent_at = NULL WHERE id = ${row.id}`;
+      else if (field === 'reminder_due_sent_at') await sql`UPDATE nexoss_dispatch_followups SET reminder_due_sent_at = NULL WHERE id = ${row.id}`;
+      else if (field === 'reminder_overdue_sent_at') await sql`UPDATE nexoss_dispatch_followups SET reminder_overdue_sent_at = NULL WHERE id = ${row.id}`;
+      else if (field === 'visit_reminder_sent_at') await sql`UPDATE nexoss_dispatch_followups SET visit_reminder_sent_at = NULL WHERE id = ${row.id}`;
     }
   }
 }
