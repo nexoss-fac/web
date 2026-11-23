@@ -64,7 +64,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   } = useStore();
   const industryKey = resolveIndustryTemplate(industryTemplate);
   const industry = COMPANY_INDUSTRIES[industryKey];
-  const isMacizoNatural = /macizo\\s*natural/i.test(localStorage.getItem('nexoss_active_company_name') || '');
+  const isMacizoNatural = /macizo\s*natural/i.test(localStorage.getItem('nexoss_active_company_name') || '');
   const isFootwear = industryKey === 'footwear';
 
   // Search & Filter State
