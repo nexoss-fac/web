@@ -9,6 +9,7 @@ type SaleRow = { id: string; numero_factura: string; cliente_nombre: string; cli
 const reminderTimers = new Map<string, ReturnType<typeof setInterval>>();
 
 async function ensureCollectionsSchema(sql: Sql) {
+  await sql`CREATE TABLE IF NOT EXISTS nexoss_customer_addresses (client_document TEXT PRIMARY KEY, client_address TEXT NOT NULL DEFAULT '', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`;
   await sql`CREATE TABLE IF NOT EXISTS nexoss_client_collection_assignments (
     client_document TEXT PRIMARY KEY,
     client_name TEXT NOT NULL DEFAULT '',
@@ -168,13 +169,27 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     try {
       await ensureCollectionsSchema(sql);
       const rows = await sql`SELECT cliente_rif AS document, MAX(TRIM(CONCAT(COALESCE(cliente_nombre,''), ' ', COALESCE(cliente_apellido,'')))) AS name,
-        MAX(cliente_telefono) AS phone, MAX(cliente_direccion) AS address, COUNT(*)::int AS invoices
-        FROM sales_transactions WHERE COALESCE(cliente_rif,'') <> '' AND COALESCE(estado,'completada') <> 'anulada'
-        GROUP BY cliente_rif ORDER BY name`;
+        MAX(cliente_telefono) AS phone, COALESCE(MAX(a.client_address), MAX(cliente_direccion), '') AS address, COUNT(*)::int AS invoices
+        FROM sales_transactions s LEFT JOIN nexoss_customer_addresses a ON a.client_document = regexp_replace(upper(trim(s.cliente_rif)), '[.\\s-]', '', 'g') WHERE COALESCE(s.cliente_rif,'') <> '' AND COALESCE(s.estado,'completada') <> 'anulada'
+        GROUP BY s.cliente_rif ORDER BY name`;
       const assignments = await sql`SELECT client_document, collector_uid, client_address FROM nexoss_client_collection_assignments`;
       const byDocument = new Map((assignments as any[]).map((a) => [a.client_document, a.collector_uid]));
       return res.json({ clients: (rows as any[]).map((row) => ({ ...row, collectorUid: byDocument.get(documentKey(row.document)) || '', address: (assignments as any[]).find((a) => a.client_document === documentKey(row.document))?.client_address || row.address || '' })) });
     } catch (error) { return res.status(503).json({ error: 'No se pudo cargar la cartera de clientes.' }); }
+  });
+
+  app.put('/api/collections/clients/:document/address', adminOnly, async (req, res) => {
+    const sql = getNeonSql(); const document = documentKey(req.params.document);
+    const address = String(req.body?.address || '').trim().slice(0, 500);
+    if (!sql || !document) return res.status(400).json({ error: 'Cliente inválido.' });
+    try {
+      await ensureCollectionsSchema(sql);
+      await sql`INSERT INTO nexoss_customer_addresses (client_document, client_address) VALUES (${document}, ${address})
+        ON CONFLICT (client_document) DO UPDATE SET client_address = EXCLUDED.client_address, updated_at = NOW()`;
+      await sql`UPDATE nexoss_client_collection_assignments SET client_address = ${address}, updated_at = NOW() WHERE client_document = ${document}`;
+      await sql`UPDATE nexoss_dispatch_followups SET client_address = ${address}, updated_at = NOW() WHERE client_document = ${document}`;
+      return res.json({ saved: true });
+    } catch { return res.status(503).json({ error: 'No se pudo guardar la dirección.' }); }
   });
 
   app.get('/api/collections/assignments', async (req, res) => {
@@ -230,7 +245,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
       const visitDueAt = new Date(dispatchedAt.getTime() + 3 * 86400000);
       await sql`INSERT INTO nexoss_dispatch_followups
         (id, sale_id, invoice_number, client_document, client_name, client_address, collector_uid, dispatched_at, due_at, visit_due_at)
-        VALUES (${randomUUID()}, ${sale.id}, ${sale.numero_factura}, ${document}, ${displayName(sale)}, COALESCE((SELECT client_address FROM nexoss_client_collection_assignments WHERE client_document = ${document}), ''), ${assignment[0].collector_uid}, ${dispatchedAt.toISOString()}, ${dueAt.toISOString()}, ${visitDueAt.toISOString()})
+        VALUES (${randomUUID()}, ${sale.id}, ${sale.numero_factura}, ${document}, ${displayName(sale)}, COALESCE((SELECT client_address FROM nexoss_customer_addresses WHERE client_document = ${document}), (SELECT client_address FROM nexoss_client_collection_assignments WHERE client_document = ${document}), ''), ${assignment[0].collector_uid}, ${dispatchedAt.toISOString()}, ${dueAt.toISOString()}, ${visitDueAt.toISOString()})
         ON CONFLICT (sale_id) DO UPDATE SET collector_uid = EXCLUDED.collector_uid, updated_at = NOW()`;
       await sendWebPushToRoles(sql, ['owner', 'admin'], { title: 'Macizo · Despacho a crédito', body: `Factura ${sale.numero_factura} despachada. Cobro en 15 días y visita de anaqueles programada.`, url: '/?tab=collections', tag: `dispatch-${sale.id}` });
       await sendWebPushToUsers(sql, [assignment[0].collector_uid], { title: 'Macizo · Nueva cobranza asignada', body: `Cliente ${displayName(sale)} · Factura ${sale.numero_factura}. Vence en 15 días.`, url: '/?tab=collections', tag: `dispatch-${sale.id}` });
