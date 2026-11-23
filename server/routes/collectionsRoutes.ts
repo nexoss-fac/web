@@ -110,7 +110,10 @@ async function processReminders(sql: Sql) {
     let collector = 0;
     if (field !== 'visit_reminder_sent_at') collector = await sendWebPushToUsers(sql, [row.collector_uid], { title, body, url: '/?tab=collections', tag });
     if (admins + collector > 0) {
-      await sql`UPDATE nexoss_dispatch_followups SET ${sql(field)} = NOW(), updated_at = NOW() WHERE id = ${row.id} AND ${sql(field)} IS NULL`;
+      if (field === 'reminder_10_sent_at') await sql`UPDATE nexoss_dispatch_followups SET reminder_10_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND reminder_10_sent_at IS NULL`;
+      else if (field === 'reminder_due_sent_at') await sql`UPDATE nexoss_dispatch_followups SET reminder_due_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND reminder_due_sent_at IS NULL`;
+      else if (field === 'reminder_overdue_sent_at') await sql`UPDATE nexoss_dispatch_followups SET reminder_overdue_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND reminder_overdue_sent_at IS NULL`;
+      else if (field === 'visit_reminder_sent_at') await sql`UPDATE nexoss_dispatch_followups SET visit_reminder_sent_at = NOW(), updated_at = NOW() WHERE id = ${row.id} AND visit_reminder_sent_at IS NULL`;
     }
   }
 }
