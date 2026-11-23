@@ -20,7 +20,7 @@ export const SALE_UPDATABLE_FIELDS = [
   'pagos', 'estado', 'fecha', 'notas', 'estado_cashea',
   'total_positivo_inmediato_usd', 'total_cashea_pendiente_usd',
   // Historial de abonos de Cashea: el cliente lo enviaba y el servidor lo descartaba.
-  'cashea_abonos',
+  'cashea_abonos', 'cliente_direccion', 'orden_entrega', 'condicion_pago',
 ] as const;
 
 export type SaleUpdates = Partial<Pick<Sale, typeof SALE_UPDATABLE_FIELDS[number]>>;
