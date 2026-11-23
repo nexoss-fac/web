@@ -29,11 +29,34 @@ async function ensureOrdersSchema(sql: Sql) {
     dispatched_by_uid TEXT, dispatched_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`;
+  await sql`CREATE TABLE IF NOT EXISTS nexoss_client_collection_assignments (
+    client_document TEXT PRIMARY KEY, client_name TEXT NOT NULL DEFAULT '', client_address TEXT NOT NULL DEFAULT '',
+    collector_uid TEXT NOT NULL, assigned_by_uid TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`;
+  await sql`CREATE TABLE IF NOT EXISTS nexoss_dispatch_followups (
+    id TEXT PRIMARY KEY, sale_id TEXT NOT NULL UNIQUE, invoice_number TEXT NOT NULL, client_document TEXT NOT NULL,
+    client_name TEXT NOT NULL, client_address TEXT NOT NULL DEFAULT '', collector_uid TEXT NOT NULL,
+    dispatched_at TIMESTAMPTZ NOT NULL, due_at TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','partial','paid','cancelled')),
+    reminder_10_sent_at TIMESTAMPTZ, reminder_due_sent_at TIMESTAMPTZ, reminder_overdue_sent_at TIMESTAMPTZ,
+    visit_due_at TIMESTAMPTZ NOT NULL, visit_completed_at TIMESTAMPTZ, visit_completed_by_uid TEXT,
+    visit_note TEXT NOT NULL DEFAULT '', visit_reminder_sent_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_customer_orders_status_idx ON nexoss_customer_orders(status, requested_delivery_date)`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_customer_orders_customer_idx ON nexoss_customer_orders(customer_document)`;
 }
 export function registerCustomerOrderRoutes(app: Express, deps: { getNeonSql: () => Sql; adminOnly: RequestHandler }) {
   const { getNeonSql, adminOnly } = deps;
+  app.get('/api/customer-orders/invoices', adminOnly, async (_req, res) => {
+    const sql = getNeonSql();
+    if (!sql) return res.status(503).json({ error: 'Base de datos de empresa no disponible.' });
+    try {
+      const invoices = await sql`SELECT id, numero_factura, cliente_nombre, cliente_apellido, cliente_rif, total_usd, condicion_pago
+        FROM sales_transactions WHERE COALESCE(estado,'completada') <> 'anulada' ORDER BY fecha DESC LIMIT 200`;
+      return res.json({ invoices });
+    } catch { return res.status(503).json({ error: 'No se pudieron cargar las facturas.' }); }
+  });
   app.get('/api/customer-orders', adminOnly, async (_req, res) => {
     const sql = getNeonSql();
     if (!sql) return res.status(503).json({ error: 'Base de datos de empresa no disponible.' });
@@ -77,8 +100,21 @@ export function registerCustomerOrderRoutes(app: Express, deps: { getNeonSql: ()
       const invoiceSaleId = body.invoiceSaleId === undefined ? order.invoice_sale_id : clean(body.invoiceSaleId, 120);
       if (['dispatched','partial'].includes(nextStatus)) {
         if (!invoiceSaleId) return res.status(409).json({ error: 'Registra primero la factura en Ventas y vincúlala al pedido antes de confirmar el despacho.' });
-        const invoice = await sql`SELECT id, cliente_rif FROM sales_transactions WHERE id = ${invoiceSaleId} LIMIT 1`;
-        if (!invoice.length) return res.status(404).json({ error: 'La factura vinculada no existe en esta empresa.' });
+        const invoice = await sql`SELECT id, numero_factura, cliente_rif, cliente_nombre, cliente_apellido, condicion_pago, total_usd, estado FROM sales_transactions WHERE id = ${invoiceSaleId} LIMIT 1`;
+        if (!invoice.length || invoice[0].estado === 'anulada') return res.status(404).json({ error: 'La factura vinculada no existe o está anulada en esta empresa.' });
+        if (invoice[0].condicion_pago === 'credito') {
+          const document = clean(order.customer_document || invoice[0].cliente_rif, 60).toUpperCase().replace(/[.\\s-]/g, '');
+          const assignment = await sql`SELECT collector_uid FROM nexoss_client_collection_assignments WHERE client_document = ${document} LIMIT 1`;
+          if (!assignment[0]?.collector_uid) return res.status(409).json({ error: 'Asigna un cobrador al cliente en Cobranza antes de confirmar el despacho a crédito.' });
+          const dispatchedAt = new Date();
+          const dueAt = new Date(dispatchedAt.getTime() + 15 * 86400000);
+          const visitDueAt = new Date(dispatchedAt.getTime() + 3 * 86400000);
+          const name = [invoice[0].cliente_nombre, invoice[0].cliente_apellido].filter(Boolean).join(' ').trim() || order.customer_name;
+          await sql`INSERT INTO nexoss_dispatch_followups
+            (id, sale_id, invoice_number, client_document, client_name, client_address, collector_uid, dispatched_at, due_at, visit_due_at)
+            VALUES (${randomUUID()}, ${invoiceSaleId}, ${invoice[0].numero_factura}, ${document}, ${name}, ${order.branch_address || order.customer_address || ''}, ${assignment[0].collector_uid}, ${dispatchedAt.toISOString()}, ${dueAt.toISOString()}, ${visitDueAt.toISOString()})
+            ON CONFLICT (sale_id) DO UPDATE SET collector_uid = EXCLUDED.collector_uid, client_address = EXCLUDED.client_address, updated_at = NOW()`;
+        }
       }
       const rows = await sql`UPDATE nexoss_customer_orders SET
         status = ${nextStatus}, items = ${JSON.stringify(items)}, invoice_sale_id = ${invoiceSaleId || null},
