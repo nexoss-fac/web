@@ -135,6 +135,10 @@ export const CompanyWorkspaceGate: React.FC<Props> = ({ user, loading, onTenantS
         && Date.parse(subscription.currentPeriodEnd) > Date.now());
       if (selected?.status === 'active' && subscriptionIsActive) {
         setActiveCompany(selected);
+        const resolvedIndustry = resolveIndustryTemplate(selected.industryTemplate, selected.activity || '');
+        localStorage.setItem('nexoss_active_company_name', selected.tradeName || selected.legalName);
+        localStorage.setItem('nexoss_active_company_industry', resolvedIndustry);
+        window.dispatchEvent(new Event('nexoss:company-profile-updated'));
         setMode('list');
       } else {
         setActiveCompany(null);
