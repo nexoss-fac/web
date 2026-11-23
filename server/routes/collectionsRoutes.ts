@@ -44,6 +44,7 @@ async function ensureCollectionsSchema(sql: Sql) {
   )`;
   await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS visit_completed_by_uid TEXT`;
   await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS client_address TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE nexoss_dispatch_followups ADD COLUMN IF NOT EXISTS client_phone TEXT NOT NULL DEFAULT ''`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_dispatch_followups_due_idx ON nexoss_dispatch_followups (status, due_at)`;
   await sql`CREATE INDEX IF NOT EXISTS nexoss_dispatch_followups_collector_idx ON nexoss_dispatch_followups (collector_uid, status)`;
   await sql`CREATE TABLE IF NOT EXISTS nexoss_collection_payments (
@@ -244,8 +245,8 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
       const dueAt = new Date(dispatchedAt.getTime() + 15 * 86400000);
       const visitDueAt = new Date(dispatchedAt.getTime() + 3 * 86400000);
       await sql`INSERT INTO nexoss_dispatch_followups
-        (id, sale_id, invoice_number, client_document, client_name, client_address, collector_uid, dispatched_at, due_at, visit_due_at)
-        VALUES (${randomUUID()}, ${sale.id}, ${sale.numero_factura}, ${document}, ${displayName(sale)}, COALESCE((SELECT client_address FROM nexoss_customer_addresses WHERE client_document = ${document}), (SELECT client_address FROM nexoss_client_collection_assignments WHERE client_document = ${document}), ''), ${assignment[0].collector_uid}, ${dispatchedAt.toISOString()}, ${dueAt.toISOString()}, ${visitDueAt.toISOString()})
+        (id, sale_id, invoice_number, client_document, client_name, client_address, client_phone, collector_uid, dispatched_at, due_at, visit_due_at)
+        VALUES (${randomUUID()}, ${sale.id}, ${sale.numero_factura}, ${document}, ${displayName(sale)}, COALESCE((SELECT client_address FROM nexoss_customer_addresses WHERE client_document = ${document}), (SELECT client_address FROM nexoss_client_collection_assignments WHERE client_document = ${document}), ''), ${sale.cliente_telefono || ''}, ${assignment[0].collector_uid}, ${dispatchedAt.toISOString()}, ${dueAt.toISOString()}, ${visitDueAt.toISOString()})
         ON CONFLICT (sale_id) DO UPDATE SET collector_uid = EXCLUDED.collector_uid, updated_at = NOW()`;
       await sendWebPushToRoles(sql, ['owner', 'admin'], { title: 'Macizo · Despacho a crédito', body: `Factura ${sale.numero_factura} despachada. Cobro en 15 días y visita de anaqueles programada.`, url: '/?tab=collections', tag: `dispatch-${sale.id}` });
       await sendWebPushToUsers(sql, [assignment[0].collector_uid], { title: 'Macizo · Nueva cobranza asignada', body: `Cliente ${displayName(sale)} · Factura ${sale.numero_factura}. Vence en 15 días.`, url: '/?tab=collections', tag: `dispatch-${sale.id}` });
@@ -267,7 +268,8 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
         const saleRows = await sql`SELECT id, total_usd, pagos FROM sales_transactions WHERE id = ${(row as any).sale_id} LIMIT 1`;
         if (!saleRows[0]) continue;
         const balance = await currentBalance(sql, { ...(row as any), ...(saleRows[0] as any) });
-        tasks.push({ ...row, ...balance });
+        const paymentHistory = await sql`SELECT id, amount_usd, amount_bs, exchange_rate, method, reference, paid_at, recorded_by_uid FROM nexoss_collection_payments WHERE sale_id = ${(row as any).sale_id} ORDER BY paid_at ASC`;
+        tasks.push({ ...row, ...balance, payments: paymentHistory });
       }
       return res.json({ tasks });
     } catch { return res.status(503).json({ error: 'No se pudieron cargar las tareas de cobranza.' }); }
