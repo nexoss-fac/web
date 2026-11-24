@@ -762,22 +762,30 @@ export async function initDatabaseSchema() {
 // Ventas (sales_transactions)
 // ==========================================
 
-export async function getNextInvoiceNumber(): Promise<string | null> {
+export async function getNextInvoiceNumber(prefix: 'MK' | 'MN' = 'MK'): Promise<string | null> {
   const sql = getNeonSql();
   if (!sql) return null;
   try {
     await initDatabaseSchema();
     const rows = await (sql as any).query(
       `INSERT INTO invoice_sequences (id, last_number, updated_at)
-       VALUES ('NEXOSS', 1, NOW())
+       VALUES ($1, COALESCE((
+         SELECT MAX(CAST(SUBSTRING(numero_factura FROM '[0-9]+$') AS INTEGER))
+         FROM sales_transactions
+         WHERE numero_factura ~* ('^' || $1 || '-[0-9]+$')
+       ), CASE WHEN $1 = 'MN' THEN 100 ELSE 0 END) + 1, NOW())
        ON CONFLICT (id) DO UPDATE SET
-         last_number = invoice_sequences.last_number + 1,
+         last_number = GREATEST(invoice_sequences.last_number, COALESCE((
+           SELECT MAX(CAST(SUBSTRING(numero_factura FROM '[0-9]+$') AS INTEGER))
+           FROM sales_transactions
+           WHERE numero_factura ~* ('^' || $1 || '-[0-9]+$')
+         ), CASE WHEN $1 = 'MN' THEN 100 ELSE 0 END)) + 1,
          updated_at = NOW()
        RETURNING last_number`,
-      []
+      [prefix]
     );
-    const n = Number(rows?.[0]?.last_number) || 1;
-    return `MK-${String(n).padStart(6, '0')}`;
+    const n = Number(rows?.[0]?.last_number) || (prefix === 'MN' ? 101 : 1);
+    return `${prefix}-${String(n).padStart(6, '0')}`;
   } catch (err) {
     logger.error('Error generando número de factura:', err);
     return null;
