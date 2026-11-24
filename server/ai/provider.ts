@@ -35,7 +35,11 @@ function parseImageDataUrl(value: string) {
   return { mimeType: match[1], data: match[2] };
 }
 
-function modelSupportsVision(model: string): boolean {\n  return /qwen2\\.5vl|llava|moondream|minicpm-v|llama3\\.2-vision|gemma3/i.test(model);\n}\n\nfunction systemPrompt(companyName: string, role: string, industry: string): string {
+function modelSupportsVision(model: string): boolean {
+  return /qwen2\.5vl|llava|moondream|minicpm-v|llama3\.2-vision|gemma3/i.test(model);
+}
+
+function systemPrompt(companyName: string, role: string, industry: string): string {
   return [
     'Eres NEXOSS AI, asistente operativo de una plataforma de gestión empresarial multiempresa.',
     'Responde en español claro y conciso.',
