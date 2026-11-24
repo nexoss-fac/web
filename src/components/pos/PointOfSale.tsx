@@ -95,7 +95,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       const m = value.match(new RegExp(`^(?:${invoicePrefix}[- ]?)?(\\d+)$`, 'i'));
       return m ? Math.max(highest, Number(m[1]) || 0) : highest;
     }, 0);
-    return `${invoicePrefix}-${String(max + 1).padStart(6, '0')}`;
+    return `${invoicePrefix}-${String(Math.max(max + 1, invoicePrefix === 'MN' ? 101 : 1)).padStart(6, '0')}`;
   }, [sales, invoicePrefix]);
   const [invoiceNumber, setInvoiceNumber] = useState<string>(() => `${invoicePrefix}-000001`);
   const [reservedInvoiceNumber, setReservedInvoiceNumber] = useState<string>('');
