@@ -2243,9 +2243,10 @@ async function startServer() {
 
   // Reserva atómica del siguiente correlativo de factura en la base del tenant.
   // La secuencia evita que dos terminales de la misma empresa reciban el mismo número.
-  app.post('/api/invoices/next', async (_req, res) => {
+  app.post('/api/invoices/next', async (req, res) => {
     try {
-      const numero = await getNextInvoiceNumber();
+      const prefix = req.body?.prefix === 'MN' ? 'MN' : 'MK';
+      const numero = await getNextInvoiceNumber(prefix);
       if (!numero) return res.status(503).json({ error: 'No se pudo reservar el número de factura en la base de datos de esta empresa.' });
       return res.json({ numero_factura: numero });
     } catch (error) {
