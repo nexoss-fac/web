@@ -88,14 +88,16 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   // Invoice & Customer Data
   const todayIso = getTodayVenezuela();
   const [invoiceDate, setInvoiceDate] = useState<string>(() => getTodayVenezuela());
+  const invoicePrefix = isMacizoNatural ? 'MN' : 'MK';
   const getNextInvoiceNumber = React.useCallback(() => {
     const max = sales.reduce((highest, sale) => {
-      const m = String(sale.numero_factura || '').match(/(?:MK[- ]?)?(\d+)$/i);
+      const value = String(sale.numero_factura || '');
+      const m = value.match(new RegExp(`^(?:${invoicePrefix}[- ]?)?(\\d+)$`, 'i'));
       return m ? Math.max(highest, Number(m[1]) || 0) : highest;
     }, 0);
-    return `MK-${String(max + 1).padStart(6, '0')}`;
-  }, [sales]);
-  const [invoiceNumber, setInvoiceNumber] = useState<string>(() => 'MK-000001');
+    return `${invoicePrefix}-${String(max + 1).padStart(6, '0')}`;
+  }, [sales, invoicePrefix]);
+  const [invoiceNumber, setInvoiceNumber] = useState<string>(() => `${invoicePrefix}-000001`);
   const [reservedInvoiceNumber, setReservedInvoiceNumber] = useState<string>('');
   const [customSaleRate, setCustomSaleRate] = useState<string>('');
   const [isCustomSaleRate, setIsCustomSaleRate] = useState(false);
@@ -144,7 +146,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   React.useEffect(() => {
     let cancelled = false;
-    fetch('/api/invoices/next', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+    fetch('/api/invoices/next', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prefix: invoicePrefix }) })
       .then((r) => r.ok ? r.json() : null)
       .then((j) => {
         if (!cancelled && j?.numero_factura) {
@@ -626,7 +628,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     setInvoiceNumber(localNextNumber);
     setReservedInvoiceNumber('');
     // Reserva exactamente una vez el siguiente número después de emitir la factura.
-    void fetch('/api/invoices/next', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+    void fetch('/api/invoices/next', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prefix: invoicePrefix }) })
       .then(async (response) => {
         if (!response.ok) throw new Error('No se pudo reservar el siguiente correlativo.');
         const payload = await response.json();
@@ -1471,23 +1473,25 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                       </div>
                     </div>
 
-                    {isMacizoNatural && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                        <div>
-                          <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Dirección del cliente</label>
-                          <input type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Dirección fiscal o comercial" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
-                        </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Dirección del cliente</label>
+                        <input type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Dirección fiscal o comercial del cliente" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
+                      </div>
+                      {isMacizoNatural && (
                         <div>
                           <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Orden de entrega</label>
                           <input type="text" value={deliveryOrder} onChange={(e) => setDeliveryOrder(e.target.value)} placeholder="N.º de orden (opcional)" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
                         </div>
-                        <div>
-                          <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Condición de pago</label>
-                          <select value={paymentCondition} onChange={(e) => setPaymentCondition(e.target.value as 'contado' | 'credito')} className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20">
-                            <option value="contado">Contado</option>
-                            <option value="credito">Crédito</option>
-                          </select>
-                        </div>
+                      )}
+                    </div>
+                    {isMacizoNatural && (
+                      <div>
+                        <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Condición de pago</label>
+                        <select value={paymentCondition} onChange={(e) => setPaymentCondition(e.target.value as 'contado' | 'credito')} className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20">
+                          <option value="contado">Contado</option>
+                          <option value="credito">Crédito</option>
+                        </select>
                       </div>
                     )}
 
