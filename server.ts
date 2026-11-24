@@ -12,6 +12,7 @@ import { registerPurchaseInvoiceRoutes } from './server/routes/purchaseInvoiceRo
 import { registerAccountingFirmRoutes } from './server/routes/accountingFirmRoutes.ts';
 import { registerSharedContactsRoutes } from './server/routes/sharedContactsRoutes.ts';
 import { registerHealthRoutes } from './server/routes/healthRoutes.ts';
+import { registerNexossAiRoutes } from './server/routes/aiRoutes.ts';
 import { createServer as createViteServer } from 'vite';
 import { 
   checkDatabaseConnection, 
@@ -995,6 +996,8 @@ async function startServer() {
 
   const adminOnly = requireTenantRole('owner', 'admin');
   const pushDeviceAccess = requireTenantRole('owner', 'admin', 'collector');
+  const aiMemberAccess = requireTenantRole('owner', 'admin', 'cashier', 'accountant', 'collector', 'doctor');
+  registerNexossAiRoutes(app, aiMemberAccess);
   registerSharedContactsRoutes(app);
   registerHealthRoutes(app, adminOnly);
 

@@ -13,6 +13,7 @@ import { FiscalFolder } from './components/fiscal/FiscalFolder';
 import { PublicFiscalBoard } from './components/fiscal/PublicFiscalBoard';
 import { PushNotificationSettings } from './components/common/PushNotificationSettings';
 import { HealthWorkspace } from './components/health/HealthWorkspace';
+import { NexossAiAssistant } from './components/common/NexossAiAssistant';
 
 // Lazy load view components for maximum initial load performance and lightweight bundle
 const AccountingFirmDashboard = lazy(() => import('./components/accounting/AccountingFirmDashboard').then((m) => ({ default: m.AccountingFirmDashboard })));
@@ -243,6 +244,7 @@ function AppContent() {
         </nav>
 
         {isScannerOpen && <Suspense fallback={null}><ReceiptScannerModal isOpen={isScannerOpen} onClose={() => setIsScannerOpen(false)} /></Suspense>}
+        {activeCompanyId && currentUser && <NexossAiAssistant key={activeCompanyId} companyId={activeCompanyId} companyName={selectedCompanyName} />}
 
         {/* High Density Sub-Footer (matching Design HTML) */}
         <footer className="hidden lg:flex h-10 bg-slate-50 border-t border-slate-200 items-center justify-between px-4 sm:px-6 text-[10px] text-slate-400 shrink-0">
