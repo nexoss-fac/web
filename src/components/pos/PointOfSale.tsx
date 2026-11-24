@@ -517,9 +517,11 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   const handleFinalizeSale = async () => {
     if (cart.length === 0) return;
 
-    // Check payments
+    // A crédito no recibe dinero en caja: la venta queda registrada con saldo pendiente.
     let finalPayments: SalePayment[] = [];
-    if (isMixedPaymentOpen) {
+    if (paymentCondition === 'credito') {
+      finalPayments = [];
+    } else if (isMixedPaymentOpen) {
       if (Math.abs(totalPaidUsd - totalUsd) > 0.1 && totalPaidUsd < totalUsd) {
         alert(`Falta por cubrir $${(totalUsd - totalPaidUsd).toFixed(2)} para completar el pago.`);
         return;
@@ -1485,15 +1487,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                         </div>
                       )}
                     </div>
-                    {isMacizoNatural && (
-                      <div>
-                        <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Condición de pago</label>
-                        <select value={paymentCondition} onChange={(e) => setPaymentCondition(e.target.value as 'contado' | 'credito')} className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20">
-                          <option value="contado">Contado</option>
-                          <option value="credito">Crédito</option>
-                        </select>
-                      </div>
-                    )}
+
 
                     {customerContactStatus && <p role="status" aria-live="polite" className={`text-xs font-semibold ${customerContactStatus.startsWith('Cliente guardado') ? 'text-emerald-700' : customerContactStatus === 'Guardando cliente…' ? 'text-slate-500' : 'text-rose-600'}`}>{customerContactStatus}</p>}
 
@@ -1603,6 +1597,33 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
 
                   {/* Payment Method Selector */}
                   <div className="pt-3 border-t border-slate-200 space-y-2.5">
+                    <div>
+                      <span className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide block mb-2">Forma de pago</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentCondition('contado')}
+                          aria-pressed={paymentCondition === 'contado'}
+                          className={`p-3 rounded-xl border text-sm font-black transition cursor-pointer ${paymentCondition === 'contado' ? 'bg-indigo-50 border-indigo-600 text-indigo-900 ring-2 ring-indigo-500/20' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                        >
+                          Contado
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setPaymentCondition('credito'); setIsMixedPaymentOpen(false); setMixedPayments([]); }}
+                          aria-pressed={paymentCondition === 'credito'}
+                          className={`p-3 rounded-xl border text-sm font-black transition cursor-pointer ${paymentCondition === 'credito' ? 'bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-500/20' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                        >
+                          Crédito
+                        </button>
+                      </div>
+                    </div>
+                    {paymentCondition === 'credito' && (
+                      <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs sm:text-sm text-amber-900">
+                        <strong>Venta a crédito:</strong> no se registra cobro ni movimiento de caja al facturar. El importe queda pendiente de pago del cliente.
+                      </div>
+                    )}
+                    <div className={paymentCondition === 'credito' ? 'hidden' : ''}>
                     <div className="flex items-center justify-between">
                       <span className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide">Método de Pago</span>
                       <button
@@ -1750,6 +1771,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                         </div>
                       </div>
                     )}
+                    </div>
 
                     {/* Single Payment Cashea Warning */}
                     {!isMixedPaymentOpen && singlePaymentAccount === 'Cashea' && (
