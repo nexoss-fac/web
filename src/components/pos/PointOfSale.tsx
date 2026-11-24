@@ -1774,7 +1774,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                     </div>
 
                     {/* Single Payment Cashea Warning */}
-                    {!isMixedPaymentOpen && singlePaymentAccount === 'Cashea' && (
+                    {paymentCondition === 'contado' && !isMixedPaymentOpen && singlePaymentAccount === 'Cashea' && (
                       <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl space-y-1.5 text-xs text-amber-900">
                         <div className="flex items-center gap-2 font-black text-sm">
                           <Clock className="w-4 h-4 text-amber-600" />
@@ -1787,7 +1787,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                     )}
 
                     {/* Asistente Plan Cashea: Inicial (Punto/Pago Móvil) + Saldo Cashea */}
-                    <div className="bg-amber-50/70 border border-amber-200 p-3.5 rounded-2xl space-y-2">
+                    {paymentCondition === 'contado' && <div className="bg-amber-50/70 border border-amber-200 p-3.5 rounded-2xl space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 rounded-md bg-amber-500 text-white font-black text-xs uppercase">
@@ -1910,10 +1910,10 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                           </button>
                         </div>
                       )}
-                    </div>
+                    </div>}
 
                     {/* BDV Pago Móvil Live Verification Callout */}
-                    {((singlePaymentAccount || '').includes('Pago Móvil') || isMixedPaymentOpen) && (
+                    {paymentCondition === 'contado' && ((singlePaymentAccount || '').includes('Pago Móvil') || isMixedPaymentOpen) && (
                       <div className="p-3.5 bg-red-50/70 border border-red-200 rounded-2xl space-y-2.5">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 text-red-700 font-black text-xs sm:text-sm">
