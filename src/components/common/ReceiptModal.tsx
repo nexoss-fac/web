@@ -83,11 +83,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
       .join('');
     const invoiceMarkup = invoice.outerHTML;
 
-    printWindow.addEventListener('load', () => {
-      printWindow.focus();
-      printWindow.print();
-    }, { once: true });
-
     printWindow.document.open();
     printWindow.document.write(`<!doctype html>
       <html lang="es">
@@ -146,6 +141,29 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
         <body>${invoiceMarkup}</body>
       </html>`);
     printWindow.document.close();
+
+    // Espera a que el documento y sus hojas de estilo estén cargados antes de abrir
+    // el diálogo. Si se imprime durante about:blank, Edge genera una página vacía.
+    const startPrint = async () => {
+      try {
+        await Promise.all(Array.from(printWindow.document.images).map((image) =>
+          image.decode ? image.decode().catch(() => undefined) : Promise.resolve()
+        ));
+        if (printWindow.document.fonts?.ready) {
+          await printWindow.document.fonts.ready;
+        }
+      } catch {
+        // La impresión puede continuar aunque una fuente o imagen opcional falle.
+      }
+      printWindow.focus();
+      printWindow.print();
+    };
+
+    if (printWindow.document.readyState === 'complete') {
+      void startPrint();
+    } else {
+      printWindow.addEventListener('load', () => { void startPrint(); }, { once: true });
+    }
   };
 
   const getReceiptSummaryText = () => {
