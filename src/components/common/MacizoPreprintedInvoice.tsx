@@ -37,6 +37,7 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
     <>
       <style>{`
         @page { size: letter portrait; margin: 0; }
+        #macizo-preprinted-invoice .macizo-content, #macizo-preprinted-invoice .macizo-content * { font-size: 12pt !important; line-height: 1.15 !important; }
         @media print {
           html, body, #root { width: 8.5in !important; min-height: 11in !important; height: 11in !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: transparent !important; }
           body * { visibility: hidden !important; }
@@ -48,7 +49,8 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
             color: #111 !important; overflow: hidden !important; z-index: 999999 !important;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
-          #macizo-preprinted-invoice .macizo-content { position: absolute !important; left: .25in !important; right: .25in !important; width: auto !important; min-width: 0 !important; max-width: none !important; box-sizing: border-box !important; top: .95in !important; height: 2.83in !important; display: flex !important; flex-direction: column !important; align-items: stretch !important; }
+          #macizo-preprinted-invoice .macizo-content { position: absolute !important; left: .25in !important; right: .25in !important; width: auto !important; min-width: 0 !important; max-width: none !important; box-sizing: border-box !important; top: 1.97in !important; height: 3.4in !important; display: flex !important; flex-direction: column !important; align-items: stretch !important; }
+          #macizo-preprinted-invoice .macizo-content, #macizo-preprinted-invoice .macizo-content * { font-size: 12pt !important; line-height: 1.15 !important; }
           #macizo-preprinted-invoice .macizo-content > * { width: 100% !important; min-width: 0 !important; max-width: none !important; flex-shrink: 0 !important; box-sizing: border-box !important; }
           #macizo-preprinted-invoice .macizo-content > div:nth-child(4) { flex: 1 1 auto !important; min-height: 0 !important; }
           #macizo-preprinted-invoice .macizo-screen-hint { display: none !important; }
@@ -58,7 +60,7 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
         <div className="macizo-screen-hint absolute inset-x-0 top-0 z-10 bg-amber-50 px-3 py-1.5 text-center text-[10px] font-semibold text-amber-900">
           Vista de impresión · Solo se imprimen los datos centrales; membrete y pie ya están preimpresos
         </div>
-        <div className="macizo-content absolute left-[4.55%] right-[4.55%] top-[11.2%] bottom-[55.8%] flex flex-col text-[9px] leading-tight">
+        <div className="macizo-content absolute left-[4.55%] right-[4.55%] top-[33.7%] bottom-[8%] flex flex-col text-[12pt] leading-tight">
           <div className="grid grid-cols-2 items-end gap-x-4 border-b border-slate-300 pb-1">
             <div className="flex items-baseline gap-2">
               <strong className="uppercase tracking-wide">Fecha</strong>
