@@ -76,6 +76,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
       return;
     }
 
+    // Documento de impresión aislado. Conserva tipografía y estilos visuales de la app,
+    // pero define explícitamente la geometría física y el ancho de cada sección.
     const stylesheets = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
       .map((link) => `<link rel="stylesheet" href="${link.href}">`)
       .join('');
@@ -104,13 +106,40 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
               margin: 0; padding: 0; overflow: hidden; border: 0; box-shadow: none;
               background: transparent; color: #111;
             }
+            * { box-sizing: border-box !important; }
             #macizo-preprinted-invoice .macizo-content {
-              position: absolute; left: .25in; right: .25in; width: auto; min-width: 0; max-width: none; box-sizing: border-box; top: .95in;
-              height: 2.83in; bottom: auto; display: flex; flex-direction: column; align-items: stretch;
+              position: absolute !important; left: .25in !important; right: .25in !important;
+              width: auto !important; min-width: 0 !important; max-width: none !important;
+              top: .95in !important; height: 2.83in !important; bottom: auto !important;
+              display: flex !important; flex-direction: column !important; align-items: stretch !important;
             }
-            #macizo-preprinted-invoice .macizo-content > * { width: 100%; min-width: 0; max-width: none; flex-shrink: 0; box-sizing: border-box; }
-            #macizo-preprinted-invoice .macizo-content > div:nth-child(4) { flex: 1 1 auto; min-height: 0;
+            #macizo-preprinted-invoice .macizo-content > div {
+              display: block !important; width: 100% !important; min-width: 0 !important;
+              max-width: none !important; flex-shrink: 0 !important; margin-left: 0 !important;
+              margin-right: 0 !important;
             }
+            #macizo-preprinted-invoice .macizo-content > div:nth-child(1) {
+              display: grid !important; grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important;
+            }
+            #macizo-preprinted-invoice .macizo-content > div:nth-child(2) {
+              display: grid !important; grid-template-columns: minmax(0,1fr) auto !important;
+              width: 100% !important;
+            }
+            #macizo-preprinted-invoice .macizo-content > div:nth-child(3),
+            #macizo-preprinted-invoice .macizo-content > div:nth-child(4) > div {
+              display: grid !important; width: 100% !important;
+              grid-template-columns: .55fr 3.3fr 1.15fr .45fr 1.35fr !important;
+            }
+            #macizo-preprinted-invoice .macizo-content > div:nth-child(4) {
+              width: 100% !important; flex: 1 1 auto !important; min-height: 0 !important;
+              overflow: hidden !important;
+            }
+            #macizo-preprinted-invoice .macizo-content > div:nth-child(5) {
+              display: grid !important; grid-template-columns: minmax(0,1fr) auto !important;
+              width: 100% !important; align-items: end !important;
+            }
+            #macizo-preprinted-invoice .macizo-content > div:nth-child(5) > div:first-child { min-width: 0 !important; }
+            #macizo-preprinted-invoice .macizo-content > div:nth-child(5) > div:last-child { min-width: 2.25in !important; }
             #macizo-preprinted-invoice .macizo-screen-hint { display: none; }
           </style>
         </head>
