@@ -76,8 +76,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
       return;
     }
 
-    // El documento de impresión es autónomo: no depende de las hojas de estilo
-    // de la aplicación ni de los anchos heredados del modal.
+    // Documento de impresión aislado. Conserva tipografía y estilos visuales de la app,
+    // pero define explícitamente la geometría física y el ancho de cada sección.
+    const stylesheets = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
+      .map((link) => `<link rel="stylesheet" href="${link.href}">`)
+      .join('');
     const invoiceMarkup = invoice.outerHTML;
 
     printWindow.addEventListener('load', () => {
@@ -92,6 +95,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <title>Factura Macizo</title>
+          ${stylesheets}
           <style>
             @page { size: 5.5in 8.5in portrait; margin: 0; }
             html, body { width: 5.5in; height: 8.5in; margin: 0; padding: 0; overflow: hidden; background: transparent; }
