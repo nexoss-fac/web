@@ -36,14 +36,14 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
   return (
     <>
       <style>{`
-        @page { size: letter portrait; margin: 0; }
+        @page { size: 5.5in 8.5in; margin: 0; }
         @media print {
-          html, body, #root { width: 8.5in !important; min-height: 11in !important; height: 11in !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: transparent !important; }
+          html, body, #root { width: 5.5in !important; min-height: 8.5in !important; height: 8.5in !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: transparent !important; }
           body * { visibility: hidden !important; }
           #macizo-preprinted-invoice, #macizo-preprinted-invoice * { visibility: visible !important; }
           #macizo-preprinted-invoice {
             display: block !important; position: fixed !important; left: 0 !important; top: 0 !important;
-            width: 8.5in !important; height: 5.5in !important; margin: 0 !important; padding: 0 !important;
+            width: 5.5in !important; height: 8.5in !important; margin: 0 !important; padding: 0 !important;
             border: 0 !important; box-shadow: none !important; background: transparent !important;
             color: #111 !important; overflow: hidden !important; z-index: 999999 !important;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
@@ -52,7 +52,7 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
           #macizo-preprinted-invoice .macizo-screen-hint { display: none !important; }
         }
       `}</style>
-      <section id="macizo-preprinted-invoice" className="relative mx-auto aspect-[17/11] w-full max-w-[850px] overflow-hidden border border-slate-300 bg-white text-slate-900 shadow-sm">
+      <section id="macizo-preprinted-invoice" className="relative mx-auto aspect-[5.5/8.5] w-full max-w-[550px] overflow-hidden border border-slate-300 bg-white text-slate-900 shadow-sm">
         <div className="macizo-screen-hint absolute inset-x-0 top-0 z-10 bg-amber-50 px-3 py-1.5 text-center text-[10px] font-semibold text-amber-900">
           Vista de impresión · Solo se imprimen los datos centrales; membrete y pie ya están preimpresos
         </div>
