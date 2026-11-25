@@ -105,7 +105,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
               background: transparent; color: #111;
             }
             #macizo-preprinted-invoice .macizo-content {
-              position: absolute; left: .34in; right: .34in; top: .75in;
+              position: absolute; left: .25in; right: .25in; top: .95in;
               height: 2.83in; bottom: auto;
             }
             #macizo-preprinted-invoice .macizo-screen-hint { display: none; }
