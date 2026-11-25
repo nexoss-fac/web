@@ -16,6 +16,8 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
     maximumFractionDigits: 2,
   });
   const date = new Date(sale.fecha);
+  // En la papelería Fitgurt se imprime la secuencia corta de cinco dígitos; el prefijo MN permanece en el registro interno.
+  const invoiceDisplayNumber = String(sale.numero_factura || '').replace(/\D/g, '').slice(-5).padStart(5, '0');
   const payments = (sale.pagos || []).map((payment) => String(payment.cuenta || '').toLowerCase());
   const isCredit = sale.condicion_pago ? sale.condicion_pago === 'credito' : payments.some((method) => method.includes('cashea') || method.includes('crédito') || method.includes('credito'));
   const paymentFlags = {
@@ -62,7 +64,7 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
             </div>
             <div className="flex items-baseline justify-end gap-2 text-[11px]">
               <strong className="uppercase tracking-wide">FACTURA:</strong>
-              <span className="font-black tabular-nums">{sale.numero_factura}</span>
+              <span className="font-black tabular-nums">{invoiceDisplayNumber}</span>
             </div>
           </div>
           <div className="mt-1 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
