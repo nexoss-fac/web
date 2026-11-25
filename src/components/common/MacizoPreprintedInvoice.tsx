@@ -48,15 +48,15 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
             color: #111 !important; overflow: hidden !important; z-index: 999999 !important;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
-          #macizo-preprinted-invoice .macizo-content { position: absolute !important; left: .42in !important; right: .42in !important; top: 1.2in !important; height: 3.45in !important; }
+          #macizo-preprinted-invoice .macizo-content { position: absolute !important; left: .34in !important; right: .34in !important; top: 1.97in !important; height: 2.83in !important; }
           #macizo-preprinted-invoice .macizo-screen-hint { display: none !important; }
         }
       `}</style>
-      <section id="macizo-preprinted-invoice" className="relative mx-auto aspect-[8.5/5.5] w-full max-w-[1100px] overflow-hidden border border-slate-300 bg-white text-slate-900 shadow-sm">
+      <section id="macizo-preprinted-invoice" className="relative mx-auto aspect-[17/11] w-full max-w-[850px] overflow-hidden border border-slate-300 bg-white text-slate-900 shadow-sm">
         <div className="macizo-screen-hint absolute inset-x-0 top-0 z-10 bg-amber-50 px-3 py-1.5 text-center text-[10px] font-semibold text-amber-900">
           Vista de impresión · Solo se imprimen los datos centrales; membrete y pie ya están preimpresos
         </div>
-        <div className="macizo-content absolute left-[5%] right-[5%] top-[22%] bottom-[14%] flex flex-col text-[9px] leading-tight">
+        <div className="macizo-content absolute left-[4%] right-[4%] top-[21%] bottom-[10%] flex flex-col text-[9px] leading-tight">
           <div className="grid grid-cols-2 items-end gap-x-4 border-b border-slate-300 pb-1">
             <div className="flex items-baseline gap-2">
               <strong className="uppercase tracking-wide">Fecha</strong>
