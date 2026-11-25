@@ -106,7 +106,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
             }
             #macizo-preprinted-invoice .macizo-content {
               position: absolute; left: .25in; right: .25in; width: auto; min-width: 0; max-width: none; box-sizing: border-box; top: .95in;
-              height: 2.83in; bottom: auto;
+              height: 2.83in; bottom: auto; display: flex; flex-direction: column; align-items: stretch;
+            }
+            #macizo-preprinted-invoice .macizo-content > * { width: 100%; min-width: 0; max-width: none; flex-shrink: 0; box-sizing: border-box; }
+            #macizo-preprinted-invoice .macizo-content > div:nth-child(4) { flex: 1 1 auto; min-height: 0;
             }
             #macizo-preprinted-invoice .macizo-screen-hint { display: none; }
           </style>
