@@ -70,7 +70,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
       return;
     }
 
-    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    const printWindow = window.open('', '_blank', 'width=700,height=1000');
     if (!printWindow) {
       window.alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para NEXOSS e inténtalo de nuevo.');
       return;
@@ -95,18 +95,18 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
           <title>Factura Macizo</title>
           ${stylesheets}
           <style>
-            @page { size: letter landscape; margin: 0; }
-            html, body { width: 11in; height: 8.5in; margin: 0; padding: 0; overflow: hidden; background: transparent; }
+            @page { size: 5.5in 8.5in portrait; margin: 0; }
+            html, body { width: 5.5in; height: 8.5in; margin: 0; padding: 0; overflow: hidden; background: transparent; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             #macizo-preprinted-invoice {
               display: block; position: relative; box-sizing: border-box;
-              width: 11in; height: 8.5in; max-width: none; aspect-ratio: auto;
+              width: 5.5in; height: 8.5in; max-width: none; aspect-ratio: auto;
               margin: 0; padding: 0; overflow: hidden; border: 0; box-shadow: none;
               background: transparent; color: #111;
             }
             #macizo-preprinted-invoice .macizo-content {
-              position: absolute; left: .42in; right: .42in; top: 1.05in;
-              height: 6.95in; bottom: auto;
+              position: absolute; left: .28in; right: .28in; top: .82in;
+              height: 7.4in; bottom: auto;
             }
             #macizo-preprinted-invoice .macizo-screen-hint { display: none; }
           </style>
