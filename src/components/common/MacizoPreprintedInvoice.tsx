@@ -48,7 +48,7 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
             color: #111 !important; overflow: hidden !important; z-index: 999999 !important;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
-          #macizo-preprinted-invoice .macizo-content { position: absolute !important; left: .25in !important; right: auto !important; width: 5in !important; box-sizing: border-box !important; top: .95in !important; height: 2.83in !important; }
+          #macizo-preprinted-invoice .macizo-content { position: absolute !important; left: .25in !important; right: .25in !important; width: auto !important; min-width: 0 !important; max-width: none !important; box-sizing: border-box !important; top: .95in !important; height: 2.83in !important; }
           #macizo-preprinted-invoice .macizo-screen-hint { display: none !important; }
         }
       `}</style>
