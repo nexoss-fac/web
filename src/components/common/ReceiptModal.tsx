@@ -95,7 +95,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
           <title>Factura Macizo</title>
           ${stylesheets}
           <style>
-            @page { size: 5.5in 8.5in; margin: 0; }
+            @page { size: 5.5in 8.5in portrait; margin: 0; }
             html, body { width: 5.5in; height: 8.5in; margin: 0; padding: 0; overflow: hidden; background: transparent; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             #macizo-preprinted-invoice {
@@ -105,7 +105,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
               background: transparent; color: #111;
             }
             #macizo-preprinted-invoice .macizo-content {
-              position: absolute; left: .34in; right: .34in; top: 1.97in;
+              position: absolute; left: .34in; right: .34in; top: .75in;
               height: 2.83in; bottom: auto;
             }
             #macizo-preprinted-invoice .macizo-screen-hint { display: none; }
