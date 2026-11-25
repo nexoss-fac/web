@@ -49,7 +49,7 @@ export const MacizoPreprintedInvoice: React.FC<MacizoPreprintedInvoiceProps> = (
             color: #111 !important; overflow: hidden !important; z-index: 999999 !important;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
-          #macizo-preprinted-invoice .macizo-content { position: absolute !important; left: .25in !important; right: .25in !important; width: auto !important; min-width: 0 !important; max-width: none !important; box-sizing: border-box !important; top: 1.97in !important; height: 3.4in !important; display: flex !important; flex-direction: column !important; align-items: stretch !important; }
+          #macizo-preprinted-invoice .macizo-content { position: absolute !important; left: .25in !important; right: .25in !important; width: auto !important; min-width: 0 !important; max-width: none !important; box-sizing: border-box !important; top: 1.18in !important; height: 3.4in !important; display: flex !important; flex-direction: column !important; align-items: stretch !important; }
           #macizo-preprinted-invoice .macizo-content, #macizo-preprinted-invoice .macizo-content * { font-size: 12pt !important; line-height: 1.15 !important; }
           #macizo-preprinted-invoice .macizo-content > * { width: 100% !important; min-width: 0 !important; max-width: none !important; flex-shrink: 0 !important; box-sizing: border-box !important; }
           #macizo-preprinted-invoice .macizo-content > div:nth-child(4) { flex: 1 1 auto !important; min-height: 0 !important; }

@@ -105,7 +105,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
             #macizo-preprinted-invoice .macizo-content {
               position: absolute !important; left: .25in !important; right: .25in !important;
               width: auto !important; min-width: 0 !important; max-width: none !important;
-              top: 1.97in !important; height: 3.4in !important; bottom: auto !important;
+              top: 1.18in !important; height: 3.4in !important; bottom: auto !important;
               display: flex !important; flex-direction: column !important; align-items: stretch !important;
             }
             #macizo-preprinted-invoice .macizo-content, #macizo-preprinted-invoice .macizo-content * { font-size: 12pt !important; line-height: 1.15 !important; }
