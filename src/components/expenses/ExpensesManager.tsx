@@ -83,6 +83,7 @@ export const ExpensesManager: React.FC<{ isManufacturingIndustry?: boolean }> = 
   const [descripcion, setDescripcion] = useState('');
   const [beneficiario, setBeneficiario] = useState('');
   const [beneficiarioRif, setBeneficiarioRif] = useState('');
+  const [supplierContacts, setSupplierContacts] = useState<Array<{ nombre: string; documento?: string; trade_name?: string }>>([]);
   const [cuentaOrigen, setCuentaOrigen] = useState(accounts[0]?.nombre || 'Efectivo USD');
   const [moneda, setMoneda] = useState<Currency>('USD');
   const [montoInput, setMontoInput] = useState('');
@@ -218,6 +219,27 @@ export const ExpensesManager: React.FC<{ isManufacturingIndustry?: boolean }> = 
       .sort((a, b) => b.monto_usd - a.monto_usd);
   }, [periodExpenses, totalGastosUsd]);
 
+  const loadSupplierContacts = async () => {
+    try {
+      const response = await fetch('/api/contacts?tipo=proveedor');
+      if (!response.ok) return;
+      const data = await response.json();
+      setSupplierContacts(Array.isArray(data?.contacts) ? data.contacts : []);
+    } catch (error) {
+      console.warn('No se pudo cargar el directorio de proveedores:', error);
+    }
+  };
+
+  const applySupplierSuggestion = (value: string) => {
+    const normalized = value.trim().toLocaleLowerCase('es');
+    const matches = supplierContacts.filter((contact) =>
+      contact.nombre.trim().toLocaleLowerCase('es') === normalized ||
+      String(contact.trade_name || '').trim().toLocaleLowerCase('es') === normalized
+    );
+    if (matches.length !== 1) return;
+    setBeneficiario(matches[0].nombre || value);
+    setBeneficiarioRif(matches[0].documento || '');
+  };
   const lookupSupplier = async (byDocument: boolean): Promise<boolean> => {
     const value = (byDocument ? beneficiarioRif : beneficiario).trim();
     if (!value) return false;
@@ -228,9 +250,14 @@ export const ExpensesManager: React.FC<{ isManufacturingIndustry?: boolean }> = 
       const response = await fetch(`/api/contacts?${query}`);
       if (!response.ok) return false;
       const data = await response.json();
-      if (data?.contact) {
-        setBeneficiario(data.contact.nombre || beneficiario);
-        setBeneficiarioRif(data.contact.documento || beneficiarioRif);
+      const contact = data?.contact || (Array.isArray(data?.contacts)
+        ? data.contacts.find((item: { nombre?: string; trade_name?: string }) =>
+            [item.nombre, item.trade_name].some((name) => String(name || '').trim().toLocaleLowerCase('es') === value.toLocaleLowerCase('es'))
+          )
+        : null);
+      if (contact) {
+        setBeneficiario(contact.nombre || beneficiario);
+        setBeneficiarioRif(contact.documento || beneficiarioRif);
         return true;
       }
     } catch (error) { console.warn('No se pudo consultar el directorio de proveedores:', error); }
@@ -1123,10 +1150,20 @@ export const ExpensesManager: React.FC<{ isManufacturingIndustry?: boolean }> = 
                     type="text"
                     placeholder="Ej: Corpoelec / María Pérez / Tealca"
                     value={beneficiario}
-                    onChange={(e) => setBeneficiario(e.target.value)}
+                    onChange={(e) => {
+                      setBeneficiario(e.target.value);
+                      applySupplierSuggestion(e.target.value);
+                    }}
+                    onFocus={() => void loadSupplierContacts()}
                     onBlur={async () => { await lookupSupplier(false); await saveSupplierContact(); }}
+                    list="expense-supplier-directory"
                     className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 focus:bg-white"
                   />
+                  <datalist id="expense-supplier-directory">
+                    {supplierContacts.map((contact, index) => (
+                      <option key={contact.documento || index} value={contact.nombre} label={[contact.documento, contact.trade_name].filter(Boolean).join(' · ')} />
+                    ))}
+                  </datalist>
                   <input
                     type="text"
                     placeholder="RIF / Cédula del proveedor (opcional)"

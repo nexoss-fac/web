@@ -109,6 +109,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   const [deliveryOrder, setDeliveryOrder] = useState('');
   const [paymentCondition, setPaymentCondition] = useState<'contado' | 'credito'>('contado');
   const [customerContactStatus, setCustomerContactStatus] = useState('');
+  const [customerContacts, setCustomerContacts] = useState<Array<{ nombre: string; apellido?: string; documento?: string; telefono?: string; direccion?: string; trade_name?: string }>>([]);
 
   // Effective exchange rate for this sale (matches invoice date or custom rate)
   const effectiveExchangeRate = useMemo(() => {
@@ -467,6 +468,31 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     setIsCasheaSplitOpen(false);
   };
 
+  const loadCustomerContacts = async () => {
+    try {
+      const response = await fetch('/api/contacts?tipo=cliente');
+      if (!response.ok) return;
+      const data = await response.json();
+      setCustomerContacts(Array.isArray(data?.contacts) ? data.contacts : []);
+    } catch (error) {
+      console.warn('No se pudo cargar el directorio de clientes:', error);
+    }
+  };
+
+  const applyCustomerSuggestion = (value: string) => {
+    const normalized = value.trim().toLocaleLowerCase('es');
+    const matches = customerContacts.filter((contact) => {
+      const fullName = [contact.nombre, contact.apellido].filter(Boolean).join(' ').trim().toLocaleLowerCase('es');
+      return fullName === normalized || String(contact.trade_name || '').trim().toLocaleLowerCase('es') === normalized;
+    });
+    if (matches.length !== 1) return;
+    const contact = matches[0];
+    setCustomerName(contact.nombre || value);
+    setCustomerLastName(contact.apellido || '');
+    setCustomerRif(contact.documento || '');
+    setCustomerPhone(contact.telefono || '');
+    setCustomerAddress(contact.direccion || '');
+  };
   const lookupCustomerByDocument = async (): Promise<boolean> => {
     const document = customerRif.trim();
     if (!document) return false;
@@ -1435,11 +1461,21 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                           type="text"
                           id="pos-customer-razon-social"
                           value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
+                          onChange={(e) => {
+                            setCustomerName(e.target.value);
+                            applyCustomerSuggestion(e.target.value);
+                          }}
+                          onFocus={() => void loadCustomerContacts()}
                           onBlur={() => void saveCustomerContact()}
+                          list="pos-customer-directory"
                           placeholder="Nombre y apellido o razón social"
                           className="w-full min-w-0 pl-10 pr-3.5 py-2.5 sm:py-3 bg-white border border-slate-300 rounded-xl text-sm sm:text-base font-bold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs"
                         />
+                        <datalist id="pos-customer-directory">
+                          {customerContacts.map((contact, index) => (
+                            <option key={contact.documento || index} value={[contact.nombre, contact.apellido].filter(Boolean).join(' ')} label={[contact.documento, contact.trade_name].filter(Boolean).join(' · ')} />
+                          ))}
+                        </datalist>
                       </div>
                     </div>
 
