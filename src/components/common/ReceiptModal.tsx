@@ -70,7 +70,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
       return;
     }
 
-    const printWindow = window.open('', '_blank', 'width=850,height=650');
+    const printWindow = window.open('', '_blank', 'width=550,height=850');
     if (!printWindow) {
       window.alert('El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para NEXOSS e inténtalo de nuevo.');
       return;
@@ -95,12 +95,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
           <title>Factura Macizo</title>
           ${stylesheets}
           <style>
-            @page { size: letter portrait; margin: 0; }
-            html, body { width: 8.5in; height: 11in; margin: 0; padding: 0; overflow: hidden; background: transparent; }
+            @page { size: 5.5in 8.5in; margin: 0; }
+            html, body { width: 5.5in; height: 8.5in; margin: 0; padding: 0; overflow: hidden; background: transparent; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             #macizo-preprinted-invoice {
               display: block; position: relative; box-sizing: border-box;
-              width: 8.5in; height: 5.5in; max-width: none; aspect-ratio: auto;
+              width: 5.5in; height: 8.5in; max-width: none; aspect-ratio: auto;
               margin: 0; padding: 0; overflow: hidden; border: 0; box-shadow: none;
               background: transparent; color: #111;
             }
