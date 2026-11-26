@@ -631,7 +631,18 @@ export const InventoryManager: React.FC = () => {
                     <div className="px-4 pb-4 flex-1 flex flex-col">
                       <div className="text-[10px] uppercase tracking-wider font-bold text-indigo-600">{p.marca} · {p.tipo}</div>
                       <h3 className="mt-1 text-sm font-bold text-slate-900 leading-snug line-clamp-2">{p.nombre}</h3>
-                      <div className="mt-1 text-xs text-slate-500 min-h-8">{p.color || 'Color no indicado'}{p.descripcion ? ` · ${p.descripcion}` : ''}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        <div className="font-medium text-slate-600">{p.color || 'Color no indicado'}</div>
+                        {p.descripcion && (
+                          <details className="group mt-1">
+                            <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden">
+                              <span className="block leading-relaxed line-clamp-2 group-open:line-clamp-none">{p.descripcion}</span>
+                              <span className="mt-1 inline-flex text-[11px] font-semibold text-indigo-600 group-open:hidden">Leer más</span>
+                              <span className="mt-1 hidden text-[11px] font-semibold text-indigo-600 group-open:inline">Ver menos</span>
+                            </summary>
+                          </details>
+                        )}
+                      </div>
                       <div className="mt-3 pt-3 border-t border-slate-100 flex items-end justify-between gap-2">
                         <div><div className="text-xl font-extrabold text-slate-900 font-mono">${(p.precio || 0).toFixed(2)}</div><div className="text-[10px] text-slate-400">{((p.precio || 0) * exchangeRate).toFixed(0)} Bs · SKU {p.sku}</div></div>
                         <div className="text-right"><div className="text-[10px] text-slate-400">Costo</div><div className="text-sm font-semibold text-slate-700">${(p.costo || 0).toFixed(2)}</div></div>
