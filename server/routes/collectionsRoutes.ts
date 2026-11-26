@@ -309,6 +309,23 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     } catch { return res.status(503).json({ error: 'No se pudo registrar el cobro.' }); }
   });
 
+  app.get('/api/collections/visits', async (req, res) => {
+    const context = tenant(req); const sql = getNeonSql();
+    if (!context || !sql) return res.status(503).json({ error: 'Base de datos no disponible.' });
+    try {
+      await ensureCollectionsSchema(sql);
+      const rows = context.role === 'collector'
+        ? await sql`SELECT sale_id, invoice_number, client_document, client_name, client_address, client_phone, dispatched_at, visit_due_at, visit_completed_at, visit_completed_by_uid, visit_note
+            FROM nexoss_dispatch_followups WHERE collector_uid = ${context.platformUserId} AND visit_due_at IS NOT NULL ORDER BY visit_due_at`
+        : await sql`SELECT sale_id, invoice_number, client_document, client_name, client_address, client_phone, dispatched_at, visit_due_at, visit_completed_at, visit_completed_by_uid, visit_note
+            FROM nexoss_dispatch_followups WHERE visit_due_at IS NOT NULL ORDER BY visit_due_at`;
+      return res.json({ visits: rows });
+    } catch (error) {
+      console.error('[Visitas] Error cargando agenda:', error);
+      return res.status(503).json({ error: 'No se pudo cargar la agenda de visitas.' });
+    }
+  });
+
   app.post('/api/collections/visits/:saleId', async (req, res) => {
     const context = tenant(req); const sql = getNeonSql(); const saleId = String(req.params.saleId || '').trim();
     const note = String(req.body?.note || '').trim().slice(0, 2000);
