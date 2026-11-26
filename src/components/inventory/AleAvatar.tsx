@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useId } from 'react';
 
 export type AleAvatarStatus = 'idle' | 'thinking' | 'success' | 'error';
 interface AleAvatarProps { status?: AleAvatarStatus; size?: 'sm' | 'md' | 'lg'; className?: string; }
 const sizes = { sm: 'w-9 h-9', md: 'w-14 h-14', lg: 'w-20 h-20' };
 
 export const AleAvatar: React.FC<AleAvatarProps> = ({ status = 'idle', size = 'md', className = '' }) => {
+  const gradientId = useId().replace(/:/g, '');
   const label = status === 'thinking' ? 'analizando' : status === 'error' ? 'requiere atención' : status === 'success' ? 'análisis completado' : 'disponible';
   const ring = status === 'error' ? 'border-rose-400/70' : 'border-cyan-300/70';
   return (
@@ -12,14 +13,14 @@ export const AleAvatar: React.FC<AleAvatarProps> = ({ status = 'idle', size = 'm
       <div className={'absolute -inset-1 rounded-full border ' + ring + (status === 'thinking' ? ' animate-pulse' : '')} />
       <svg viewBox="0 0 128 128" className="relative h-full w-full rounded-full overflow-hidden shadow-lg" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <linearGradient id="ale-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#071a35" /><stop offset="1" stopColor="#020817" /></linearGradient>
-          <linearGradient id="ale-skin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#f6c7a5" /><stop offset="1" stopColor="#d99575" /></linearGradient>
-          <linearGradient id="ale-jacket" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#263c5d" /><stop offset="1" stopColor="#0d1c34" /></linearGradient>
+          <linearGradient id={gradientId + "-bg"} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#071a35" /><stop offset="1" stopColor="#020817" /></linearGradient>
+          <linearGradient id={gradientId + "-skin"} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#f6c7a5" /><stop offset="1" stopColor="#d99575" /></linearGradient>
+          <linearGradient id={gradientId + "-jacket"} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#263c5d" /><stop offset="1" stopColor="#0d1c34" /></linearGradient>
         </defs>
-        <circle cx="64" cy="64" r="64" fill="url(#ale-bg)" /><circle cx="64" cy="59" r="49" fill="none" stroke="#22d3ee" strokeOpacity=".55" strokeWidth="2" />
-        <path d="M13 111 Q22 91 46 88 L82 88 Q106 91 116 111 L128 128 H0Z" fill="url(#ale-jacket)" />
+        <circle cx="64" cy="64" r="64" fill={`url(#${gradientId}-bg)`} /><circle cx="64" cy="59" r="49" fill="none" stroke="#22d3ee" strokeOpacity=".55" strokeWidth="2" />
+        <path d="M13 111 Q22 91 46 88 L82 88 Q106 91 116 111 L128 128 H0Z" fill={`url(#${gradientId}-jacket)`} />
         <path d="M45 88 L64 107 L83 88" fill="#e9b08f" /><path d="M35 46 Q34 12 65 12 Q98 12 95 53 L91 91 Q82 101 64 101 Q42 99 35 83Z" fill="#553626" />
-        <path d="M39 43 Q43 17 66 18 Q88 18 91 43 L88 68 Q82 81 64 82 Q45 81 39 66Z" fill="url(#ale-skin)" />
+        <path d="M39 43 Q43 17 66 18 Q88 18 91 43 L88 68 Q82 81 64 82 Q45 81 39 66Z" fill={`url(#${gradientId}-skin)`} />
         <path d="M39 49 Q34 25 51 17 Q75 5 91 27 Q98 38 91 59 L86 43 Q76 38 69 30 Q57 42 41 43Z" fill="#65412e" />
         <path d="M43 51 Q34 56 38 79 L45 91 L47 60Z" fill="#65412e" /><path d="M84 48 Q97 58 90 84 L82 94 L81 58Z" fill="#65412e" />
         <path d="M51 53 Q57 49 62 53 M68 53 Q74 49 79 53" fill="none" stroke="#65412e" strokeWidth="2" strokeLinecap="round" />
