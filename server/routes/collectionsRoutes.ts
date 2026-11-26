@@ -92,7 +92,7 @@ async function processReminders(sql: Sql) {
         OR (reminder_due_sent_at IS NULL AND due_at <= NOW() AND due_at > NOW() - INTERVAL '1 day')
         OR (reminder_overdue_sent_at IS NULL AND due_at <= NOW() - INTERVAL '1 day')
         OR (visit_completed_at IS NULL AND visit_reminder_sent_at IS NULL AND visit_due_at <= NOW())))
-      OR (visit_completed_at IS NULL AND visit_reminder_sent_at IS NULL AND visit_due_at <= NOW())
+    )
     ORDER BY due_at ASC LIMIT 100`;
   for (const row of rows as any[]) {
     const due = new Date(row.due_at);
@@ -199,7 +199,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     try {
       await ensureCollectionsSchema(sql);
       const rows = context.role === 'collector'
-        ? await sql`SELECT * FROM nexoss_client_collection_assignments WHERE collector_uid = ${context.uid} ORDER BY client_name`
+        ? await sql`SELECT * FROM nexoss_client_collection_assignments WHERE collector_uid = ${context.platformUserId} ORDER BY client_name`
         : await sql`SELECT * FROM nexoss_client_collection_assignments ORDER BY client_name`;
       return res.json({ assignments: rows });
     } catch (error) { console.error('[Cobranza] Error cargando asignaciones:', { companyId: context.companyId, uid: context.uid, role: context.role, message: error instanceof Error ? error.message : String(error) }); return res.status(503).json({ error: 'No se pudieron cargar las asignaciones.' }); }
@@ -265,7 +265,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     try {
       await ensureCollectionsSchema(sql); armReminderScheduler(context, sql);
       const rows = context.role === 'collector'
-        ? await sql`SELECT * FROM nexoss_dispatch_followups WHERE collector_uid = ${context.uid} AND status IN ('open','partial') ORDER BY due_at`
+        ? await sql`SELECT * FROM nexoss_dispatch_followups WHERE collector_uid = ${context.platformUserId} AND status IN ('open','partial') ORDER BY due_at`
         : await sql`SELECT * FROM nexoss_dispatch_followups WHERE status IN ('open','partial') OR (status = 'paid' AND visit_completed_at IS NULL) ORDER BY due_at`;
       const tasks = [];
       for (const row of rows as SaleRow[]) {
@@ -293,7 +293,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
       const cases = await sql`SELECT * FROM nexoss_dispatch_followups WHERE sale_id = ${saleId} AND status IN ('open','partial') LIMIT 1`;
       const followup = cases[0] as any;
       if (!followup) return res.status(404).json({ error: 'No existe una cobranza activa para esta factura.' });
-      if (context.role === 'collector' && followup.collector_uid !== context.uid) return res.status(403).json({ error: 'Esta cobranza no está asignada a tu usuario.' });
+      if (context.role === 'collector' && followup.collector_uid !== context.platformUserId) return res.status(403).json({ error: 'Esta cobranza no está asignada a tu usuario.' });
       const sales = await sql`SELECT id, total_usd, pagos FROM sales_transactions WHERE id = ${saleId} LIMIT 1`;
       if (!sales[0]) return res.status(404).json({ error: 'Factura no encontrada.' });
       const balance = await currentBalance(sql, { ...(followup as any), ...(sales[0] as any) });
