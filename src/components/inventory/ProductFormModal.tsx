@@ -39,6 +39,7 @@ interface ProductFormModalProps {
   onSave: (productData: Omit<ShoeProduct, 'id' | 'created_at'>) => void;
   onSaveBulk?: (productsData: Omit<ShoeProduct, 'id' | 'created_at'>[]) => void;
   editingProduct?: ShoeProduct | null;
+  isDuplicating?: boolean;
   initialAiData?: ShoeAiResult | null;
   initialAiImage?: string | null;
 }
@@ -71,6 +72,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   onSave,
   onSaveBulk,
   editingProduct,
+  isDuplicating = false,
   initialAiData,
   initialAiImage,
 }) => {
@@ -200,6 +202,14 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     setSingleStock(editingProduct.stock?.toString() || '0');
     setAiAnalysisSuccess(null);
   }, [editingProduct?.id, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !editingProduct || !isDuplicating) return;
+    setSku(`${editingProduct.sku || 'ZAPATO'}-T${Date.now().toString().slice(-5)}`.toUpperCase());
+    setCodigoBarras('');
+    setSingleStock('0');
+    setSingleTalla(editingProduct.talla || '38');
+  }, [isOpen, editingProduct?.id, isDuplicating]);
 
   useEffect(() => {
     if (isOpen && !editingProduct) {
@@ -967,10 +977,12 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-base sm:text-lg tracking-tight">
-                {editingProduct ? `Editar ${industry.productLabel}` : `Registrar ${industry.productLabel}`}
+                {isDuplicating ? `Duplicar ${industry.productLabel}` : editingProduct ? `Editar ${industry.productLabel}` : `Registrar ${industry.productLabel}`}
               </h3>
               <p className="text-xs text-slate-300 mt-0.5">
-                {editingProduct
+                {isDuplicating
+                  ? 'Se copiarán los datos del modelo. Cambia la talla y confirma el stock inicial.'
+                  : editingProduct
                   ? 'Modifica precios, existencias y datos del artículo'
                   : isFootwear
                     ? 'Crea un modelo con múltiples tallas y colores o un artículo individual'
