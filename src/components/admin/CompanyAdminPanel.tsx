@@ -13,7 +13,8 @@ type CompanyProfile = {
   phone: string; email: string; industryTemplate: IndustryTemplate; logoUrl: string;
   mainBranchName: string; mainBranchAddress: string;
 };
-type TeamMember = { companyId: string; userId: string; email: string; displayName: string; role: string };
+type CollectorPermissions = { collectionsPayments: boolean; visitSchedule: boolean; visitExecute: boolean; shelfReview: boolean; shelfPhotos: boolean; shelfArrange: boolean };
+type TeamMember = { companyId: string; userId: string; email: string; displayName: string; role: string; collectorPermissions?: Partial<CollectorPermissions> };
 type Invitation = { id: string; companyId: string; email: string; role: string; expiresAt: string };
 type Category = { id: string; name: string; kind: 'product' | 'service'; legacy?: boolean };
 
@@ -209,6 +210,16 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
     } finally {
       setBusy(false);
     }
+  };
+
+  const saveCollectorPermissions = async (member: TeamMember, permissions: CollectorPermissions) => {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await apiRequest(`/api/company/members/${member.userId}/collector-permissions`, { method: 'PUT', body: JSON.stringify({ permissions }) });
+      setMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, collectorPermissions: permissions } : item));
+      setNotice(`Permisos actualizados para ${member.displayName || member.email}.`);
+    } catch (saveError) { setError(saveError instanceof Error ? saveError.message : 'No se pudieron guardar los permisos.'); }
+    finally { setBusy(false); }
   };
 
   const removeMember = async (member: TeamMember) => {
@@ -437,6 +448,26 @@ export const CompanyAdminPanel: React.FC<{ companyId: string }> = ({ companyId }
                 </div>
               ))}
               {!members.length && <p className="px-5 py-8 text-center text-sm text-slate-500">Todavía no hay miembros en el equipo.</p>}
+              {members.filter((member) => member.role === 'collector').map((member) => {
+                const defaults: CollectorPermissions = { collectionsPayments: true, visitSchedule: false, visitExecute: false, shelfReview: false, shelfPhotos: false, shelfArrange: false };
+                const permissions = { ...defaults, ...(member.collectorPermissions || {}) };
+                const labels: Array<[keyof CollectorPermissions, string]> = [
+                  ['collectionsPayments', 'Registrar abonos y cobros asignados'], ['visitSchedule', 'Consultar agenda de visitas'],
+                  ['visitExecute', 'Realizar visitas a supermercados'], ['shelfReview', 'Revisar productos y anaqueles'],
+                  ['shelfPhotos', 'Tomar y adjuntar fotografías'], ['shelfArrange', 'Reportar y ejecutar arreglos de anaqueles'],
+                ];
+                return <div key={member.userId} className="mx-4 my-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+                  <div className="mb-3"><p className="text-sm font-bold text-slate-900">Funciones de {member.displayName || member.email}</p><p className="text-xs text-slate-500">Configura por separado sus facultades de cobranza y trabajo de campo.</p></div>
+                  <div className="grid gap-2 sm:grid-cols-2">{labels.map(([key, label]) => <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
+                    <input type="checkbox" disabled={busy} checked={permissions[key]} onChange={(event) => {
+                      const next = { ...permissions, [key]: event.target.checked };
+                      setMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, collectorPermissions: next } : item));
+                    }} className="h-4 w-4 rounded border-slate-300 text-indigo-600" />{label}
+                  </label>)}</div>
+                  <button type="button" disabled={busy} onClick={() => void saveCollectorPermissions(member, permissions)} className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Guardar funciones</button>
+                </div>;
+              })}
+
             </div>
           </section>
 
