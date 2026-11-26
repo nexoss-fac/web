@@ -202,7 +202,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
         ? await sql`SELECT * FROM nexoss_client_collection_assignments WHERE collector_uid = ${context.uid} ORDER BY client_name`
         : await sql`SELECT * FROM nexoss_client_collection_assignments ORDER BY client_name`;
       return res.json({ assignments: rows });
-    } catch { return res.status(503).json({ error: 'No se pudieron cargar las asignaciones.' }); }
+    } catch (error) { console.error('[Cobranza] Error cargando asignaciones:', { companyId: context.companyId, uid: context.uid, role: context.role, message: error instanceof Error ? error.message : String(error) }); return res.status(503).json({ error: 'No se pudieron cargar las asignaciones.' }); }
   });
 
   app.put('/api/collections/assignments/:document', adminOnly, async (req, res) => {
@@ -276,7 +276,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
         tasks.push({ ...row, ...balance, payments: paymentHistory });
       }
       return res.json({ tasks });
-    } catch { return res.status(503).json({ error: 'No se pudieron cargar las tareas de cobranza.' }); }
+    } catch (error) { console.error('[Cobranza] Error cargando tareas:', { companyId: context.companyId, uid: context.uid, role: context.role, message: error instanceof Error ? error.message : String(error) }); return res.status(503).json({ error: 'No se pudieron cargar las tareas de cobranza.' }); }
   });
 
   app.post('/api/collections/payments/:saleId', async (req, res) => {
