@@ -6,6 +6,7 @@ import { resolveIndustryTemplate } from '../../src/domain/companyIndustries.ts';
 import { resolveAuthorizedTenant, TenantResolutionError, type TenantRepository, type TenantSecretProvider } from './tenantResolver.ts';
 
 export interface TenantStorageContext {
+  platformUserId: string;
   companyId: string;
   uid: string;
   role: MembershipRole;
@@ -185,7 +186,7 @@ export function createCompanyAccessMiddleware(store: LocalPlatformStore): Reques
       const industryTemplate = resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || '');
       if (!checkTenantPermissions(req, res, membership.role, plan.modules, industryTemplate)) return;
       const tenant = {
-        companyId, uid: identity.uid, role: membership.role,
+        platformUserId: user.id, companyId, uid: identity.uid, role: membership.role,
         industryTemplate: resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || ''),
         maxProducts: plan.limits.products,
       } satisfies TenantStorageContext;
@@ -216,6 +217,7 @@ export function createPostgresCompanyAccessMiddleware(
       });
       if (!checkTenantPermissions(req, res, tenant.role, tenant.modules, tenant.industryTemplate)) return;
       const context: TenantStorageContext = {
+        platformUserId: tenant.platformUserId,
         companyId: tenant.companyId,
         companySlug: tenant.companySlug,
         uid: identity!.uid,
