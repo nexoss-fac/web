@@ -557,7 +557,8 @@ async function startServer() {
       try {
         const result = await getPostgresControlPlane().listForIdentity(identity);
         return res.json({ ...result, platformAdmin: isPlatformAdmin(identity) });
-      } catch {
+      } catch (error) {
+        logger.error('No se pudo cargar el control de empresas desde PostgreSQL:', error);
         return res.status(503).json({ error: 'Control de empresas no disponible.' });
       }
     }
