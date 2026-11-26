@@ -5,7 +5,7 @@ import type { IndustryTemplate } from '../../src/domain/companyIndustries.ts';
  * Este módulo NO está conectado todavía a las rutas heredadas.
  * La identidad debe venir de un verificador de tokens confiable en el servidor.
  */
-export type TenantRole = 'owner' | 'admin' | 'accountant' | 'auditor' | 'supervisor' | 'cashier' | 'doctor';
+export type TenantRole = 'owner' | 'admin' | 'accountant' | 'auditor' | 'supervisor' | 'cashier' | 'doctor' | 'collector';
 
 export interface VerifiedIdentity {
   provider: string;
@@ -14,6 +14,7 @@ export interface VerifiedIdentity {
 }
 
 export interface MembershipRecord {
+  userId: string;
   companyId: string;
   slug: string;
   industryTemplate: IndustryTemplate;
@@ -39,6 +40,7 @@ export interface TenantSecretProvider {
 }
 
 export interface AuthorizedTenantContext {
+  platformUserId: string;
   companyId: string;
   companySlug: string;
   industryTemplate: IndustryTemplate;
@@ -119,6 +121,7 @@ export async function resolveAuthorizedTenant(input: {
   }
 
   return {
+    platformUserId: membership.userId,
     companyId: membership.companyId,
     companySlug: membership.slug,
     industryTemplate: membership.industryTemplate,

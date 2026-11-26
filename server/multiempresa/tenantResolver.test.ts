@@ -4,7 +4,7 @@ import { resolveAuthorizedTenant, TenantResolutionError, type MembershipRecord }
 
 const identity = { provider: 'firebase', subject: 'user-test-001', email: 'test@example.invalid' };
 const activeMembership: MembershipRecord = {
-  companyId: 'company-a', slug: 'empresa-a', companyStatus: 'active', membershipStatus: 'active',
+  userId: 'platform-user-a', companyId: 'company-a', slug: 'empresa-a', companyStatus: 'active', membershipStatus: 'active',
   role: 'owner', industryTemplate: 'footwear', secretReference: 'secret://tenant/company-a', connectionStatus: 'ready',
   modules: ['pos', 'inventory', 'reports', 'accounting'],
 };

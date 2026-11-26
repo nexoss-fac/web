@@ -31,7 +31,7 @@ test('la consulta de membresía enlaza identidad, proveedor y empresa solicitada
     assert.match(text, /c\.id = \$3 AND m\.status = 'active'/);
     const allowed = values[0] === 'firebase' && values[1] === 'uid-company-a' && values[2] === 'company-a';
     return result(allowed ? [{
-      company_id: 'company-a', slug: 'empresa-a', company_status: 'active',
+      user_id: 'platform-user-a', company_id: 'company-a', slug: 'empresa-a', company_status: 'active',
       membership_status: 'active', role: 'owner', secret_reference: 'secrets/a',
       connection_status: 'ready', modules: ['pos', 'inventory'], workspace: { industryTemplate: 'footwear' },
     }] : []);
