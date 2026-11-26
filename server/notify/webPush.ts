@@ -62,13 +62,13 @@ export async function hasWebPushSubscription(sql: Sql, uid: string) {
   return rows.length > 0;
 }
 
-export async function sendWebPushTest(sql: Sql, uid: string) {
+export async function sendWebPushTest(sql: Sql, uid: string, icon?: string) {
   if (!isWebPushConfigured()) throw new Error('Web Push no está configurado en el servidor.');
   await ensureTable(sql);
   const rows = await sql`SELECT id, subscription FROM nexoss_web_push_subscriptions WHERE uid = ${uid}`;
   if (!rows.length) return false;
   const webPush = await getWebPush();
-  const message = JSON.stringify({ title: 'NEXOSS · Notificación de prueba', body: 'Este dispositivo está conectado y puede recibir avisos de ventas y gastos.', url: '/?tab=admin', tag: 'nexoss-notification-test' });
+  const message = JSON.stringify({ title: 'NEXOSS · Notificación de prueba', body: 'Este dispositivo está conectado y puede recibir avisos de ventas y gastos.', url: '/?tab=admin', tag: 'nexoss-notification-test', ...(icon ? { icon } : {}) });
   await Promise.all((rows as any[]).map(async (row) => {
     try {
       await webPush.sendNotification(row.subscription, message, { TTL: 60 * 60 });
@@ -83,7 +83,7 @@ export async function sendWebPushTest(sql: Sql, uid: string) {
   return true;
 }
 
-export async function sendWebPushToCompanyAdmins(sql: Sql, payload: { title: string; body: string; url?: string }) {
+export async function sendWebPushToCompanyAdmins(sql: Sql, payload: { title: string; body: string; url?: string; icon?: string }) {
   if (!isWebPushConfigured()) return;
   await ensureTable(sql);
   const rows = await sql`SELECT id, uid, subscription FROM nexoss_web_push_subscriptions WHERE role IN ('owner', 'admin')`;
@@ -94,6 +94,7 @@ export async function sendWebPushToCompanyAdmins(sql: Sql, payload: { title: str
     body: payload.body,
     url: payload.url || '/?tab=admin',
     tag: 'nexoss-business-alert',
+    ...(payload.icon ? { icon: payload.icon } : {}),
   });
   await Promise.all((rows as any[]).map(async (row) => {
     try {
