@@ -2236,7 +2236,7 @@ async function startServer() {
         return result.managedMembers.some((member) => member.companyId === companyId && member.userId === uid && member.role === 'collector');
       }
       const state = PLATFORM_STORE.readState();
-      const user = state.users.find((item) => item.subject === uid);
+      const user = state.users.find((item) => item.id === uid);
       return Boolean(user && state.memberships.some((item) => item.companyId === companyId && item.userId === user.id && item.role === 'collector' && item.status === 'active'));
     },
   });
