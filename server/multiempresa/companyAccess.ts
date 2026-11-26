@@ -6,7 +6,8 @@ import { resolveIndustryTemplate } from '../../src/domain/companyIndustries.ts';
 import { resolveAuthorizedTenant, TenantResolutionError, type TenantRepository, type TenantSecretProvider } from './tenantResolver.ts';
 
 export interface TenantStorageContext {
-  platformUserId: string;
+  /** Optional only for legacy test/context adapters; production middleware always supplies the verified platform ID. */
+  platformUserId?: string;
   companyId: string;
   uid: string;
   role: MembershipRole;
