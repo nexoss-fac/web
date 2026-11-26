@@ -217,6 +217,10 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
       await sql`INSERT INTO nexoss_client_collection_assignments (client_document, client_name, client_address, collector_uid, assigned_by_uid)
         VALUES (${document}, ${clientName}, ${clientAddress}, ${collectorUid}, ${context.uid})
         ON CONFLICT (client_document) DO UPDATE SET client_name = EXCLUDED.client_name, client_address = EXCLUDED.client_address, collector_uid = EXCLUDED.collector_uid, assigned_by_uid = EXCLUDED.assigned_by_uid, updated_at = NOW()`;
+      // Keep already-dispatched invoices aligned with the client's current collector.
+      // This updates ownership only; payment history, due dates and dispatch history remain untouched.
+      await sql`UPDATE nexoss_dispatch_followups SET collector_uid = ${collectorUid}, updated_at = NOW()
+        WHERE client_document = ${document} AND status IN ('open', 'partial')`;
       return res.json({ saved: true });
     } catch { return res.status(503).json({ error: 'No se pudo guardar la asignación.' }); }
   });
