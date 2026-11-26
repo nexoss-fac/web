@@ -1349,12 +1349,45 @@ async function startServer() {
       const members = state.memberships.filter((item) => item.companyId === tenant.companyId && item.status === 'active')
         .flatMap((item) => {
           const user = state.users.find((candidate) => candidate.id === item.userId);
-          return user ? [{ companyId: tenant.companyId, userId: user.id, email: user.email, displayName: user.displayName, role: item.role }] : [];
+          return user ? [{ companyId: tenant.companyId, userId: user.id, email: user.email, displayName: user.displayName, role: item.role, collectorPermissions: (item as any).collectorPermissions || {} }] : [];
         });
       return res.json({ members });
     } catch (error) {
       logger.error('No se pudo leer el equipo local:', error);
       return res.status(503).json({ error: 'No se pudo cargar el equipo de la empresa.' });
+    }
+  });
+
+  app.put('/api/company/members/:userId/collector-permissions', adminOnly, async (req, res) => {
+    const tenant = (req as TenantAuthenticatedRequest).tenant!;
+    const allowedKeys = ['collectionsPayments', 'visitSchedule', 'visitExecute', 'shelfReview', 'shelfPhotos', 'shelfArrange'];
+    const input = req.body?.permissions;
+    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !allowedKeys.includes(key))
+      || allowedKeys.some((key) => typeof input[key] !== 'boolean')) return res.status(400).json({ error: 'La configuración de permisos no es válida.' });
+    const permissions = Object.fromEntries(allowedKeys.map((key) => [key, input[key]]));
+    if (usePostgresControlPlane()) {
+      try {
+        const updated = await getPostgresControlPlane().updateCollectorPermissions(tenant.companyId, req.params.userId, permissions, tenant.uid);
+        return updated ? res.json({ success: true }) : res.status(403).json({ error: 'Solo puedes configurar permisos de un cobrador activo de esta empresa.' });
+      } catch (error) {
+        logger.error('No se pudieron guardar los permisos del cobrador:', error);
+        return res.status(503).json({ error: 'No se pudieron guardar los permisos.' });
+      }
+    }
+    try {
+      const updated = PLATFORM_STORE.update((state) => {
+        const actor = state.users.find((item) => item.subject === tenant.uid);
+        const admin = actor && state.memberships.some((item) => item.companyId === tenant.companyId && item.userId === actor.id && item.status === 'active' && ['owner', 'admin'].includes(item.role));
+        const target = state.memberships.find((item) => item.companyId === tenant.companyId && item.userId === req.params.userId && item.status === 'active' && item.role === 'collector');
+        if (!admin || !target || target.userId === actor?.id) return false;
+        (target as any).collectorPermissions = permissions;
+        state.audit.push({ id: randomUUID(), actorUid: tenant.uid, companyId: tenant.companyId, action: 'membership.collector_permissions_updated', createdAt: new Date().toISOString(), metadata: { userId: target.userId, permissions } });
+        return true;
+      });
+      return updated ? res.json({ success: true }) : res.status(403).json({ error: 'Solo puedes configurar permisos de un cobrador activo de esta empresa.' });
+    } catch (error) {
+      logger.error('No se pudieron guardar los permisos locales del cobrador:', error);
+      return res.status(503).json({ error: 'No se pudieron guardar los permisos.' });
     }
   });
 

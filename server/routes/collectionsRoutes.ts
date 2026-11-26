@@ -267,7 +267,7 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     try {
       await ensureCollectionsSchema(sql); armReminderScheduler(context, sql);
       const rows = context.role === 'collector'
-        ? await sql`SELECT * FROM nexoss_dispatch_followups WHERE collector_uid = ${context.platformUserId} AND status IN ('open','partial') ORDER BY due_at`
+        ? await sql`SELECT * FROM nexoss_dispatch_followups WHERE collector_uid = ${context.platformUserId} AND ((status IN ('open','partial')) OR visit_completed_at IS NULL) ORDER BY due_at`
         : await sql`SELECT * FROM nexoss_dispatch_followups WHERE status IN ('open','partial') OR (status = 'paid' AND visit_completed_at IS NULL) ORDER BY due_at`;
       const tasks = [];
       for (const row of rows as SaleRow[]) {
@@ -309,15 +309,35 @@ export function registerCollectionsRoutes(app: Express, deps: CollectionsRouteDe
     } catch { return res.status(503).json({ error: 'No se pudo registrar el cobro.' }); }
   });
 
-  app.post('/api/collections/visits/:saleId', adminOnly, async (req, res) => {
-    const sql = getNeonSql(); const saleId = String(req.params.saleId || '').trim();
-    const note = String(req.body?.note || '').trim().slice(0, 2000);
-    if (!sql || !saleId) return res.status(400).json({ error: 'Visita inválida.' });
+  app.get('/api/collections/visits', async (req, res) => {
+    const context = tenant(req); const sql = getNeonSql();
+    if (!context || !sql) return res.status(503).json({ error: 'Base de datos no disponible.' });
     try {
       await ensureCollectionsSchema(sql);
-      const updated = await sql`UPDATE nexoss_dispatch_followups SET visit_completed_at = NOW(), visit_completed_by_uid = ${(tenant(req) as any)?.uid || ''}, visit_note = ${note}, updated_at = NOW()
-        WHERE sale_id = ${saleId} AND visit_completed_at IS NULL RETURNING id`;
-      return updated.length ? res.json({ saved: true }) : res.status(404).json({ error: 'La visita no existe o ya fue completada.' });
+      const rows = context.role === 'collector'
+        ? await sql`SELECT sale_id, invoice_number, client_document, client_name, client_address, client_phone, dispatched_at, visit_due_at, visit_completed_at, visit_completed_by_uid, visit_note
+            FROM nexoss_dispatch_followups WHERE collector_uid = ${context.platformUserId} AND visit_due_at IS NOT NULL ORDER BY visit_due_at`
+        : await sql`SELECT sale_id, invoice_number, client_document, client_name, client_address, client_phone, dispatched_at, visit_due_at, visit_completed_at, visit_completed_by_uid, visit_note
+            FROM nexoss_dispatch_followups WHERE visit_due_at IS NOT NULL ORDER BY visit_due_at`;
+      return res.json({ visits: rows });
+    } catch (error) {
+      console.error('[Visitas] Error cargando agenda:', error);
+      return res.status(503).json({ error: 'No se pudo cargar la agenda de visitas.' });
+    }
+  });
+
+  app.post('/api/collections/visits/:saleId', async (req, res) => {
+    const context = tenant(req); const sql = getNeonSql(); const saleId = String(req.params.saleId || '').trim();
+    const note = String(req.body?.note || '').trim().slice(0, 2000);
+    if (!context || !sql || !saleId) return res.status(400).json({ error: 'Visita inválida.' });
+    try {
+      await ensureCollectionsSchema(sql);
+      const updated = context.role === 'collector'
+        ? await sql`UPDATE nexoss_dispatch_followups SET visit_completed_at = NOW(), visit_completed_by_uid = ${context.uid}, visit_note = ${note}, updated_at = NOW()
+            WHERE sale_id = ${saleId} AND collector_uid = ${context.platformUserId} AND visit_completed_at IS NULL RETURNING id`
+        : await sql`UPDATE nexoss_dispatch_followups SET visit_completed_at = NOW(), visit_completed_by_uid = ${context.uid}, visit_note = ${note}, updated_at = NOW()
+            WHERE sale_id = ${saleId} AND visit_completed_at IS NULL RETURNING id`;
+      return updated.length ? res.json({ saved: true }) : res.status(404).json({ error: 'La visita no existe, no está asignada a este cobrador o ya fue completada.' });
     } catch { return res.status(503).json({ error: 'No se pudo guardar la visita.' }); }
   });
 }

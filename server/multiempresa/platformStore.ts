@@ -14,7 +14,7 @@ export interface PlatformCompany {
   onboardingStep: number; status: CompanyStatus; createdAt: string; updatedAt: string;
 }
 export interface PlatformUser { id: string; provider: 'firebase'; subject: string; email: string; displayName: string; createdAt: string; }
-export interface Membership { companyId: string; userId: string; role: MembershipRole; status: 'active' | 'revoked'; createdAt: string; }
+export interface Membership { companyId: string; userId: string; role: MembershipRole; status: 'active' | 'revoked'; createdAt: string; collectorPermissions?: import('./tenantResolver.ts').CollectorPermissions; }
 export interface Invitation { id: string; companyId: string; email: string; role: Exclude<MembershipRole, 'owner'>; status: 'pending' | 'accepted' | 'revoked' | 'expired'; createdAt: string; expiresAt: string; }
 export interface Plan { id: string; name: string; price: number; currency: string; interval: 'month' | 'year'; limits: { users: number; products: number; branches: number; warehouses: number }; modules: string[]; active: boolean; }
 export interface Subscription { companyId: string; planId: string; status: SubscriptionStatus; startedAt: string; currentPeriodEnd: string; updatedAt: string; }

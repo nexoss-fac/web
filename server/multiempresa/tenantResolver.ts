@@ -13,6 +13,15 @@ export interface VerifiedIdentity {
   email?: string;
 }
 
+export interface CollectorPermissions {
+  collectionsPayments: boolean; visitSchedule: boolean; visitExecute: boolean;
+  shelfReview: boolean; shelfPhotos: boolean; shelfArrange: boolean;
+}
+export const DEFAULT_COLLECTOR_PERMISSIONS: CollectorPermissions = {
+  collectionsPayments: true, visitSchedule: false, visitExecute: false,
+  shelfReview: false, shelfPhotos: false, shelfArrange: false,
+};
+
 export interface MembershipRecord {
   userId: string;
   companyId: string;
@@ -21,6 +30,7 @@ export interface MembershipRecord {
   companyStatus: 'onboarding' | 'active' | 'suspended' | 'archived';
   membershipStatus: 'invited' | 'active' | 'revoked';
   role: TenantRole;
+  collectorPermissions?: CollectorPermissions;
   secretReference: string | null;
   encryptedConnectionSecret?: string | null;
   connectionStatus: 'provisioning' | 'ready' | 'degraded' | 'disabled';
@@ -45,6 +55,7 @@ export interface AuthorizedTenantContext {
   companySlug: string;
   industryTemplate: IndustryTemplate;
   role: TenantRole;
+  collectorPermissions: CollectorPermissions;
   modules: string[];
   maxProducts: number;
   connectionString: string;
@@ -126,6 +137,7 @@ export async function resolveAuthorizedTenant(input: {
     companySlug: membership.slug,
     industryTemplate: membership.industryTemplate,
     role: membership.role,
+    collectorPermissions: { ...DEFAULT_COLLECTOR_PERMISSIONS, ...(membership.collectorPermissions || {}) },
     modules: membership.modules,
     maxProducts: membership.maxProducts || 0,
     connectionString,

@@ -3,13 +3,15 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { FirebaseAuthenticatedRequest } from '../auth/firebaseAuth.ts';
 import { LocalPlatformStore, hasActiveSubscription, type MembershipRole } from './platformStore.ts';
 import { resolveIndustryTemplate } from '../../src/domain/companyIndustries.ts';
-import { resolveAuthorizedTenant, TenantResolutionError, type TenantRepository, type TenantSecretProvider } from './tenantResolver.ts';
+import { DEFAULT_COLLECTOR_PERMISSIONS, resolveAuthorizedTenant, TenantResolutionError, type TenantRepository, type TenantSecretProvider } from './tenantResolver.ts';
 
 export interface TenantStorageContext {
-  platformUserId: string;
+  /** Optional only for legacy test/context adapters; production middleware always supplies the verified platform ID. */
+  platformUserId?: string;
   companyId: string;
   uid: string;
   role: MembershipRole;
+  collectorPermissions?: import('./tenantResolver.ts').CollectorPermissions;
   industryTemplate: ReturnType<typeof resolveIndustryTemplate>;
   companySlug?: string;
   connectionString?: string;
@@ -79,7 +81,7 @@ const ROLE_POLICY: Record<MembershipRole, RolePolicy> = {
   },
   collector: {
     allow: [
-      { methods: 'read', route: /^\/(?:collections\/(?:tasks|assignments)|push)(?:\/|$)/ },
+      { methods: 'read', route: /^\/(?:collections\/(?:tasks|assignments|visits)|push)(?:\/|$)/ },
       { methods: 'write', route: /^\/(?:collections\/payments|push\/(?:subscribe|unsubscribe|test))(?:\/|$)/ },
     ],
   },
@@ -127,6 +129,7 @@ function checkTenantPermissions(
   role: MembershipRole,
   modules: string[],
   industryTemplate: ReturnType<typeof resolveIndustryTemplate>,
+  collectorPermissions?: import('./tenantResolver.ts').CollectorPermissions,
 ): boolean {
   const method = req.method.toUpperCase();
   const route = normalizeApiRoute(req.originalUrl);
@@ -158,8 +161,16 @@ function checkTenantPermissions(
       : (req as Request & { body?: { tipo?: unknown } }).body?.tipo) || '',
   ).toLowerCase();
 
-  const allowed = !(OWNER_ONLY_ROUTES.test(route) && role !== 'owner' && role !== 'admin')
-    && isRoleAllowed(role, { method, route, readOnly, contactType });
+  let roleAllowed = isRoleAllowed(role, { method, route, readOnly, contactType });
+  if (role === 'collector') {
+    const p = collectorPermissions || DEFAULT_COLLECTOR_PERMISSIONS;
+    if (route === '/collections/tasks') roleAllowed = Boolean(p?.collectionsPayments);
+    if (route === '/collections/assignments') roleAllowed = Boolean(p?.collectionsPayments || p?.visitSchedule || p?.visitExecute || p?.shelfReview || p?.shelfPhotos || p?.shelfArrange);
+    if (route === '/collections/visits') roleAllowed = Boolean(p?.visitSchedule || p?.visitExecute || p?.shelfReview || p?.shelfPhotos || p?.shelfArrange);
+    if (route.startsWith('/collections/payments/')) roleAllowed = Boolean(p?.collectionsPayments);
+    if (route.startsWith('/collections/visits/')) roleAllowed = Boolean(p?.visitExecute);
+  }
+  const allowed = !(OWNER_ONLY_ROUTES.test(route) && role !== 'owner' && role !== 'admin') && roleAllowed;
   if (!allowed) {
     res.status(403).json({ error: 'Tu rol no permite esta operación.' });
     return false;
@@ -184,9 +195,9 @@ export function createCompanyAccessMiddleware(store: LocalPlatformStore): Reques
       const subscription = state.subscriptions.find((item) => item.companyId === companyId)!;
       const plan = state.plans.find((item) => item.id === subscription.planId)!;
       const industryTemplate = resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || '');
-      if (!checkTenantPermissions(req, res, membership.role, plan.modules, industryTemplate)) return;
+      if (!checkTenantPermissions(req, res, membership.role, plan.modules, industryTemplate, membership.collectorPermissions)) return;
       const tenant = {
-        platformUserId: user.id, companyId, uid: identity.uid, role: membership.role,
+        platformUserId: user.id, companyId, uid: identity.uid, role: membership.role, ...(membership.collectorPermissions ? { collectorPermissions: membership.collectorPermissions } : {}),
         industryTemplate: resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || ''),
         maxProducts: plan.limits.products,
       } satisfies TenantStorageContext;
@@ -215,13 +226,14 @@ export function createPostgresCompanyAccessMiddleware(
         repository,
         secrets,
       });
-      if (!checkTenantPermissions(req, res, tenant.role, tenant.modules, tenant.industryTemplate)) return;
+      if (!checkTenantPermissions(req, res, tenant.role, tenant.modules, tenant.industryTemplate, tenant.collectorPermissions)) return;
       const context: TenantStorageContext = {
         platformUserId: tenant.platformUserId,
         companyId: tenant.companyId,
         companySlug: tenant.companySlug,
         uid: identity!.uid,
         role: tenant.role,
+        collectorPermissions: tenant.collectorPermissions,
         industryTemplate: tenant.industryTemplate,
         connectionString: tenant.connectionString,
         maxProducts: tenant.maxProducts,
