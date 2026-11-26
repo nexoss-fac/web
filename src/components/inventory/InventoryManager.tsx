@@ -650,9 +650,7 @@ export const InventoryManager: React.FC = () => {
               })}
             </div>
           )}
-          {!isFootwear && (
-          {/* Table Container (High Density Design Theme) */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+          {!isFootwear && <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs min-w-[850px]">
                 <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px] font-bold border-b border-slate-200">
@@ -871,8 +869,7 @@ export const InventoryManager: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </div>
-          )}
+          </div>}
 
         </div>
       )}
