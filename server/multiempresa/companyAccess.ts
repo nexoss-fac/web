@@ -197,7 +197,7 @@ export function createCompanyAccessMiddleware(store: LocalPlatformStore): Reques
       const industryTemplate = resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || '');
       if (!checkTenantPermissions(req, res, membership.role, plan.modules, industryTemplate, membership.collectorPermissions)) return;
       const tenant = {
-        platformUserId: user.id, companyId, uid: identity.uid, role: membership.role, collectorPermissions: membership.collectorPermissions,
+        platformUserId: user.id, companyId, uid: identity.uid, role: membership.role, ...(membership.collectorPermissions ? { collectorPermissions: membership.collectorPermissions } : {}),
         industryTemplate: resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || ''),
         maxProducts: plan.limits.products,
       } satisfies TenantStorageContext;
