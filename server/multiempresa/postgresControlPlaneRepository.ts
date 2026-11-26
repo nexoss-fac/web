@@ -250,7 +250,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
         return await client.query(
           `SELECT u.id AS user_id, c.id AS company_id, c.slug, c.status AS company_status,
                   c.economic_activity, c.workspace,
-                  m.status AS membership_status, m.role, t.secret_reference, t.encrypted_connection_secret,
+                  m.status AS membership_status, m.role, m.permissions AS collector_permissions, t.secret_reference, t.encrypted_connection_secret,
                   t.status AS connection_status, p.modules, p.max_products,
                   COALESCE(s.status IN ('trialing', 'active') AND s.current_period_end > NOW() AND p.active = TRUE, FALSE) AS subscription_active
            FROM platform_users u
@@ -273,7 +273,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     return {
       userId: row.user_id, companyId: row.company_id, slug: row.slug, companyStatus: row.company_status,
       industryTemplate: resolveIndustryTemplate(row.workspace?.industryTemplate, row.economic_activity || ''),
-      membershipStatus: row.membership_status, role: row.role,
+      membershipStatus: row.membership_status, role: row.role, collectorPermissions: row.collector_permissions || {},
       secretReference: row.secret_reference, encryptedConnectionSecret: row.encrypted_connection_secret,
       connectionStatus: row.connection_status || 'provisioning',
       modules: Array.isArray(row.modules) ? row.modules.filter((module: unknown): module is string => typeof module === 'string') : [],
