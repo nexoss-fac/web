@@ -163,9 +163,9 @@ function checkTenantPermissions(
   let roleAllowed = isRoleAllowed(role, { method, route, readOnly, contactType });
   if (role === 'collector') {
     const p = collectorPermissions;
-    if (/^\\/collections\\/(?:tasks|assignments)$/.test(route)) roleAllowed = Boolean(p?.collectionsPayments || p?.visitSchedule || p?.visitExecute || p?.shelfReview || p?.shelfPhotos || p?.shelfArrange);
-    if (/^\\/collections\\/payments(?:\\/|$)/.test(route)) roleAllowed = Boolean(p?.collectionsPayments);
-    if (/^\\/collections\\/visits(?:\\/|$)/.test(route)) roleAllowed = Boolean(p?.visitExecute);
+    if (route === '/collections/tasks' || route === '/collections/assignments') roleAllowed = Boolean(p?.collectionsPayments || p?.visitSchedule || p?.visitExecute || p?.shelfReview || p?.shelfPhotos || p?.shelfArrange);
+    if (route.startsWith('/collections/payments/')) roleAllowed = Boolean(p?.collectionsPayments);
+    if (route.startsWith('/collections/visits/')) roleAllowed = Boolean(p?.visitExecute);
   }
   const allowed = !(OWNER_ONLY_ROUTES.test(route) && role !== 'owner' && role !== 'admin') && roleAllowed;
   if (!allowed) {
