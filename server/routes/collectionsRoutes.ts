@@ -87,11 +87,13 @@ async function processReminders(sql: Sql) {
   await ensureCollectionsSchema(sql);
   const now = new Date();
   const rows = await sql`SELECT * FROM nexoss_dispatch_followups
-    WHERE ((status IN ('open', 'partial')
-      AND ((reminder_10_sent_at IS NULL AND due_at <= NOW() + INTERVAL '5 days' AND due_at > NOW())
+    WHERE (
+      (status IN ('open', 'partial') AND (
+        (reminder_10_sent_at IS NULL AND due_at <= NOW() + INTERVAL '5 days' AND due_at > NOW())
         OR (reminder_due_sent_at IS NULL AND due_at <= NOW() AND due_at > NOW() - INTERVAL '1 day')
         OR (reminder_overdue_sent_at IS NULL AND due_at <= NOW() - INTERVAL '1 day')
-        OR (visit_completed_at IS NULL AND visit_reminder_sent_at IS NULL AND visit_due_at <= NOW())))
+      ))
+      OR (visit_completed_at IS NULL AND visit_reminder_sent_at IS NULL AND visit_due_at <= NOW())
     )
     ORDER BY due_at ASC LIMIT 100`;
   for (const row of rows as any[]) {
