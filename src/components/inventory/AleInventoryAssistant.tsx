@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { AleAvatar } from './AleAvatar';
 import { AlertCircle, CheckCircle2, Loader2, MessageSquare, Sparkles, Upload, X } from 'lucide-react';
 import { ShoeProduct } from '../../types';
 import { analyzeShoeWithAi, ShoeAiResult } from '../../services/aiShoeService';
@@ -102,11 +103,15 @@ export const AleInventoryAssistant: React.FC<AleInventoryAssistantProps> = ({
   return (
     <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
       <section className="bg-white w-full max-w-4xl max-h-[92vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-        <header className="p-5 border-b border-slate-200 flex items-start justify-between gap-4 bg-slate-950 text-white">
-          <div>
-            <div className="flex items-center gap-2 text-cyan-300 font-bold text-xs uppercase tracking-wider"><Sparkles className="w-4 h-4" /> ALE · Asistente de inventario</div>
-            <h2 className="text-xl font-bold mt-1">Describe tu entrada y agrega fotografías</h2>
-            <p className="text-slate-300 text-xs mt-1">Reconoce productos de distintas categorías y prepara fichas para revisión.</p>
+        <header className="p-5 border-b border-slate-800 flex items-start justify-between gap-4 bg-slate-950 text-white">
+          <div className="flex items-center gap-3 min-w-0">
+            <AleAvatar status={busy ? 'thinking' : items.some(item => item.error) ? 'error' : items.some(item => item.result) ? 'success' : 'idle'} size="lg" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-cyan-300 font-bold text-xs uppercase tracking-wider"><Sparkles className="w-4 h-4" /> ALE · Asistente de inventario</div>
+              <h2 className="text-xl font-bold mt-1">Describe tu entrada y agrega fotografías</h2>
+              <p className="text-slate-300 text-xs mt-1">Reconoce productos de distintas categorías y prepara fichas para revisión.</p>
+              <p className="text-cyan-100/80 text-[11px] mt-2">{busy ? 'Estoy analizando tus fotografías. Te mostraré cada resultado para que lo revises.' : items.some(item => item.result) ? 'Ya tengo resultados listos para que completes y confirmes las fichas.' : '¡Hola! Soy ALE. Estoy lista para ayudarte con tu inventario.'}</p>
+            </div>
           </div>
           <button onClick={onClose} disabled={busy} className="p-2 rounded-lg hover:bg-white/10 disabled:opacity-40" aria-label="Cerrar ALE"><X className="w-5 h-5" /></button>
         </header>
@@ -138,7 +143,11 @@ export const AleInventoryAssistant: React.FC<AleInventoryAssistantProps> = ({
             </div>)}
           </div>}
 
-          {busy && <div className="rounded-xl bg-indigo-50 p-3 text-indigo-800 text-xs flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />{progress}</div>}
+          {busy && <div className="rounded-xl border border-cyan-100 bg-cyan-50 p-3 text-cyan-950 text-xs flex items-center gap-3">
+            <AleAvatar status="thinking" size="sm" />
+            <div className="min-w-0 flex-1"><p className="font-bold">ALE está trabajando</p><p className="mt-0.5">{progress} · Estoy identificando marca, modelo y características visibles.</p></div>
+            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+          </div>}
 
           {items.some(item => item.result || item.error) && <div className="space-y-3">
             <div className="flex items-center justify-between"><h3 className="font-bold text-sm">Resultados para revisar</h3><span className="text-xs text-slate-500">{items.filter(i => i.result).length} reconocidos</span></div>
@@ -154,7 +163,7 @@ export const AleInventoryAssistant: React.FC<AleInventoryAssistantProps> = ({
                 <p className="text-xs text-slate-500 mt-1">{item.result.descripcion_comercial}</p>
                 <button onClick={() => onReviewProduct(item.result!, item.image)} className="mt-3 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold inline-flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Revisar y completar ficha</button>
               </div>
-            </article> : <div key={item.id} className="rounded-lg bg-rose-50 text-rose-700 p-3 text-xs flex gap-2"><AlertCircle className="w-4 h-4 shrink-0" />{item.error}</div>)}
+            </article> : <div key={item.id} className="rounded-lg bg-rose-50 text-rose-700 p-3 text-xs flex gap-2"><AleAvatar status="error" size="sm" /><div className="min-w-0"><p className="font-bold">No pude completar este análisis</p><p className="mt-1">{item.error}</p><p className="mt-1 text-rose-600">La fotografía original sigue disponible. Puedes volver a pulsar «Analizar con ALE» para reintentar.</p></div><AlertCircle className="w-4 h-4 shrink-0" /></div>)}
           </div>}
 
           <p className="text-[11px] text-slate-500 bg-slate-50 rounded-lg p-3">ALE no registra productos ni modifica existencias. Los precios, costos, cantidades, tallas y demás datos no identificables quedan para que los completes y confirmes en la ficha habitual. La detección de duplicados es orientativa.</p>
