@@ -30,7 +30,21 @@ export const AleInventoryAssistant: React.FC<AleInventoryAssistantProps> = ({
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
 
-  const groupedIds = useMemo(() => {\n    const counts = new Map<string, number>();\n    items.forEach(item => {\n      if (!item.result) return;\n      const key = normalize([item.result.marca, item.result.modelo || item.result.nombre].join(' '));\n      if (key) counts.set(key, (counts.get(key) || 0) + 1);\n    });\n    return new Set(items.filter(item => {\n      if (!item.result) return false;\n      const key = normalize([item.result.marca, item.result.modelo || item.result.nombre].join(' '));\n      return Boolean(key && (counts.get(key) || 0) > 1);\n    }).map(item => item.id));\n  }, [items]);\n\n  const duplicateIds = useMemo(() => {
+  const groupedIds = useMemo(() => {
+    const counts = new Map<string, number>();
+    items.forEach(item => {
+      if (!item.result) return;
+      const key = normalize([item.result.marca, item.result.modelo || item.result.nombre].join(' '));
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return new Set(items.filter(item => {
+      if (!item.result) return false;
+      const key = normalize([item.result.marca, item.result.modelo || item.result.nombre].join(' '));
+      return Boolean(key && (counts.get(key) || 0) > 1);
+    }).map(item => item.id));
+  }, [items]);
+
+  const duplicateIds = useMemo(() => {
     const found = new Set<string>();
     for (const item of items) {
       if (!item.result) continue;
@@ -133,7 +147,8 @@ export const AleInventoryAssistant: React.FC<AleInventoryAssistantProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h4 className="font-bold text-sm text-slate-900">{item.result.nombre}</h4>
-                  {groupedIds.has(item.id) && <span className="text-[10px] px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-bold">Mismo modelo en este lote</span>}\n                  {duplicateIds.has(item.id) && <span className="text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-800 font-bold">Posible duplicado en catálogo</span>}
+                  {groupedIds.has(item.id) && <span className="text-[10px] px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-bold">Mismo modelo en este lote</span>}
+                  {duplicateIds.has(item.id) && <span className="text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-800 font-bold">Posible duplicado en catálogo</span>}
                 </div>
                 <p className="text-xs text-slate-600 mt-1">{[item.result.marca, item.result.modelo, item.result.categoria, item.result.color, item.result.material].filter(Boolean).join(' · ')}</p>
                 <p className="text-xs text-slate-500 mt-1">{item.result.descripcion_comercial}</p>
