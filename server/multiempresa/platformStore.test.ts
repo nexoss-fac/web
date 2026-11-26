@@ -106,6 +106,7 @@ test('acepta membresía válida y aplica el rol del servidor, nunca el rol del n
     const owner = invoke(createCompanyAccessMiddleware(store), company.id);
     assert.equal(owner.next, true);
     assert.deepEqual(owner.tenant, {
+      platformUserId: store.readState().users[0].id,
       companyId: company.id,
       uid: 'uid-owner',
       role: 'owner',
