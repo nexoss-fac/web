@@ -5,6 +5,7 @@ import { PushNotificationSettings } from '../common/PushNotificationSettings';
 type Member = { userId: string; email: string; displayName: string; role: string };
 type Client = { document: string; name: string; phone: string; address: string; invoices: number; collectorUid: string };
 type SaleOption = { id: string; numero_factura: string; cliente_nombre: string; cliente_apellido: string; cliente_rif: string; total_usd: number; fecha: string };
+type AssignedClient = { client_document: string; client_name: string; client_address?: string; collector_uid: string; };
 type Task = { sale_id: string; invoice_number: string; client_name: string; client_document: string; client_address?: string; client_phone?: string; collector_uid?: string; payments?: Array<{id:string;amount_usd:number;amount_bs:number;exchange_rate:number;method:string;reference:string;paid_at:string}>; due_at: string; dispatched_at: string; visit_due_at: string; visit_completed_at: string | null; status: string; total: number; paid: number; balance: number };
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers } });
@@ -19,6 +20,7 @@ export const CollectionsPanel: React.FC<{ companyId: string; role: string }> = (
   const [members, setMembers] = useState<Member[]>([]);
   const [sales, setSales] = useState<SaleOption[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [assignedClients, setAssignedClients] = useState<AssignedClient[]>([]);
   const [selectedSale, setSelectedSale] = useState('');
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [amountsBs, setAmountsBs] = useState<Record<string, string>>({});
@@ -34,6 +36,12 @@ export const CollectionsPanel: React.FC<{ companyId: string; role: string }> = (
     try {
       const taskData = await request<{ tasks: Task[] }>('/api/collections/tasks');
       setTasks(taskData.tasks || []);
+      if (!isAdmin) {
+        const assignmentData = await request<{ assignments: AssignedClient[] }>('/api/collections/assignments');
+        setAssignedClients(assignmentData.assignments || []);
+      } else {
+        setAssignedClients([]);
+      }
       if (isAdmin) {
         const [clientData, memberData, saleData] = await Promise.all([
           request<{ clients: Client[] }>('/api/collections/clients'),
@@ -134,6 +142,12 @@ export const CollectionsPanel: React.FC<{ companyId: string; role: string }> = (
           </div>
         </section>
       </>}
+
+      {!isAdmin && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-3 flex items-center gap-2"><ClipboardList className="h-5 w-5 text-indigo-600"/><h2 className="font-bold text-slate-900">Mis clientes asignados</h2></div>
+        <p className="mb-3 text-xs text-slate-500">Aquí aparecen los clientes que te asignó el administrador. Las facturas se mostrarán en cobranzas cuando se confirme su despacho a crédito.</p>
+        <div className="space-y-2">{assignedClients.map((client) => <article key={client.client_document} className="rounded-xl border border-slate-200 p-3"><p className="font-semibold text-slate-900">{client.client_name || 'Cliente sin nombre'}</p><p className="text-xs text-slate-500">{client.client_document}</p>{client.client_address && <p className="mt-1 text-xs text-slate-600">{client.client_address}</p>}</article>)}{assignedClients.length === 0 && <p className="py-5 text-center text-sm text-slate-500">Todavía no tienes clientes asignados. Solicita al administrador que revise tu asignación.</p>}</div>
+      </section>}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><CalendarClock className="h-5 w-5 text-indigo-600" /><h2 className="font-bold text-slate-900">{isAdmin ? 'Todas las cuentas y visitas' : 'Mis cobranzas asignadas'}</h2></div><button type="button" onClick={() => void load()} className="rounded-lg border border-slate-200 p-2 text-slate-600" aria-label="Actualizar"><RefreshCw className="h-4 w-4" /></button></div>
