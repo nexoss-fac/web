@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, MessageSquare, Plus, Sparkles, Upload, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, MessageSquare, Sparkles, Upload, X } from 'lucide-react';
 import { ShoeProduct } from '../../types';
 import { analyzeShoeWithAi, ShoeAiResult } from '../../services/aiShoeService';
 
@@ -30,7 +30,7 @@ export const AleInventoryAssistant: React.FC<AleInventoryAssistantProps> = ({
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
 
-  const duplicateIds = useMemo(() => {
+  const groupedIds = useMemo(() => {\n    const counts = new Map<string, number>();\n    items.forEach(item => {\n      if (!item.result) return;\n      const key = normalize([item.result.marca, item.result.modelo || item.result.nombre].join(' '));\n      if (key) counts.set(key, (counts.get(key) || 0) + 1);\n    });\n    return new Set(items.filter(item => {\n      if (!item.result) return false;\n      const key = normalize([item.result.marca, item.result.modelo || item.result.nombre].join(' '));\n      return Boolean(key && (counts.get(key) || 0) > 1);\n    }).map(item => item.id));\n  }, [items]);\n\n  const duplicateIds = useMemo(() => {
     const found = new Set<string>();
     for (const item of items) {
       if (!item.result) continue;
@@ -60,7 +60,7 @@ export const AleInventoryAssistant: React.FC<AleInventoryAssistantProps> = ({
   };
 
   const analyze = async () => {
-    const pending = items.filter(item => !item.result && !item.error);
+    const pending = items.filter(item => !item.result);
     if (!pending.length || busy) return;
     setBusy(true);
     let completed = 0;
@@ -133,7 +133,7 @@ export const AleInventoryAssistant: React.FC<AleInventoryAssistantProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h4 className="font-bold text-sm text-slate-900">{item.result.nombre}</h4>
-                  {duplicateIds.has(item.id) && <span className="text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-800 font-bold">Posible duplicado</span>}
+                  {groupedIds.has(item.id) && <span className="text-[10px] px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 font-bold">Mismo modelo en este lote</span>}\n                  {duplicateIds.has(item.id) && <span className="text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-800 font-bold">Posible duplicado en catálogo</span>}
                 </div>
                 <p className="text-xs text-slate-600 mt-1">{[item.result.marca, item.result.modelo, item.result.categoria, item.result.color, item.result.material].filter(Boolean).join(' · ')}</p>
                 <p className="text-xs text-slate-500 mt-1">{item.result.descripcion_comercial}</p>
@@ -147,7 +147,7 @@ export const AleInventoryAssistant: React.FC<AleInventoryAssistantProps> = ({
 
         <footer className="p-4 border-t border-slate-200 flex flex-wrap justify-between gap-2">
           <button onClick={reset} disabled={busy || !items.length} className="px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg disabled:opacity-40">Limpiar lote</button>
-          <button onClick={analyze} disabled={busy || !items.some(item => !item.result && !item.error)} className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold flex items-center gap-2 disabled:opacity-40"><Sparkles className="w-4 h-4" /> {busy ? 'Analizando…' : 'Analizar con ALE'}</button>
+          <button onClick={analyze} disabled={busy || !items.some(item => !item.result)} className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold flex items-center gap-2 disabled:opacity-40"><Sparkles className="w-4 h-4" /> {busy ? 'Analizando…' : 'Analizar con ALE'}</button>
         </footer>
       </section>
     </div>
