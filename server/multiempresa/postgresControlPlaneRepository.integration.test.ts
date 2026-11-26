@@ -22,6 +22,7 @@ test('PostgreSQL rejects cross-company reads, onboarding writes, invites and rev
     });
     await scopedPool.query(fs.readFileSync(new URL('../../db/migrations/control-plane/001_control_plane.sql', import.meta.url), 'utf8'));
     await scopedPool.query(fs.readFileSync(new URL('../../db/migrations/control-plane/002_current_platform_model.sql', import.meta.url), 'utf8'));
+    await scopedPool.query(fs.readFileSync(new URL('../../db/migrations/control-plane/024_collector_permissions.sql', import.meta.url), 'utf8'));
     await scopedPool.query(
       `INSERT INTO platform_plans
          (id, name, billing_interval, max_users, max_products, max_branches, max_warehouses, modules)
