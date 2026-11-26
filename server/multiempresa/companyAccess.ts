@@ -10,6 +10,7 @@ export interface TenantStorageContext {
   companyId: string;
   uid: string;
   role: MembershipRole;
+  collectorPermissions?: import('./tenantResolver.ts').CollectorPermissions;
   industryTemplate: ReturnType<typeof resolveIndustryTemplate>;
   companySlug?: string;
   connectionString?: string;
@@ -127,6 +128,7 @@ function checkTenantPermissions(
   role: MembershipRole,
   modules: string[],
   industryTemplate: ReturnType<typeof resolveIndustryTemplate>,
+  collectorPermissions?: import('./tenantResolver.ts').CollectorPermissions,
 ): boolean {
   const method = req.method.toUpperCase();
   const route = normalizeApiRoute(req.originalUrl);
@@ -158,8 +160,14 @@ function checkTenantPermissions(
       : (req as Request & { body?: { tipo?: unknown } }).body?.tipo) || '',
   ).toLowerCase();
 
-  const allowed = !(OWNER_ONLY_ROUTES.test(route) && role !== 'owner' && role !== 'admin')
-    && isRoleAllowed(role, { method, route, readOnly, contactType });
+  let roleAllowed = isRoleAllowed(role, { method, route, readOnly, contactType });
+  if (role === 'collector') {
+    const p = collectorPermissions;
+    if (/^\\/collections\\/(?:tasks|assignments)$/.test(route)) roleAllowed = Boolean(p?.collectionsPayments || p?.visitSchedule || p?.visitExecute || p?.shelfReview || p?.shelfPhotos || p?.shelfArrange);
+    if (/^\\/collections\\/payments(?:\\/|$)/.test(route)) roleAllowed = Boolean(p?.collectionsPayments);
+    if (/^\\/collections\\/visits(?:\\/|$)/.test(route)) roleAllowed = Boolean(p?.visitExecute);
+  }
+  const allowed = !(OWNER_ONLY_ROUTES.test(route) && role !== 'owner' && role !== 'admin') && roleAllowed;
   if (!allowed) {
     res.status(403).json({ error: 'Tu rol no permite esta operación.' });
     return false;
@@ -184,9 +192,9 @@ export function createCompanyAccessMiddleware(store: LocalPlatformStore): Reques
       const subscription = state.subscriptions.find((item) => item.companyId === companyId)!;
       const plan = state.plans.find((item) => item.id === subscription.planId)!;
       const industryTemplate = resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || '');
-      if (!checkTenantPermissions(req, res, membership.role, plan.modules, industryTemplate)) return;
+      if (!checkTenantPermissions(req, res, membership.role, plan.modules, industryTemplate, membership.collectorPermissions)) return;
       const tenant = {
-        platformUserId: user.id, companyId, uid: identity.uid, role: membership.role,
+        platformUserId: user.id, companyId, uid: identity.uid, role: membership.role, collectorPermissions: membership.collectorPermissions,
         industryTemplate: resolveIndustryTemplate(company.workspace?.industryTemplate, company.activity || ''),
         maxProducts: plan.limits.products,
       } satisfies TenantStorageContext;
@@ -215,13 +223,14 @@ export function createPostgresCompanyAccessMiddleware(
         repository,
         secrets,
       });
-      if (!checkTenantPermissions(req, res, tenant.role, tenant.modules, tenant.industryTemplate)) return;
+      if (!checkTenantPermissions(req, res, tenant.role, tenant.modules, tenant.industryTemplate, tenant.collectorPermissions)) return;
       const context: TenantStorageContext = {
         platformUserId: tenant.platformUserId,
         companyId: tenant.companyId,
         companySlug: tenant.companySlug,
         uid: identity!.uid,
         role: tenant.role,
+        collectorPermissions: tenant.collectorPermissions,
         industryTemplate: tenant.industryTemplate,
         connectionString: tenant.connectionString,
         maxProducts: tenant.maxProducts,
