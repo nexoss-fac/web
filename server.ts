@@ -100,6 +100,28 @@ async function sendInvitationNotice(input: { to: string; companyName: string; ro
   };
 }
 
+async function resolveTenantPushIcon(tenant: { companyId?: string; uid?: string } | undefined): Promise<string | undefined> {
+  if (!tenant?.companyId) return undefined;
+  try {
+    let logoUrl: unknown;
+    if (usePostgresControlPlane()) {
+      if (!tenant.uid) return undefined;
+      const profile = await getPostgresControlPlane().getManagedCompanyProfile(tenant.companyId, tenant.uid);
+      logoUrl = profile?.logoUrl;
+    } else {
+      const company = PLATFORM_STORE.readState().companies.find((item) => item.id === tenant.companyId);
+      logoUrl = company?.logoUrl;
+    }
+    if (typeof logoUrl !== 'string' || !logoUrl.trim()) return undefined;
+    const value = logoUrl.trim();
+    if (value.startsWith('/') || /^https:\/\//i.test(value) || /^data:image\/(png|jpeg|webp|svg\+xml);base64,/i.test(value)) return value;
+    return undefined;
+  } catch (error) {
+    logger.warn('[Web Push] No se pudo resolver el logo de la empresa:', error instanceof Error ? error.message : 'error');
+    return undefined;
+  }
+}
+
 /** Avisa al teléfono sin esperar la respuesta: un fallo del aviso no debe afectar la venta ni el gasto. */
 function notifyInBackground(build: (company: string) => Notice) {
   const tenant = tenantStorageContext.getStore();
@@ -115,10 +137,12 @@ function notifyInBackground(build: (company: string) => Notice) {
     void (async () => {
       const sql = getNeonSql();
       if (!sql) return;
+      const icon = await resolveTenantPushIcon(tenant);
       await sendWebPushToCompanyAdmins(sql, {
         title: notice.title,
         body: notice.body,
         url: '/?tab=admin',
+        ...(icon ? { icon } : {}),
       });
     })().catch((error) => logger.warn('[Web Push] No se pudo enviar la notificación:', error instanceof Error ? error.message : 'error'));
   }
@@ -1141,7 +1165,8 @@ async function startServer() {
     const sql = getNeonSql();
     if (!tenant?.uid || !sql) return res.status(503).json({ error: 'No hay una base de datos disponible para esta empresa.' });
     try {
-      const sent = await sendWebPushTest(sql, tenant.uid);
+      const icon = await resolveTenantPushIcon(tenant);
+      const sent = await sendWebPushTest(sql, tenant.uid, icon);
       return sent ? res.json({ sent: true }) : res.status(404).json({ sent: false, error: 'Este usuario no tiene un dispositivo activado en esta empresa.' });
     } catch (error) {
       logger.warn('[Web Push] Falló la notificación de prueba:', error instanceof Error ? error.message : 'error');
