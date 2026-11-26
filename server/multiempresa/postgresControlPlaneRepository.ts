@@ -250,7 +250,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
         return await client.query(
           `SELECT u.id AS user_id, c.id AS company_id, c.slug, c.status AS company_status,
                   c.economic_activity, c.workspace,
-                  m.status AS membership_status, m.role, m.permissions AS collector_permissions, t.secret_reference, t.encrypted_connection_secret,
+                  m.status AS membership_status, m.role, to_jsonb(m)->'permissions' AS collector_permissions, t.secret_reference, t.encrypted_connection_secret,
                   t.status AS connection_status, p.modules, p.max_products,
                   COALESCE(s.status IN ('trialing', 'active') AND s.current_period_end > NOW() AND p.active = TRUE, FALSE) AS subscription_active
            FROM platform_users u
@@ -353,7 +353,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
         : { rows: [] };
       const managedMembers = companyIds.length
         ? await client.query(
-          `SELECT c.id AS company_id, u.id AS user_id, u.email, u.display_name, m.role, m.permissions AS collector_permissions
+          `SELECT c.id AS company_id, u.id AS user_id, u.email, u.display_name, m.role, to_jsonb(m)->'permissions' AS collector_permissions
            FROM platform_users actor
            JOIN company_memberships admin_membership ON admin_membership.user_id = actor.id
              AND admin_membership.status = 'active' AND admin_membership.role IN ('owner', 'admin')
