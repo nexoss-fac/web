@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { FirebaseAuthenticatedRequest } from '../auth/firebaseAuth.ts';
 import { LocalPlatformStore, hasActiveSubscription, type MembershipRole } from './platformStore.ts';
 import { resolveIndustryTemplate } from '../../src/domain/companyIndustries.ts';
-import { resolveAuthorizedTenant, TenantResolutionError, type TenantRepository, type TenantSecretProvider } from './tenantResolver.ts';
+import { DEFAULT_COLLECTOR_PERMISSIONS, resolveAuthorizedTenant, TenantResolutionError, type TenantRepository, type TenantSecretProvider } from './tenantResolver.ts';
 
 export interface TenantStorageContext {
   /** Optional only for legacy test/context adapters; production middleware always supplies the verified platform ID. */
@@ -163,7 +163,7 @@ function checkTenantPermissions(
 
   let roleAllowed = isRoleAllowed(role, { method, route, readOnly, contactType });
   if (role === 'collector') {
-    const p = collectorPermissions;
+    const p = collectorPermissions || DEFAULT_COLLECTOR_PERMISSIONS;
     if (route === '/collections/tasks') roleAllowed = Boolean(p?.collectionsPayments);
     if (route === '/collections/assignments') roleAllowed = Boolean(p?.collectionsPayments || p?.visitSchedule || p?.visitExecute || p?.shelfReview || p?.shelfPhotos || p?.shelfArrange);
     if (route === '/collections/visits') roleAllowed = Boolean(p?.visitSchedule || p?.visitExecute || p?.shelfReview || p?.shelfPhotos || p?.shelfArrange);
