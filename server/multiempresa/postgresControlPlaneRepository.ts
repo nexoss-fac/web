@@ -353,7 +353,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
         : { rows: [] };
       const managedMembers = companyIds.length
         ? await client.query(
-          `SELECT c.id AS company_id, u.id AS user_id, u.email, u.display_name, m.role
+          `SELECT c.id AS company_id, u.id AS user_id, u.email, u.display_name, m.role, m.permissions AS collector_permissions
            FROM platform_users actor
            JOIN company_memberships admin_membership ON admin_membership.user_id = actor.id
              AND admin_membership.status = 'active' AND admin_membership.role IN ('owner', 'admin')
@@ -416,7 +416,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
         })),
         managedMembers: managedMembers.rows.filter((row) => isRole(row.role)).map((row) => ({
           companyId: row.company_id, userId: row.user_id, email: row.email,
-          displayName: row.display_name || '', role: row.role,
+          displayName: row.display_name || '', role: row.role, collectorPermissions: row.collector_permissions || {},
         })),
         emailMatches: emailMatches.rows.map((row) => ({
           id: row.id, legalName: row.legal_name, tradeName: row.trade_name || '', status: row.status,
@@ -736,6 +736,27 @@ export class PostgresControlPlaneRepository implements TenantRepository {
       );
       if (!result.rowCount) return false;
       await this.audit(client, actorUid, 'membership.role_updated', companyId, { userId, role });
+      return true;
+    });
+  }
+
+  async updateCollectorPermissions(companyId: string, userId: string, permissions: Record<string, boolean>, actorUid: string): Promise<boolean> {
+    return this.transaction(async (client) => {
+      const result = await client.query(
+        `UPDATE company_memberships m SET permissions = $3::jsonb, updated_at = NOW()
+         WHERE m.company_id = $1 AND m.user_id = $2 AND m.status = 'active' AND m.role = 'collector'
+           AND EXISTS (
+             SELECT 1 FROM platform_users actor
+             JOIN company_memberships admin_membership ON admin_membership.user_id = actor.id
+               AND admin_membership.company_id = m.company_id AND admin_membership.status = 'active'
+               AND admin_membership.role IN ('owner', 'admin')
+             WHERE actor.auth_provider = 'firebase' AND actor.auth_subject = $4 AND actor.id <> m.user_id
+           )
+         RETURNING m.company_id`,
+        [companyId, userId, JSON.stringify(permissions), actorUid],
+      );
+      if (!result.rowCount) return false;
+      await this.audit(client, actorUid, 'membership.collector_permissions_updated', companyId, { userId, permissions });
       return true;
     });
   }
