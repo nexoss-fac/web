@@ -5,8 +5,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'NEXOSS';
   const options = {
     body: data.body || 'Tienes una nueva notificación.',
-    icon: '/favicon.png',
-    badge: '/favicon.png',
+    icon: data.icon || '/favicon.png',
+    badge: data.icon || '/favicon.png',
     tag: data.tag || 'nexoss-notification',
     data: { url: data.url || '/' },
     renotify: false,
