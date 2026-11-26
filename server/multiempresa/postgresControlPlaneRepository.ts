@@ -248,7 +248,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     const result = await this.pool.connect().then(async (client) => {
       try {
         return await client.query(
-          `SELECT c.id AS company_id, c.slug, c.status AS company_status,
+          `SELECT u.id AS user_id, c.id AS company_id, c.slug, c.status AS company_status,
                   c.economic_activity, c.workspace,
                   m.status AS membership_status, m.role, t.secret_reference, t.encrypted_connection_secret,
                   t.status AS connection_status, p.modules, p.max_products,
@@ -271,7 +271,7 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     const row = result.rows[0];
     if (!row || !isRole(row.role)) return null;
     return {
-      companyId: row.company_id, slug: row.slug, companyStatus: row.company_status,
+      userId: row.user_id, companyId: row.company_id, slug: row.slug, companyStatus: row.company_status,
       industryTemplate: resolveIndustryTemplate(row.workspace?.industryTemplate, row.economic_activity || ''),
       membershipStatus: row.membership_status, role: row.role,
       secretReference: row.secret_reference, encryptedConnectionSecret: row.encrypted_connection_secret,
