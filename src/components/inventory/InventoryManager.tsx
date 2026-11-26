@@ -37,6 +37,7 @@ import { BatchWhiteBackgroundModal } from './BatchWhiteBackgroundModal';
 import { PurchaseInvoiceScanner } from './PurchaseInvoiceScanner';
 import { ShoeAiResult } from '../../services/aiShoeService';
 import { COMPANY_INDUSTRIES, resolveIndustryTemplate } from '../../domain/companyIndustries';
+import { AleInventoryAssistant } from './AleInventoryAssistant';
 
 export const InventoryManager: React.FC = () => {
   const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
@@ -72,6 +73,7 @@ export const InventoryManager: React.FC = () => {
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [isPurchaseInvoiceOpen, setIsPurchaseInvoiceOpen] = useState(false);
   const [isAiScannerOpen, setIsAiScannerOpen] = useState(false);
+  const [isAleOpen, setIsAleOpen] = useState(false);
   const [initialAiData, setInitialAiData] = useState<ShoeAiResult | null>(null);
   const [initialAiImage, setInitialAiImage] = useState<string | null>(null);
 
@@ -294,6 +296,17 @@ export const InventoryManager: React.FC = () => {
           >
             <Plus className="w-4 h-4" />
             <span>Producto nuevo</span>
+          </button>
+
+          <button
+            id="open-ale-assistant-btn"
+            type="button"
+            onClick={() => setIsAleOpen(true)}
+            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-cyan-300 font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition cursor-pointer shrink-0 whitespace-nowrap border border-slate-700"
+            title="ALE: asistente de recepción y reconocimiento de productos"
+          >
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <span>ALE · Asistente IA</span>
           </button>
 
           {isFootwear && (
@@ -1074,6 +1087,21 @@ export const InventoryManager: React.FC = () => {
         }}
         onSaveBulk={(bulk) => {
           addProductsBulk(bulk, false);
+        }}
+      />
+
+      {/* ALE: asistente universal de recepción de inventario */}
+      <AleInventoryAssistant
+        isOpen={isAleOpen}
+        onClose={() => setIsAleOpen(false)}
+        products={products}
+        industry={industry.label}
+        onReviewProduct={(aiData, img) => {
+          setInitialAiData(aiData);
+          setInitialAiImage(img);
+          setEditingProduct(null);
+          setIsAleOpen(false);
+          setIsProductModalOpen(true);
         }}
       />
 
