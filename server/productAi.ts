@@ -43,24 +43,37 @@ export async function analyzeProductImage(
   const { mimeType, data } = parseImage(imageBase64);
   if (!data || data.length < 50) throw new Error('La imagen no contiene datos válidos.');
 
-  const prompt = `Eres un especialista en identificación visual de inventario para un ERP multiempresa.
-Analiza el objeto visible sin asumir que es calzado. La empresa pertenece al sector: ${industry}.
-Identifica cualquier artículo: mercancía para reventa, alimentos, bebidas, materias primas, ingredientes, cultivos, empaques, repuestos, herramientas, equipos, ropa o insumos.
-Distingue el producto de su envase y no inventes marca, modelo, composición, peso, volumen, SKU, lote, vencimiento ni certificaciones. Si un dato no es visible, usa cadena vacía o cero.
+  const isFootwear = /footwear|calzado|zapater/i.test(industry);
+  const footwearGuidance = isFootwear ? `
+IDENTIFICACIÓN ESPECIALIZADA DE CALZADO:
+- Prioriza leer logotipos, letras, emblemas, patrón de paneles, suela, entresuela, puntera, talón y sistema de cordones.
+- Identifica marca y modelo comercial únicamente cuando existan señales visuales suficientes. No deduzcas un modelo solo por la silueta general.
+- Para marcas conocidas, contrasta rasgos característicos: Adidas (tres bandas, Trefoil, puntera T), Nike (Swoosh), New Balance (N lateral y códigos de silueta), Puma (Formstrip), Asics (Tiger Stripes), Reebok (Vector), Converse (parche/estrella), Vans (Jazz Stripe).
+- Describe el tipo con precisión: running, casual/urbano, fútbol campo, turf/microtacos, futsala, botas, sandalias u otro.
+- El color debe distinguir cuerpo, detalles y suela. Material solo si se aprecia claramente.
+- Si no puedes confirmar el modelo exacto, deja modelo vacío y crea un nombre descriptivo con marca visible + tipo de calzado + colores. No inventes series, números ni ediciones.
+- Si el logotipo no es legible, deja marca vacía; no atribuyas la marca por parecido.
+` : '';
+  const prompt = `Eres especialista en identificación visual de inventario para un ERP multiempresa.
+La empresa pertenece al sector: ${industry}. Analiza exclusivamente lo que se ve en la fotografía.
+${isFootwear ? 'El objeto esperado es CALZADO. Aplica estas reglas especializadas:' : 'No asumas que el objeto es calzado; identifica el artículo visible.'}
+${footwearGuidance}
+Distingue el producto de su envase y no inventes marca, modelo, composición, peso, volumen, SKU, lote, vencimiento ni certificaciones. Si un dato no es visible, usa cadena vacía.
 Si parece ingrediente, material de fabricación o empaque, marca es_materia_prima=true; si no puedes determinarlo, false.
 Pista del usuario: ${userHint || 'Ninguna'}.
+El nombre debe ser útil y específico sin inventar: combina solo marca/modelo/color realmente identificables; si no se identifican, usa una descripción objetiva del artículo y su color.
 Devuelve SOLO JSON válido con: nombre, marca, modelo, categoria, tipo, color, material, descripcion_comercial, caracteristicas_clave (array), unidad_medida, es_materia_prima, precio_sugerido_usd.
 No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar hechos visibles de inferencias.`;
 
   // Modelos estables y alternativas de menor demanda. Los 503/429 son transitorios:
   // se reintentan con espera creciente antes de pasar al siguiente modelo.
-  const models = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+  const models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
   let lastError: unknown;
 
   for (const model of models) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = 1; attempt <= 1; attempt++) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 45000);
+      const timeout = setTimeout(() => controller.abort(), 24000);
       const attemptStarted = Date.now();
       try {
         logger.info(`[Gemini Product AI] REST Interactions: inicio ${model}, intento ${attempt}; imagen ${Math.round(data.length * 0.75 / 1024)} KB.`);
@@ -109,7 +122,7 @@ No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar
         const clean = (v: unknown) => typeof v === 'string' ? v.trim() : '';
         const result: ProductAnalysisResult = {
           success: true,
-          nombre: clean(parsed.nombre) || 'Producto por identificar',
+          nombre: clean(parsed.nombre) || [clean(parsed.marca), clean(parsed.modelo), clean(parsed.color)].filter(Boolean).join(' ') || (isFootwear ? 'Calzado por identificar' : 'Producto por identificar'),
           marca: clean(parsed.marca),
           modelo: clean(parsed.modelo),
           categoria: clean(parsed.categoria),
