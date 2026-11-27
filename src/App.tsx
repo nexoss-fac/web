@@ -104,6 +104,8 @@ function AppContent() {
 
   return (
     <CompanyWorkspaceGate user={currentUser} loading={isAuthLoading} onTenantSelected={(companyId, role) => {
+      setIsGlobalAleOpen(false);
+      setPendingAleReview(null);
       localStorage.setItem('nexoss_active_company_role', role);
       setActiveCompanyId(companyId);
       setCompanyRole(role);
