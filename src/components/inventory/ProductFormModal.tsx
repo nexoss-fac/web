@@ -859,14 +859,15 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       // En este modo cada tarjeta trae su propia talla y stock, por lo que no exigimos la tabla de tallas compartidas.
       // Comparten costo/precio del formulario, pero pueden tener nombre, SKU, color, talla y stock propios.
       if (colorImages.length > 1) {
-        const itemsToCreate = colorImages.map((item, index) => ({
+        const itemsToCreate = colorImages.map((item, index) => {
+          const variantSku = item.sku?.trim().toUpperCase() || `AUTO-${Date.now().toString().slice(-8)}-${String(index + 1).padStart(2,'0')}`;
+          return {
           ...baseProductData,
           costo: Number(item.costo ?? parsedCosto),
           precio: Number(item.precio ?? parsedPrecio),
           nombre: item.nombre?.trim() || `${nombre.trim() || 'Producto por identificar'} ${index + 1}`,
-          // Código generado localmente cuando el usuario no ingresó uno. Se puede editar antes de guardar.
-          sku: item.sku?.trim().toUpperCase() || `AUTO-${Date.now().toString().slice(-8)}-${String(index + 1).padStart(2,'0')}`,
-          codigo_barras: internalBarcodeForSku(item.sku?.trim().toUpperCase() || `AUTO-${Date.now().toString().slice(-8)}-${String(index + 1).padStart(2,'0')}`),
+          sku: variantSku,
+          codigo_barras: internalBarcodeForSku(variantSku),
           marca: item.marca?.trim() || baseProductData.marca,
           tipo: item.tipo || baseProductData.tipo,
           genero: item.genero || baseProductData.genero,
@@ -875,7 +876,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           imagen: item.imagen,
           talla: item.talla?.trim() || singleTalla,
           stock: Number(item.stock ?? 0),
-        }));
+          };
+        });
         if (onSaveBulk) onSaveBulk(itemsToCreate); else itemsToCreate.forEach((item) => onSave(item));
         onClose();
         return;
