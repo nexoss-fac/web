@@ -43,11 +43,19 @@ export async function analyzeProductImage(
   const { mimeType, data } = parseImage(imageBase64);
   if (!data || data.length < 50) throw new Error('La imagen no contiene datos válidos.');
 
-  const prompt = `Eres un especialista en identificación visual de inventario para un ERP multiempresa.
-Analiza el objeto visible sin asumir que es calzado. La empresa pertenece al sector: ${industry}.
-Identifica cualquier artículo: mercancía para reventa, alimentos, bebidas, materias primas, ingredientes, cultivos, empaques, repuestos, herramientas, equipos, ropa o insumos.
-Distingue el producto de su envase y no inventes marca, modelo, composición, peso, volumen, SKU, lote, vencimiento ni certificaciones. Si un dato no es visible, usa cadena vacía o cero.
-Si parece ingrediente, material de fabricación o empaque, marca es_materia_prima=true; si no puedes determinarlo, false.
+  const isFootwear = /calzado|footwear|zapater/i.test(industry);
+  const footwearRules = isFootwear ? `
+CLASIFICACIÓN DE CALZADO (OBLIGATORIA):
+- categoria debe ser exactamente "Calzado" para zapatos, zapatillas, botas, sandalias y demás calzado.
+- tipo debe identificar el uso/tipo real del calzado. Elige solo el más cercano de esta lista: "Running", "Casual", "Deportivo", "Botines Fútbol Campo", "Fútbol Campo", "Micro Tacos", "Futsala", "Béisbol", "Béisbol Gancho", "Botas", "Tacones", "Sandalias", "Mocasines", "Infantil", "Otros".
+- No clasifiques automáticamente todo zapato como "Botines Fútbol Campo". Ese tipo es exclusivamente para botines con tacos de fútbol de campo claramente visibles.
+- Para zapatillas de correr usa "Running"; sneakers urbanos/de vestir usa "Casual" o "Deportivo"; si la imagen no permite distinguir uso, usa "Otros".
+- Nunca confundas categoria (familia "Calzado") con tipo (uso deportivo o estilo).
+` : '';
+  const prompt = `Eres especialista en identificación visual de inventario para un ERP multiempresa.
+La empresa pertenece al sector: ${industry}. Analiza exclusivamente el artículo visible.
+${footwearRules}
+Para cualquier producto, no inventes marca, modelo, composición, peso, volumen, SKU, lote, vencimiento ni certificaciones. Si un dato no es visible, usa cadena vacía.
 Pista del usuario: ${userHint || 'Ninguna'}.
 Devuelve SOLO JSON válido con: nombre, marca, modelo, categoria, tipo, color, material, descripcion_comercial, caracteristicas_clave (array), unidad_medida, es_materia_prima, precio_sugerido_usd.
 No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar hechos visibles de inferencias.`;
