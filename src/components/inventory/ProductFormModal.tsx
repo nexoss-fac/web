@@ -107,7 +107,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [sku, setSku] = useState(editingProduct?.sku || '');
   const [codigoBarras, setCodigoBarras] = useState(editingProduct?.codigo_barras || '');
   const [marca, setMarca] = useState(editingProduct?.marca || (isFootwear ? 'Nike' : ''));
-  const [tipo, setTipo] = useState<ShoeType>(editingProduct?.tipo || (isFootwear ? 'Botines Fútbol Campo' : 'Otros'));
+  const [tipo, setTipo] = useState<ShoeType>(editingProduct?.tipo || 'Otros');
   const [color, setColor] = useState(editingProduct?.color || '');
   const [costo, setCosto] = useState(editingProduct?.costo?.toString() || '40.00');
   const [precio, setPrecio] = useState(editingProduct?.precio?.toString() || '80.00');
@@ -188,7 +188,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     setSku(editingProduct.sku || '');
     setCodigoBarras(editingProduct.codigo_barras || '');
     setMarca(editingProduct.marca || (isFootwear ? 'Nike' : ''));
-    setTipo(editingProduct.tipo || (isFootwear ? 'Botines Fútbol Campo' : 'Otros'));
+    setTipo(editingProduct.tipo || 'Otros');
     setColor(editingProduct.color || '');
     setCosto(editingProduct.costo?.toString() || '40.00');
     setPrecio(editingProduct.precio?.toString() || '80.00');
