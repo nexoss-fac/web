@@ -636,7 +636,7 @@ export const InventoryManager: React.FC = () => {
                         {p.descripcion && (
                           <details className="group mt-1">
                             <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden">
-                              <span className="block leading-relaxed line-clamp-2 group-open:line-clamp-none">{p.descripcion}</span>
+                              <span className="block max-h-[2.45rem] overflow-hidden leading-relaxed group-open:max-h-none">{p.descripcion}</span>
                               <span className="mt-1 inline-flex text-[11px] font-semibold text-indigo-600 group-open:hidden">Leer más</span>
                               <span className="mt-1 hidden text-[11px] font-semibold text-indigo-600 group-open:inline">Ver menos</span>
                             </summary>
