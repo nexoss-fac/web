@@ -159,7 +159,7 @@ No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar
       } catch (error) {
         lastError = error;
         const message = error instanceof Error ? error.message : String(error);
-        logger.error(`[Gemini Product AI] Falló ${model} intento ${attempt} en ${Date.now() - attemptStarted} ms: ${message}`);
+        logger.error(`[Gemini Product AI] Falló ${modelName} intento ${attempt} en ${Date.now() - attemptStarted} ms: ${message}`);
         if (attempt < 2 && (message.includes('503') || message.includes('429') || message.includes('502') || message.includes('504'))) {
           await new Promise(resolve => setTimeout(resolve, 1200 * attempt));
           continue;
