@@ -13,6 +13,9 @@ import { FiscalFolder } from './components/fiscal/FiscalFolder';
 import { PublicFiscalBoard } from './components/fiscal/PublicFiscalBoard';
 import { PushNotificationSettings } from './components/common/PushNotificationSettings';
 import { HealthWorkspace } from './components/health/HealthWorkspace';
+import { AleAvatar } from './components/inventory/AleAvatar';
+import { AleInventoryAssistant } from './components/inventory/AleInventoryAssistant';
+import { ShoeAiResult } from './services/aiShoeService';
 
 // Lazy load view components for maximum initial load performance and lightweight bundle
 const AccountingFirmDashboard = lazy(() => import('./components/accounting/AccountingFirmDashboard').then((m) => ({ default: m.AccountingFirmDashboard })));
@@ -44,6 +47,8 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<NavigationTab>(() => localStorage.getItem('nexoss_active_company_industry') === 'health' ? 'health' : 'pos');
   // Escáner de gastos con cámara: se abre desde la barra inferior del teléfono.
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isGlobalAleOpen, setIsGlobalAleOpen] = useState(false);
+  const [pendingAleReview, setPendingAleReview] = useState<{ aiData: ShoeAiResult; image: string } | null>(null);
   const [activeCompanyId, setActiveCompanyId] = useState<CompanyProfileId>(() => localStorage.getItem('nexoss_active_company_id') || '');
   const [selectedCompanyName, setSelectedCompanyName] = useState(() => localStorage.getItem('nexoss_active_company_name') || 'Empresa');
   const [companyRole, setCompanyRole] = useState(() => localStorage.getItem('nexoss_active_company_role') || '');
@@ -138,7 +143,7 @@ function AppContent() {
         <main className={`flex-1 overflow-y-auto pb-24 lg:pb-6 ${activeTab === 'pos' || activeTab === 'reports' ? 'p-0' : 'p-3 sm:p-6'}`}>
           <Suspense fallback={<ViewFallback />}>
             {activeTab === 'pos' && <PointOfSale key={activeCompanyId} industryTemplate={companyIndustry} onNavigateToLayaways={userRole === 'admin' ? () => setActiveTab('layaways') : undefined} />}
-            {activeTab === 'inventory' && <InventoryManager />}
+            {activeTab === 'inventory' && <InventoryManager pendingAleReview={pendingAleReview} onAleReviewHandled={() => setPendingAleReview(null)} />}
             {activeTab === 'production' && isCompanyAdmin && isManufacturingIndustry && <ProductionManager key={activeCompanyId} />}
             {activeTab === 'inventoryReport' && <InventoryMovementReport />}
             {activeTab === 'layaways' && (selectedCompanyName.toLowerCase().includes('macizo') ? <CustomerOrdersManager /> : <LayawaysManager />)}
@@ -154,6 +159,33 @@ function AppContent() {
             {activeTab === 'health' && companyIndustry === 'health' && isClinicStaff && <HealthWorkspace key={activeCompanyId} canManagePayments={isCompanyAdmin} canManageInventory={isCompanyAdmin} />}
           </Suspense>
         </main>
+
+        {/* ALE · compañera flotante global */}
+        <div className="fixed right-5 bottom-24 lg:bottom-7 z-[70] flex flex-col items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setIsGlobalAleOpen(true)}
+            aria-label="Abrir asistente ALE"
+            title="Hablar con ALE"
+            className="group relative flex flex-col items-center gap-1.5 bg-transparent border-0 p-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-4 rounded-full"
+          >
+            <span className="absolute inset-0 rounded-full bg-cyan-400/15 blur-xl scale-125 group-hover:bg-cyan-300/25 transition-colors" />
+            <AleAvatar size="md" className="transition-transform duration-300 group-hover:scale-110 group-hover:-translate-y-1" />
+            <span className="relative text-[10px] font-extrabold tracking-[0.18em] text-slate-700 drop-shadow-sm">ALE</span>
+            <span className="absolute top-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
+          </button>
+        </div>
+        <AleInventoryAssistant
+          isOpen={isGlobalAleOpen}
+          onClose={() => setIsGlobalAleOpen(false)}
+          products={products}
+          industry={companyIndustry}
+          onReviewProduct={(aiData, image) => {
+            setPendingAleReview({ aiData, image });
+            setIsGlobalAleOpen(false);
+            setActiveTab('inventory');
+          }}
+        />
 
         {/* Mobile Bottom Navigation Bar (Phone Adaptability) */}
         <nav aria-label="Navegación Móvil" className="lg:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-40 flex items-center justify-around px-2 py-1.5 shadow-lg shadow-slate-900/10">
