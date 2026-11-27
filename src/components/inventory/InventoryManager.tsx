@@ -650,6 +650,21 @@ export const InventoryManager: React.FC = () => {
                       <div className="mt-3 flex flex-wrap items-center gap-1.5">
                         {userRole === 'admin' && <button type="button" onClick={() => handleOpenDuplicate(p)} title="Duplicar ficha para otra talla" className="flex-1 min-w-[92px] px-2.5 py-2 rounded-lg bg-violet-50 border border-violet-200 text-violet-700 text-xs font-bold hover:bg-violet-100 flex items-center justify-center gap-1.5"><Copy className="w-3.5 h-3.5" />Duplicar</button>}
                         <button type="button" onClick={() => handleOpenEdit(p)} title="Editar calzado" className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200"><Edit2 className="w-3.5 h-3.5" /></button>
+                        {userRole === 'admin' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`¿Retirar ${p.nombre} (talla ${p.talla}) del catálogo?`)) {
+                                deleteProduct(p.id);
+                              }
+                            }}
+                            title="Eliminar del catálogo"
+                            aria-label={`Eliminar ${p.nombre}, talla ${p.talla}`}
+                            className="px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 text-xs font-semibold hover:bg-rose-100"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button type="button" onClick={() => handleOpenMovement(p)} title="Ver movimientos y lotes" className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200">Lote</button>
                         <button type="button" onClick={() => handleOpenLabelModal(p)} title="Imprimir etiqueta" className="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100"><Tag className="w-3.5 h-3.5" /></button>
                         <button type="button" disabled={p.stock <= 0} onClick={() => adjustStock(p.id, -1, 'Ajuste rápido manual (-1 par)', 'salida_ajuste')} title="Restar 1 par" className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs disabled:opacity-30">−1</button>
