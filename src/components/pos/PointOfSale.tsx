@@ -273,13 +273,14 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   // Add to Cart
 
   const handleBarcodeScan = (rawCode: string) => {
-    const code = String(rawCode || '').replace(/[^0-9]/g, '').trim();
-    if (![8, 12, 13, 14].includes(code.length)) {
-      setBarcodeNotice('Código no válido. Se admiten EAN-8, UPC-A, EAN-13 y GTIN-14.');
+    const code = String(rawCode || '').replace(/\s+/g, '').trim().toUpperCase();
+    const isInternalCode128 = /^NX-[A-Z0-9]+-[A-F0-9]{8}$/.test(code);
+    if (!isInternalCode128 && ![8, 12, 13, 14].includes(code.length)) {
+      setBarcodeNotice('Código no válido. Se admiten EAN/UPC y códigos internos Code 128 de NEXOSS.');
       return;
     }
     const matches = products.filter((product) =>
-      product.activo && String(product.codigo_barras || '').replace(/\s+/g, '') === code
+      product.activo && String(product.codigo_barras || '').replace(/\s+/g, '').toUpperCase() === code
     );
     if (matches.length === 0) {
       setBarcodeNotice(`No hay un producto registrado con el código ${code}. Asígnalo desde Inventario.`);
@@ -767,10 +768,10 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
               <div className="relative">
                 <input
                   type="text"
-                  inputMode="numeric"
+                  inputMode="text"
                   id="pos-barcode-scan"
                   value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 14))}
+                  onChange={(e) => setBarcodeInput(e.target.value.replace(/[^\x20-\x7E]/g, '').slice(0, 32))}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -778,8 +779,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                       setBarcodeInput('');
                     }
                   }}
-                  placeholder="Escanear EAN / UPC (clic aquí)"
-                  aria-label="Escanear código de barras EAN o UPC"
+                  placeholder="Escanear EAN / UPC / Code 128 (clic aquí)"
+                  aria-label="Escanear código de barras EAN, UPC o Code 128"
                   className="w-full px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-slate-900 font-mono placeholder-emerald-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 />
                 {barcodeNotice && <p role="status" aria-live="polite" className="text-[11px] mt-1 text-slate-600">{barcodeNotice}</p>}

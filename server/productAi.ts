@@ -69,18 +69,18 @@ No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar
   const models = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
   let lastError: unknown;
 
-  for (const model of models) {
+  for (const modelName of models) {
     for (let attempt = 1; attempt <= 2; attempt++) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 45000);
       const attemptStarted = Date.now();
       try {
-        logger.info(`[Gemini Product AI] REST Interactions: inicio ${model}, intento ${attempt}; imagen ${Math.round(data.length * 0.75 / 1024)} KB.`);
+        logger.info(`[Gemini Product AI] REST Interactions: inicio ${modelName}, intento ${attempt}; imagen ${Math.round(data.length * 0.75 / 1024)} KB.`);
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(apiKey)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model,
+            model: modelName,
             input: [
               { type: 'image', data, mime_type: mimeType.startsWith('image/') ? mimeType : 'image/jpeg' },
               { type: 'text', text: prompt },
@@ -99,7 +99,7 @@ No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar
           } catch { /* conservar respuesta de error original */ }
           const httpError = new Error(`Gemini HTTP ${response.status}: ${detail.slice(0, 700)}`);
           lastError = httpError;
-          logger.error(`[Gemini Product AI] Falló ${model} intento ${attempt}: ${httpError.message}`);
+          logger.error(`[Gemini Product AI] Falló ${modelName} intento ${attempt}: ${httpError.message}`);
           if ([429, 500, 502, 503, 504].includes(response.status) && attempt < 2) {
             await new Promise(resolve => setTimeout(resolve, 1200 * attempt));
             continue;
@@ -120,24 +120,29 @@ No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar
 
         const clean = (v: unknown) => typeof v === 'string' ? v.trim() : '';
         const brand = clean(parsed.marca);
-        const model = clean(parsed.modelo);
+        const productModel = clean(parsed.modelo);
         const color = clean(parsed.color);
         const kind = clean(parsed.tipo);
-        const genericFootwearName = /^(zapato|zapatos|calzado|tenis|zapatilla|zapatillas|sneaker|producto|calzado deportivo|zapato deportivo|tenis deportivos|producto por identificar)(\s+(deportivo|deportiva|para hombre|para mujer))?$/i;
+        const genericFootwearName = /^(?:(?:adidas|nike|puma|reebok|new balance|asics|under armour)\s+)?(?:zapato(?:s)?|calzado(?: deportivo)?|tenis(?: deportivos)?|zapatilla(?:s)?|sneaker(?:s)?|producto|art[ií]culo)(?:\s+(?:deportivo|deportiva|para hombre|para mujer|con tacos|deportivo con tacos))*$/i;
         const specificFeatures = Array.isArray(parsed.caracteristicas_clave)
           ? parsed.caracteristicas_clave.filter((v: unknown) => typeof v === 'string').map((v: string) => v.trim()).filter(Boolean).slice(0, 3)
           : [];
         const suppliedName = clean(parsed.nombre);
-        const descriptiveName = [brand, model, color, kind, ...specificFeatures.slice(0, brand || model ? 1 : 2)]
+        const description = clean(parsed.descripcion_comercial);
+        const usefulDescription = description.split(/[.;]/).map((part: string) => part.trim()).find((part: string) => part.length >= 12 && !genericFootwearName.test(part)) || '';
+        const fallbackFeatures = [...specificFeatures, usefulDescription].filter(Boolean).slice(0, 2);
+        const descriptiveName = [brand, productModel, kind, color, clean(parsed.material), ...fallbackFeatures]
           .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-        const productName = isFootwear && (!suppliedName || genericFootwearName.test(suppliedName))
-          ? (descriptiveName || 'Calzado sin modelo confirmado')
+        const normalizedName = suppliedName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+        const looksGeneric = genericFootwearName.test(suppliedName) || /^(?:calzado|zapato|tenis|zapatilla|sneaker|producto|articulo)(?:\s+(?:deportivo|deportiva|con tacos|para hombre|para mujer))*$/.test(normalizedName);
+        const productName = isFootwear && (!suppliedName || looksGeneric)
+          ? (descriptiveName || 'Calzado sin modelo confirmado - revisar identificación visual')
           : (suppliedName || descriptiveName || 'Producto sin identificar');
         const result: ProductAnalysisResult = {
           success: true,
           nombre: productName,
           marca: brand,
-          modelo: model,
+          modelo: productModel,
           categoria: clean(parsed.categoria),
           tipo: clean(parsed.tipo),
           color,
@@ -147,9 +152,9 @@ No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar
           unidad_medida: clean(parsed.unidad_medida) || 'Unidad',
           es_materia_prima: parsed.es_materia_prima === true,
           precio_sugerido_usd: 0,
-          modelo_ia_usado: model,
+          modelo_ia_usado: modelName,
         };
-        logger.info(`[Gemini Product AI] OK ${model} en ${Date.now() - attemptStarted} ms; total ${Date.now() - startedAt} ms.`);
+        logger.info(`[Gemini Product AI] OK ${modelName} en ${Date.now() - attemptStarted} ms; total ${Date.now() - startedAt} ms.`);
         return result;
       } catch (error) {
         lastError = error;

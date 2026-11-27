@@ -800,7 +800,13 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       ? activeSizes.reduce((sum, s) => sum + s.stock, 0)
       : parseInt(singleStock, 10) || 0;
 
-  const internalBarcodeForSku = (value: string) => `NX-${value.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '-')}`;
+  const internalBarcodeForSku = (value: string) => {
+    const source = value.trim().toUpperCase() || `AUTO-${Date.now()}`;
+    let hash = 2166136261;
+    for (let i = 0; i < source.length; i++) hash = Math.imul(hash ^ source.charCodeAt(i), 16777619);
+    const prefix = source.replace(/[^A-Z0-9]/g, '').slice(0, 12) || 'ITEM';
+    return `NX-${prefix}-${(hash >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
