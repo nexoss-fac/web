@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import {
   Boxes,
@@ -40,7 +40,12 @@ import { ShoeAiResult } from '../../services/aiShoeService';
 import { COMPANY_INDUSTRIES, resolveIndustryTemplate } from '../../domain/companyIndustries';
 import { AleInventoryAssistant } from './AleInventoryAssistant';
 
-export const InventoryManager: React.FC = () => {
+interface InventoryManagerProps {
+  pendingAleReview?: { aiData: ShoeAiResult; image: string } | null;
+  onAleReviewHandled?: () => void;
+}
+
+export const InventoryManager: React.FC<InventoryManagerProps> = ({ pendingAleReview, onAleReviewHandled }) => {
   const industry = COMPANY_INDUSTRIES[resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry'))];
   const isFootwear = resolveIndustryTemplate(localStorage.getItem('nexoss_active_company_industry')) === 'footwear';
   const stockUnit = industry.unitLabel;
@@ -78,6 +83,16 @@ export const InventoryManager: React.FC = () => {
   const [isAleOpen, setIsAleOpen] = useState(false);
   const [initialAiData, setInitialAiData] = useState<ShoeAiResult | null>(null);
   const [initialAiImage, setInitialAiImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingAleReview) return;
+    setInitialAiData(pendingAleReview.aiData);
+    setInitialAiImage(pendingAleReview.image);
+    setEditingProduct(null);
+    setIsDuplicatingProduct(false);
+    setIsProductModalOpen(true);
+    onAleReviewHandled?.();
+  }, [pendingAleReview, onAleReviewHandled]);
 
   const exportInventoryExcel = () => {
     const productById = new Map(products.map((p) => [p.id, p]));
