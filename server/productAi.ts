@@ -43,12 +43,24 @@ export async function analyzeProductImage(
   const { mimeType, data } = parseImage(imageBase64);
   if (!data || data.length < 50) throw new Error('La imagen no contiene datos válidos.');
 
-  const prompt = `Eres un especialista en identificación visual de inventario para un ERP multiempresa.
-Analiza el objeto visible sin asumir que es calzado. La empresa pertenece al sector: ${industry}.
-Identifica cualquier artículo: mercancía para reventa, alimentos, bebidas, materias primas, ingredientes, cultivos, empaques, repuestos, herramientas, equipos, ropa o insumos.
-Distingue el producto de su envase y no inventes marca, modelo, composición, peso, volumen, SKU, lote, vencimiento ni certificaciones. Si un dato no es visible, usa cadena vacía o cero.
-Si parece ingrediente, material de fabricación o empaque, marca es_materia_prima=true; si no puedes determinarlo, false.
-Pista del usuario: ${userHint || 'Ninguna'}.
+  const isFootwear = /footwear|calzado|zapater/i.test(industry);
+  const footwearGuidance = isFootwear ? `
+IDENTIFICACIÓN PRECISA DE CALZADO:
+- Inspecciona la imagen como especialista en catálogo: logotipo y letras visibles, lengüeta, talón, laterales, patrón de paneles, puntera, suela, entresuela, cámara/placa, costuras, ojales y cordones.
+- Prioriza reconocer la MARCA y el MODELO comercial exacto cuando los rasgos visuales realmente lo sustenten. Contrasta los detalles característicos de cada marca; no uses solo la silueta genérica.
+- Busca nombres o códigos impresos en la lengüeta, plantilla, lateral y suela cuando sean legibles.
+- No confundas una línea o familia con un modelo exacto. No inventes números, series, colaboraciones ni ediciones.
+- Si el modelo exacto no puede confirmarse, devuelve modelo vacío y crea un nombre útil y concreto: marca visible + tipo/estilo + color principal + rasgo distintivo visible (por ejemplo, "Nike sneaker urbano negro con suela plataforma"). Nunca uses nombres vacíos como "Zapato deportivo", "Calzado", "Producto", "Tenis genérico" ni "Producto por identificar".
+- Si la marca no es legible, no la adivines: usa un nombre descriptivo con tipo, color y rasgos visibles específicos.
+- Distingue el tipo real: Running, Casual, Deportivo, Botines Fútbol Campo, Fútbol Campo, Micro Tacos, Futsala, Béisbol, Botas, Sandalias u Otros. Fútbol campo solo si se ven tacos de campo.
+` : '';
+  const prompt = `Eres especialista en identificación visual de inventario para un ERP multiempresa.
+Analiza exclusivamente el objeto visible. La empresa pertenece al sector: ${industry}.
+${footwearGuidance}
+Identifica el artículo, su categoría y características concretas. Distingue el producto del envase.
+No inventes marca, modelo, composición, peso, volumen, SKU, lote, vencimiento ni certificaciones. Si un dato no es visible, usa cadena vacía.
+El campo nombre debe ser específico, descriptivo y útil para buscar y vender el producto; no repitas etiquetas genéricas. Si modelo está confirmado, incluye marca + modelo + color/variante en nombre. Si no, usa los rasgos visibles concretos.
+Pista adicional del usuario: ${userHint || 'Ninguna'}.
 Devuelve SOLO JSON válido con: nombre, marca, modelo, categoria, tipo, color, material, descripcion_comercial, caracteristicas_clave (array), unidad_medida, es_materia_prima, precio_sugerido_usd.
 No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar hechos visibles de inferencias.`;
 
@@ -109,7 +121,7 @@ No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar
         const clean = (v: unknown) => typeof v === 'string' ? v.trim() : '';
         const result: ProductAnalysisResult = {
           success: true,
-          nombre: clean(parsed.nombre) || 'Producto por identificar',
+          nombre: clean(parsed.nombre) || [clean(parsed.marca), clean(parsed.modelo), clean(parsed.color), clean(parsed.tipo)].filter(Boolean).join(' ') || (isFootwear ? 'Calzado sin modelo confirmado' : 'Producto sin identificar'),
           marca: clean(parsed.marca),
           modelo: clean(parsed.modelo),
           categoria: clean(parsed.categoria),
