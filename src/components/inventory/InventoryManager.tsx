@@ -85,14 +85,14 @@ export const InventoryManager: React.FC<InventoryManagerProps> = ({ pendingAleRe
   const [initialAiImage, setInitialAiImage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!pendingAleReview) return;
+    if (!pendingAleReview || isProductModalOpen) return;
     setInitialAiData(pendingAleReview.aiData);
     setInitialAiImage(pendingAleReview.image);
     setEditingProduct(null);
     setIsDuplicatingProduct(false);
     setIsProductModalOpen(true);
     onAleReviewHandled?.();
-  }, [pendingAleReview, onAleReviewHandled]);
+  }, [pendingAleReview, isProductModalOpen, onAleReviewHandled]);
 
   const exportInventoryExcel = () => {
     const productById = new Map(products.map((p) => [p.id, p]));
