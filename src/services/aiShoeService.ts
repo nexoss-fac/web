@@ -89,8 +89,8 @@ export async function analyzeShoeWithAi(
   for (const endpoint of endpoints) {
     try {
       const controller = new AbortController();
-      // La inferencia multimodal puede tardar más en redes móviles; ampliar el límite a 90 segundos.
-      const timeout = setTimeout(() => controller.abort(), 90000);
+      // Dos intentos acotados en servidor: dar margen de red sin dejar al usuario esperando 90 s.
+      const timeout = setTimeout(() => controller.abort(), 60000);
       let response: Response;
       try {
         response = await fetch(endpoint, {
@@ -148,7 +148,7 @@ export async function analyzeShoeWithAi(
       }
     } catch (err: any) {
       lastErrorMsg = err?.name === 'AbortError'
-        ? 'Gemini tardó más de 90 segundos. La foto original está conservada; puedes reintentar o completar los datos manualmente.'
+        ? 'El análisis superó el tiempo esperado. La foto original está conservada; puedes reintentar o completar los datos manualmente.'
         : err?.message || String(err);
       console.warn(`[ShoeAiService] Network error on ${endpoint}:`, lastErrorMsg);
     }
