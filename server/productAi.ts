@@ -123,13 +123,13 @@ No inventes precio: precio_sugerido_usd debe ser 0. La descripción debe separar
         const model = clean(parsed.modelo);
         const color = clean(parsed.color);
         const kind = clean(parsed.tipo);
-        const genericFootwearName = /^(zapato|zapatos|calzado|tenis|zapatilla|zapatillas|sneaker|producto|calzado deportivo|zapato deportivo|tenis deportivos|producto por identificar)(\\s+(deportivo|deportiva|para hombre|para mujer))?$/i;
+        const genericFootwearName = /^(zapato|zapatos|calzado|tenis|zapatilla|zapatillas|sneaker|producto|calzado deportivo|zapato deportivo|tenis deportivos|producto por identificar)(\s+(deportivo|deportiva|para hombre|para mujer))?$/i;
         const specificFeatures = Array.isArray(parsed.caracteristicas_clave)
           ? parsed.caracteristicas_clave.filter((v: unknown) => typeof v === 'string').map((v: string) => v.trim()).filter(Boolean).slice(0, 3)
           : [];
         const suppliedName = clean(parsed.nombre);
         const descriptiveName = [brand, model, color, kind, ...specificFeatures.slice(0, brand || model ? 1 : 2)]
-          .filter(Boolean).join(' ').replace(/\\s+/g, ' ').trim();
+          .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
         const productName = isFootwear && (!suppliedName || genericFootwearName.test(suppliedName))
           ? (descriptiveName || 'Calzado sin modelo confirmado')
           : (suppliedName || descriptiveName || 'Producto sin identificar');
