@@ -93,6 +93,8 @@ function AppContent() {
     if (activeTab === 'health' && companyIndustry === 'health' && !isClinicStaff) setActiveTab('pos');
   }, [userRole, companyRole, isCompanyAdmin, isClinicStaff, isManufacturingIndustry, companyIndustry, activeTab]);
   const handleCompanySelect = (companyId: string) => {
+    setIsGlobalAleOpen(false);
+    setPendingAleReview(null);
     setActiveCompanyId(companyId);
     setSelectedCompanyName(localStorage.getItem('nexoss_active_company_name') || 'Empresa');
     setCompanyRole(localStorage.getItem('nexoss_active_company_role') || '');
@@ -164,9 +166,12 @@ function AppContent() {
         <div className="fixed right-5 bottom-24 lg:bottom-7 z-[70] flex flex-col items-center gap-1.5">
           <button
             type="button"
-            onClick={() => setIsGlobalAleOpen(true)}
+            onClick={() => {
+              if (companyIndustry === 'health' && !isCompanyAdmin) return;
+              setIsGlobalAleOpen(true);
+            }}
             aria-label="Abrir asistente ALE"
-            title="Hablar con ALE"
+            title={companyIndustry === 'health' && !isCompanyAdmin ? 'ALE clínica estará disponible en el espacio clínico' : 'Hablar con ALE'}
             className="group relative flex flex-col items-center gap-1.5 bg-transparent border-0 p-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-4 rounded-full"
           >
             <span className="absolute inset-0 rounded-full bg-cyan-400/15 blur-xl scale-125 group-hover:bg-cyan-300/25 transition-colors" />
@@ -175,7 +180,8 @@ function AppContent() {
             <span className="absolute top-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
           </button>
         </div>
-        <AleInventoryAssistant
+        {!(companyIndustry === 'health' && !isCompanyAdmin) && <AleInventoryAssistant
+          key={activeCompanyId}
           isOpen={isGlobalAleOpen}
           onClose={() => setIsGlobalAleOpen(false)}
           products={products}
@@ -185,7 +191,7 @@ function AppContent() {
             setIsGlobalAleOpen(false);
             setActiveTab('inventory');
           }}
-        />
+        />}
 
         {/* Mobile Bottom Navigation Bar (Phone Adaptability) */}
         <nav aria-label="Navegación Móvil" className="lg:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-40 flex items-center justify-around px-2 py-1.5 shadow-lg shadow-slate-900/10">
