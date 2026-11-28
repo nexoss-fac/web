@@ -55,6 +55,8 @@ export interface ShoeProduct {
   categoria: string;
   clasificacion_inventario?: InventoryClassification;
   marca: string;
+  /** Referencia/modelo comercial devuelto por el catálogo del fabricante. */
+  modelo?: string;
   tipo: ShoeType;
   talla: string; // ej: "36", "37", "38", "39", "40", "41", "42", "43", "44"
   color: string;
