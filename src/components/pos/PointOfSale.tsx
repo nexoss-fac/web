@@ -105,11 +105,12 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   const [customerLastName, setCustomerLastName] = useState('');
   const [customerRif, setCustomerRif] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [deliveryOrder, setDeliveryOrder] = useState('');
   const [paymentCondition, setPaymentCondition] = useState<'contado' | 'credito'>('contado');
   const [customerContactStatus, setCustomerContactStatus] = useState('');
-  const [customerContacts, setCustomerContacts] = useState<Array<{ nombre: string; apellido?: string; documento?: string; telefono?: string; direccion?: string; trade_name?: string }>>([]);
+  const [customerContacts, setCustomerContacts] = useState<Array<{ nombre: string; apellido?: string; documento?: string; telefono?: string; direccion?: string; correo?: string; trade_name?: string }>>([]);
 
   // Effective exchange rate for this sale (matches invoice date or custom rate)
   const effectiveExchangeRate = useMemo(() => {
@@ -384,6 +385,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     setCustomerLastName('');
     setCustomerRif('');
     setCustomerPhone('');
+    setCustomerEmail('');
     setDiscountType('none');
     setDiscountValue(0);
     setApplyIva(false);
@@ -492,6 +494,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     setCustomerLastName(contact.apellido || '');
     setCustomerRif(contact.documento || '');
     setCustomerPhone(contact.telefono || '');
+    setCustomerEmail(contact.correo || '');
     setCustomerAddress(contact.direccion || '');
   };
   const lookupCustomerByDocument = async (): Promise<boolean> => {
@@ -506,6 +509,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
         setCustomerName(contact.nombre || '');
         setCustomerLastName(contact.apellido || '');
         setCustomerPhone(contact.telefono || '');
+        setCustomerEmail(contact.correo || '');
+        setCustomerAddress(contact.direccion || '');
         return true;
       }
     } catch (error) {
@@ -524,7 +529,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       const response = await fetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'cliente', documento: document, nombre: name, apellido: customerLastName.trim(), telefono: customerPhone.trim() }),
+        body: JSON.stringify({ tipo: 'cliente', documento: document, nombre: name, apellido: customerLastName.trim(), telefono: customerPhone.trim(), correo: customerEmail.trim(), direccion: customerAddress.trim() }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || result?.success !== true) {
@@ -602,6 +607,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       cliente_apellido: customerLastName.trim() || '',
       cliente_rif: customerRif.trim() || undefined,
       cliente_telefono: customerPhone.trim() || undefined,
+      cliente_correo: customerEmail.trim() || undefined,
       cliente_direccion: customerAddress.trim() || undefined,
       orden_entrega: deliveryOrder.trim() || undefined,
       condicion_pago: finalPayments.some((payment) => (payment.cuenta || '').toLowerCase().includes('cashea')) ? 'credito' : paymentCondition,
@@ -627,12 +633,12 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
 
     // Guarda/actualiza el cliente por cédula o RIF para autocompletarlo en próximas facturas y equipos.
     if (customerRif.trim() && customerName.trim() && customerName.trim() !== 'Consumidor Final') {
-      try {
-        await fetch('/api/contacts', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipo: 'cliente', documento: customerRif.trim(), nombre: customerName.trim(), apellido: customerLastName.trim(), telefono: customerPhone.trim() }),
-        });
-      } catch (error) { console.warn('No se pudo guardar el cliente en el directorio:', error); }
+      // El directorio de clientes no forma parte de la transacción de venta. Se guarda
+      // en segundo plano para que una petición secundaria no retrase el comprobante.
+      void fetch('/api/contacts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'cliente', documento: customerRif.trim(), nombre: customerName.trim(), apellido: customerLastName.trim(), telefono: customerPhone.trim(), correo: customerEmail.trim(), direccion: customerAddress.trim() }),
+      }).catch((error) => console.warn('No se pudo guardar el cliente en el directorio:', error));
     }
 
     setExchangeRateForDate(invoiceDate, effectiveExchangeRate);
@@ -1513,6 +1519,10 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Correo electrónico del cliente</label>
+                        <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} onBlur={() => void saveCustomerContact()} placeholder="cliente@correo.com" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
+                      </div>
                       <div>
                         <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Dirección del cliente</label>
                         <input type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Dirección fiscal o comercial del cliente" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
