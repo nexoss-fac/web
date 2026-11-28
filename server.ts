@@ -47,8 +47,6 @@ import { verifyBdvPayment, getBdvApiConfig, getRecentVerifications } from './ser
 import { analyzeShoeImage } from './server/shoeAi.ts';
 import { analyzeProductImage } from './server/productAi.ts';
 
-// Cache in-memory de consultas de códigos para no consumir repetidamente la cuota externa.
-const productBarcodeLookupCache = new Map<string, { expiresAt: number; payload: Record<string, unknown> }>();
 import { analyzeReceiptImage, analyzeCurrencyOperation } from './server/receiptAi.ts';
 import { scanFiscalDocument } from './server/fiscalDocumentAi.ts';
 import { compressFiscalPdfDataUrl } from './server/fiscalPdfCompression.ts';
@@ -66,6 +64,8 @@ import { NATIONAL_FISCAL_REQUIREMENTS } from './src/domain/fiscalBoard.ts';
 import { isIndustryTemplate, normalizeIndustryTemplate, resolveIndustryTemplate } from './src/domain/companyIndustries.ts';
 import { assertProductionRuntimeSupported } from './server/productionRuntime.ts';
 import { logger } from './server/logger.ts';
+// Cache in-memory de consultas de códigos para no consumir repetidamente la cuota externa.
+const productBarcodeLookupCache = new Map<string, { expiresAt: number; payload: Record<string, unknown> }>();
 import { sendMail } from './server/mail/mailer.ts';
 import { buildExpenseNotice, buildSaleNotice, sendNotice, type Notice } from './server/notify/notifier.ts';
 import { isWebPushConfigured, saveWebPushSubscription, removeWebPushSubscription, sendWebPushToCompanyAdmins, sendWebPushToUsers, hasWebPushSubscription, sendWebPushTest } from './server/notify/webPush.ts';
@@ -879,7 +879,7 @@ async function startServer() {
 
   app.post('/api/platform/admin/companies/:companyId/transfer-owner', requirePlatformAdmin, async (req, res) => {
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({ error: 'Introduce un correo válido.' });
+    if (!/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Introduce un correo válido.' });
     const actorUid = (req as any).firebaseIdentity.uid;
     if (usePostgresControlPlane()) {
       try {
@@ -2236,8 +2236,8 @@ async function startServer() {
   // Identificación de productos por EAN/UPC/GTIN. La consulta se hace desde el servidor
   // para no exponer servicios externos al navegador ni sobrescribir datos del fabricante.
   app.get('/api/products/lookup-barcode', adminOnly, async (req, res) => {
-    const code = String(req.query.code || '').replace(/\\s+/g, '');
-    if (!/^(?:\\d{8}|\\d{12,14})$/.test(code)) {
+    const code = String(req.query.code || '').replace(/\s+/g, '');
+    if (!/^(?:\d{8}|\d{12,14})$/.test(code)) {
       return res.status(400).json({ success: false, error: 'Introduce un EAN-8, UPC-A, EAN-13 o GTIN-14 válido.' });
     }
 
@@ -2282,7 +2282,7 @@ async function startServer() {
           model: typeof item.model === 'string' ? item.model : '',
           category: typeof item.category === 'string' ? item.category : '',
           description: typeof item.description === 'string' ? item.description : '',
-          images: Array.isArray(item.images) ? item.images.filter((value): value is string => typeof value === 'string' && /^https?:\\/\\//i.test(value)).slice(0, 5) : [],
+          images: Array.isArray(item.images) ? item.images.filter((value): value is string => typeof value === 'string' && (value.startsWith('https://') || value.startsWith('http://'))).slice(0, 5) : [],
           ean: typeof item.ean === 'string' ? item.ean : '',
           upc: typeof item.upc === 'string' ? item.upc : '',
           gtin: typeof item.gtin === 'string' ? item.gtin : '',
