@@ -836,9 +836,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         return;
       }
       const item = result.product;
-      if (item.title) setNombre(item.title);
-      if (item.brand) setMarca(item.brand);
-      if (item.model) setModeloFabricante(item.model);
+      // En la matriz de tallas, varios GTIN pueden corresponder al mismo modelo:
+      // el primer resultado completa la ficha y los siguientes no reemplazan esos datos.
+      if (item.title && (!scannedCode || !nombre.trim())) setNombre(item.title);
+      if (item.brand && (!scannedCode || !marca.trim())) setMarca(item.brand);
+      if (item.model && (!scannedCode || !modeloFabricante.trim())) setModeloFabricante(item.model);
       if (item.description && !descripcion.trim()) setDescripcion(item.description);
       if (item.images?.[0] && !imagen.trim()) setImagen(item.images[0]);
       if (!sku.trim() && item.model) setSku(item.model.replace(/\s+/g, '-').toUpperCase());
@@ -1530,7 +1532,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               {/* Active Sizes Steppers Grid */}
               <div className="space-y-1.5">
                 <span className="text-[11px] font-bold text-slate-700 block">
-                  Cantidades por Talla ({activeSizes.length} seleccionadas):
+                  Cantidades y EAN/UPC por Talla ({activeSizes.length} seleccionadas):
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {activeSizes.map((item) => (
