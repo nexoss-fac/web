@@ -46,6 +46,9 @@ import {
 import { verifyBdvPayment, getBdvApiConfig, getRecentVerifications } from './server/bdv.ts';
 import { analyzeShoeImage } from './server/shoeAi.ts';
 import { analyzeProductImage } from './server/productAi.ts';
+
+// Cache in-memory de consultas de códigos para no consumir repetidamente la cuota externa.
+const productBarcodeLookupCache = new Map<string, { expiresAt: number; payload: Record<string, unknown> }>();
 import { analyzeReceiptImage, analyzeCurrencyOperation } from './server/receiptAi.ts';
 import { scanFiscalDocument } from './server/fiscalDocumentAi.ts';
 import { compressFiscalPdfDataUrl } from './server/fiscalPdfCompression.ts';
@@ -2228,6 +2231,69 @@ async function startServer() {
     await writeLocalProducts(finalProducts);
 
     res.json({ success: true, count: products.length, total: finalProducts.length });
+  });
+
+  // Identificación de productos por EAN/UPC/GTIN. La consulta se hace desde el servidor
+  // para no exponer servicios externos al navegador ni sobrescribir datos del fabricante.
+  app.get('/api/products/lookup-barcode', adminOnly, async (req, res) => {
+    const code = String(req.query.code || '').replace(/\\s+/g, '');
+    if (!/^(?:\\d{8}|\\d{12,14})$/.test(code)) {
+      return res.status(400).json({ success: false, error: 'Introduce un EAN-8, UPC-A, EAN-13 o GTIN-14 válido.' });
+    }
+
+    try {
+      const cached = productBarcodeLookupCache.get(code);
+      if (cached && cached.expiresAt > Date.now()) return res.json(cached.payload);
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 9000);
+      let response: Response;
+      try {
+        response = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${encodeURIComponent(code)}`, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (response.status === 404) {
+        return res.status(404).json({ success: false, found: false, error: 'No encontramos una ficha para este código. Puedes completar los datos con la fotografía.' });
+      }
+      if (response.status === 429) {
+        return res.status(429).json({ success: false, error: 'Se alcanzó el límite diario de consultas gratuitas. El código original se conserva; intenta más tarde.' });
+      }
+      if (!response.ok) {
+        return res.status(502).json({ success: false, error: 'El catálogo externo no está disponible en este momento.' });
+      }
+
+      const payload = await response.json() as { code?: string; items?: Array<Record<string, unknown>> };
+      const item = Array.isArray(payload.items) ? payload.items[0] : undefined;
+      if (!item) return res.status(404).json({ success: false, found: false, error: 'El código no tiene una ficha de producto disponible.' });
+
+      const result = {
+        success: true,
+        found: true,
+        source: 'UPCitemdb',
+        barcode: code,
+        product: {
+          title: typeof item.title === 'string' ? item.title : '',
+          brand: typeof item.brand === 'string' ? item.brand : '',
+          model: typeof item.model === 'string' ? item.model : '',
+          category: typeof item.category === 'string' ? item.category : '',
+          description: typeof item.description === 'string' ? item.description : '',
+          images: Array.isArray(item.images) ? item.images.filter((value): value is string => typeof value === 'string' && /^https?:\\/\\//i.test(value)).slice(0, 5) : [],
+          ean: typeof item.ean === 'string' ? item.ean : '',
+          upc: typeof item.upc === 'string' ? item.upc : '',
+          gtin: typeof item.gtin === 'string' ? item.gtin : '',
+        },
+      };
+      productBarcodeLookupCache.set(code, { expiresAt: Date.now() + 24 * 60 * 60 * 1000, payload: result });
+      return res.json(result);
+    } catch (error) {
+      logger.warn('No se pudo consultar el catálogo por EAN/UPC:', error instanceof Error ? error.message : String(error));
+      return res.status(502).json({ success: false, error: 'No se pudo conectar con el catálogo de códigos. El código escaneado permanece en la ficha.' });
+    }
   });
 
   // Asignación masiva de códigos internos Code 128 para productos sin EAN/UPC.
