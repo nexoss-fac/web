@@ -2270,22 +2270,28 @@ async function startServer() {
         const resetAt = reset && Number.isFinite(Number(reset))
           ? new Date(Number(reset) * 1000).toISOString()
           : null;
+        const limitType = providerCode === 'TOO_FAST'
+          ? 'burst'
+          : providerCode === 'EXCEED_LIMIT' || remaining === '0'
+            ? 'daily'
+            : 'unknown';
         logger.warn('[Barcode lookup] UPCitemdb aplicó un límite externo:', {
-          providerCode: providerCode || 'RATE_LIMIT',
+          providerCode: providerCode || 'HTTP_TOO_MANY_REQUESTS',
+          limitType,
           remaining,
           resetAt,
           retryAfter,
         });
-        const message = providerCode === 'TOO_FAST' || retryAfter
+        const message = limitType === 'burst'
           ? 'El catálogo externo está limitando temporalmente las consultas por frecuencia. Espera un momento y vuelve a intentarlo. Tu código original se conserva.'
-          : providerCode === 'EXCEED_LIMIT' || remaining === '0'
+          : limitType === 'daily'
             ? 'El proveedor del catálogo agotó su cuota gratuita compartida por IP. No significa que hayas agotado búsquedas en NEXOSS. Tu código original se conserva; podrás reintentar cuando se restablezca la cuota.'
             : 'El catálogo externo rechazó temporalmente la consulta por límite de uso. No es un límite de búsquedas de tu inventario. Tu código original se conserva; intenta más tarde.';
         return res.status(429).json({
           success: false,
           error: message,
           provider: 'UPCitemdb',
-          limitType: providerCode === 'TOO_FAST' || retryAfter ? 'burst' : providerCode === 'EXCEED_LIMIT' || remaining === '0' ? 'daily' : 'unknown',
+          limitType,
           ...(resetAt ? { resetAt } : {}),
           ...(retryAfter ? { retryAfterSeconds: Number(retryAfter) || undefined } : {}),
         });
