@@ -9,6 +9,7 @@ export interface MailMessage {
   subject: string;
   text: string;
   html: string;
+  attachments?: Array<{ filename: string; content: string; contentType?: string }>;
 }
 
 export type MailProvider = 'smtp' | 'resend' | 'none';
@@ -93,7 +94,7 @@ export async function sendMail(message: MailMessage, config: MailConfig = readMa
       const response = await doFetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${config.resendApiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: config.from, to: [message.to], subject: message.subject, text: message.text, html: message.html }),
+        body: JSON.stringify({ from: config.from, to: [message.to], subject: message.subject, text: message.text, html: message.html, ...(message.attachments?.length ? { attachments: message.attachments.map((file) => ({ filename: file.filename, content: file.content })) } : {}) }),
         signal: AbortSignal.timeout(15000),
       });
       if (!response.ok) {
@@ -110,7 +111,7 @@ export async function sendMail(message: MailMessage, config: MailConfig = readMa
       host: smtp.host, port: smtp.port, secure: smtp.secure, auth: { user: smtp.user, pass: smtp.pass },
       connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 20000,
     });
-    await transport.sendMail({ from: config.from, to: message.to, subject: message.subject, text: message.text, html: message.html });
+    await transport.sendMail({ from: config.from, to: message.to, subject: message.subject, text: message.text, html: message.html, ...(message.attachments?.length ? { attachments: message.attachments.map((file) => ({ filename: file.filename, content: Buffer.from(file.content, 'base64'), contentType: file.contentType || 'application/octet-stream' })) } : {}) });
     return { sent: true, provider: 'smtp' };
   } catch (error) {
     // El mensaje del proveedor puede ayudar (clave inválida, puerto bloqueado), pero nunca incluye la contraseña.

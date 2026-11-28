@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   Search,
   ShoppingCart,
@@ -98,6 +98,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     return `${invoicePrefix}-${String(Math.max(max + 1, invoicePrefix === 'MN' ? 101 : 1)).padStart(6, '0')}`;
   }, [sales, invoicePrefix]);
   const [invoiceNumber, setInvoiceNumber] = useState<string>(() => `${invoicePrefix}-000001`);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const finalizingRef = useRef(false);
   const [reservedInvoiceNumber, setReservedInvoiceNumber] = useState<string>('');
   const [customSaleRate, setCustomSaleRate] = useState<string>('');
   const [isCustomSaleRate, setIsCustomSaleRate] = useState(false);
@@ -105,11 +107,12 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
   const [customerLastName, setCustomerLastName] = useState('');
   const [customerRif, setCustomerRif] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
   const [deliveryOrder, setDeliveryOrder] = useState('');
   const [paymentCondition, setPaymentCondition] = useState<'contado' | 'credito'>('contado');
   const [customerContactStatus, setCustomerContactStatus] = useState('');
-  const [customerContacts, setCustomerContacts] = useState<Array<{ nombre: string; apellido?: string; documento?: string; telefono?: string; direccion?: string; trade_name?: string }>>([]);
+  const [customerContacts, setCustomerContacts] = useState<Array<{ nombre: string; apellido?: string; documento?: string; telefono?: string; direccion?: string; correo?: string; trade_name?: string }>>([]);
 
   // Effective exchange rate for this sale (matches invoice date or custom rate)
   const effectiveExchangeRate = useMemo(() => {
@@ -384,6 +387,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     setCustomerLastName('');
     setCustomerRif('');
     setCustomerPhone('');
+    setCustomerEmail('');
     setDiscountType('none');
     setDiscountValue(0);
     setApplyIva(false);
@@ -492,6 +496,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     setCustomerLastName(contact.apellido || '');
     setCustomerRif(contact.documento || '');
     setCustomerPhone(contact.telefono || '');
+    setCustomerEmail(contact.correo || '');
     setCustomerAddress(contact.direccion || '');
   };
   const lookupCustomerByDocument = async (): Promise<boolean> => {
@@ -506,6 +511,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
         setCustomerName(contact.nombre || '');
         setCustomerLastName(contact.apellido || '');
         setCustomerPhone(contact.telefono || '');
+        setCustomerEmail(contact.correo || '');
+        setCustomerAddress(contact.direccion || '');
         return true;
       }
     } catch (error) {
@@ -524,7 +531,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       const response = await fetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'cliente', documento: document, nombre: name, apellido: customerLastName.trim(), telefono: customerPhone.trim() }),
+        body: JSON.stringify({ tipo: 'cliente', documento: document, nombre: name, apellido: customerLastName.trim(), telefono: customerPhone.trim(), correo: customerEmail.trim(), direccion: customerAddress.trim() }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || result?.success !== true) {
@@ -542,7 +549,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
 
   // Finalize Sale
   const handleFinalizeSale = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || finalizingRef.current) return;
 
     // A crédito no recibe dinero en caja: la venta queda registrada con saldo pendiente.
     let finalPayments: SalePayment[] = [];
@@ -595,6 +602,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     const finalSaleDate = createSaleTimestamp(invoiceDate);
 
     let newSale: Sale;
+    finalizingRef.current = true;
+    setIsFinalizing(true);
     try {
       newSale = await recordSale({
       numero_factura: finalInvoiceNumber,
@@ -602,6 +611,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
       cliente_apellido: customerLastName.trim() || '',
       cliente_rif: customerRif.trim() || undefined,
       cliente_telefono: customerPhone.trim() || undefined,
+      cliente_correo: customerEmail.trim() || undefined,
       cliente_direccion: customerAddress.trim() || undefined,
       orden_entrega: deliveryOrder.trim() || undefined,
       condicion_pago: finalPayments.some((payment) => (payment.cuenta || '').toLowerCase().includes('cashea')) ? 'credito' : paymentCondition,
@@ -622,17 +632,19 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     } catch (error) {
       console.error('Venta rechazada por el servidor:', error);
       alert(error instanceof Error ? error.message : 'No se pudo registrar la venta. Verifica Neon e intenta nuevamente.');
+      finalizingRef.current = false;
+      setIsFinalizing(false);
       return;
     }
 
     // Guarda/actualiza el cliente por cédula o RIF para autocompletarlo en próximas facturas y equipos.
     if (customerRif.trim() && customerName.trim() && customerName.trim() !== 'Consumidor Final') {
-      try {
-        await fetch('/api/contacts', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipo: 'cliente', documento: customerRif.trim(), nombre: customerName.trim(), apellido: customerLastName.trim(), telefono: customerPhone.trim() }),
-        });
-      } catch (error) { console.warn('No se pudo guardar el cliente en el directorio:', error); }
+      // El directorio de clientes no forma parte de la transacción de venta. Se guarda
+      // en segundo plano para que una petición secundaria no retrase el comprobante.
+      void fetch('/api/contacts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'cliente', documento: customerRif.trim(), nombre: customerName.trim(), apellido: customerLastName.trim(), telefono: customerPhone.trim(), correo: customerEmail.trim(), direccion: customerAddress.trim() }),
+      }).catch((error) => console.warn('No se pudo guardar el cliente en el directorio:', error));
     }
 
     setExchangeRateForDate(invoiceDate, effectiveExchangeRate);
@@ -653,6 +665,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     setInvoiceDate(getTodayVenezuela());
     setIsMixedPaymentOpen(false);
     setLastSale(newSale);
+    finalizingRef.current = false;
+    setIsFinalizing(false);
     const localNextNumber = `${invoicePrefix}-${String(Math.max(Number((finalInvoiceNumber.match(/(\d+)$/) || [0, 0])[1]) + 1, invoicePrefix === 'MN' ? 101 : 1)).padStart(6, '0')}`;
     setInvoiceNumber(localNextNumber);
     setReservedInvoiceNumber('');
@@ -1514,6 +1528,10 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
+                        <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Correo electrónico del cliente</label>
+                        <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} onBlur={() => void saveCustomerContact()} placeholder="cliente@correo.com" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
+                      </div>
+                      <div>
                         <label className="text-xs font-black text-slate-700 uppercase tracking-wide block mb-1">Dirección del cliente</label>
                         <input type="text" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Dirección fiscal o comercial del cliente" className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20" />
                       </div>
@@ -2061,11 +2079,11 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                   <button
                     id="complete-sale-btn"
                     onClick={handleFinalizeSale}
-                    disabled={cart.length === 0}
+                    disabled={cart.length === 0 || isFinalizing}
                     className="w-full py-3 sm:py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-md shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed whitespace-nowrap truncate"
                   >
                     <Check className="w-4 h-4 stroke-[3] shrink-0" />
-                    <span className="truncate">Confirmar y Facturar Venta (${totalUsd.toFixed(2)})</span>
+                    <span className="truncate">{isFinalizing ? 'Registrando venta…' : `Confirmar y Facturar Venta (${totalUsd.toFixed(2)})`}</span>
                   </button>
 
                 </div>

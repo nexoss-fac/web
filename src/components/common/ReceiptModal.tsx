@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Printer,
   CheckCircle,
@@ -14,7 +14,9 @@ import {
   DollarSign,
   ShieldCheck,
   Clock,
-  Sparkles
+  Sparkles,
+  Mail,
+  Loader2
 } from 'lucide-react';
 import { Sale } from '../../types';
 import { useStore } from '../../context/StoreContext';
@@ -44,6 +46,14 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
   const [isEditingDate, setIsEditingDate] = useState(false);
   const [editDateValue, setEditDateValue] = useState(sale?.fecha ? sale.fecha.slice(0, 16) : '');
   const [copiedText, setCopiedText] = useState(false);
+  const [emailRecipient, setEmailRecipient] = useState(sale?.cliente_correo || '');
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    setEmailRecipient(sale?.cliente_correo || '');
+    setEmailStatus(null);
+  }, [sale?.id, sale?.cliente_correo]);
 
   if (!sale) return null;
 
@@ -191,6 +201,31 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
       setTimeout(() => setCopiedText(false), 2500);
     } catch {
       // fallback
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!sale || emailSending) return;
+    const recipient = emailRecipient.trim();
+    if (!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(recipient)) {
+      setEmailStatus({ type: 'error', message: 'Introduce un correo válido para enviar la factura.' });
+      return;
+    }
+    setEmailSending(true);
+    setEmailStatus(null);
+    try {
+      const response = await fetch(`/api/sales/${encodeURIComponent(sale.id)}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: recipient }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result?.sent !== true) throw new Error(result?.error || 'No se pudo enviar la factura.');
+      setEmailStatus({ type: 'success', message: `Factura enviada al proveedor de correo para ${recipient}.` });
+    } catch (error) {
+      setEmailStatus({ type: 'error', message: error instanceof Error ? error.message : 'No se pudo enviar la factura.' });
+    } finally {
+      setEmailSending(false);
     }
   };
 
@@ -751,7 +786,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
         </div>
 
         {/* Modal Action Buttons Footer (Screen Only) */}
-        <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200 flex flex-wrap sm:flex-nowrap gap-2 print-hide">
+        <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200 flex flex-wrap gap-2 print-hide">
+          <div className="w-full flex flex-col sm:flex-row gap-2">
+            <input type="email" value={emailRecipient} onChange={(event) => setEmailRecipient(event.target.value)} placeholder="Correo del cliente" aria-label="Correo del destinatario de la factura" className="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20" />
+            <button type="button" onClick={handleSendEmail} disabled={emailSending} className="sm:min-w-[190px] px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer disabled:cursor-wait">
+              {emailSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              {emailSending ? 'Enviando…' : 'Enviar factura por correo'}
+            </button>
+          </div>
+          {emailStatus && <p role="status" aria-live="polite" className={`w-full text-xs font-semibold ${emailStatus.type === 'success' ? 'text-emerald-700' : 'text-rose-600'}`}>{emailStatus.message}</p>}
           <button
             type="button"
             onClick={handlePrint}

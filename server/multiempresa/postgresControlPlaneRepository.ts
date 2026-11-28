@@ -815,18 +815,21 @@ export class PostgresControlPlaneRepository implements TenantRepository {
     });
   }
 
-  async getCompanyIdentity(companyId: string): Promise<Pick<PlatformCompany, 'legalName' | 'tradeName' | 'address' | 'logoUrl' | 'workspace'> | null> {
+  async getCompanyIdentity(companyId: string): Promise<Pick<PlatformCompany, 'legalName' | 'tradeName' | 'taxId' | 'address' | 'phone' | 'email' | 'logoUrl' | 'workspace'> | null> {
     const client = await this.pool.connect();
     try {
       const result = await client.query(
-        `SELECT legal_name, trade_name, address, logo_url, workspace FROM platform_companies WHERE id = $1 LIMIT 1`,
+        `SELECT legal_name, trade_name, tax_id, address, phone, email, logo_url, workspace FROM platform_companies WHERE id = $1 LIMIT 1`,
         [companyId],
       );
       const row = result.rows[0];
       return row ? {
         legalName: row.legal_name,
         tradeName: row.trade_name || '',
+        taxId: row.tax_id || '',
         address: row.address || '',
+        phone: row.phone || '',
+        email: row.email || '',
         logoUrl: row.logo_url || '',
         workspace: row.workspace || {},
       } : null;

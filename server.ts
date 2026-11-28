@@ -2381,7 +2381,32 @@ async function startServer() {
   });
 
   // 5. Sales API (Neon or Local JSON persistence)
-  registerSalesRoutes(app, { readServerStore, writeServerStore, readLocalSales, getNeonSql, normalizeSales, updateSale, voidSale, onSaleRegistered: (sale) => notifyInBackground((company) => buildSaleNotice(sale, company)) });
+  registerSalesRoutes(app, {
+    readServerStore, writeServerStore, readLocalSales, getNeonSql, normalizeSales, updateSale, voidSale,
+    onSaleRegistered: (sale) => notifyInBackground((company) => buildSaleNotice(sale, company)),
+    getCompanyProfile: async () => {
+      const tenant = tenantStorageContext.getStore();
+      if (!tenant) return null;
+      if (usePostgresControlPlane()) {
+        // La identidad fiscal/comercial es visible para los miembros autorizados de la empresa,
+        // no solo para administradores: también cajeros pueden enviar facturas.
+        const profile = await getPostgresControlPlane().getCompanyIdentity(tenant.companyId);
+        if (!profile) return null;
+        return {
+          legalName: profile.legalName, tradeName: profile.tradeName, taxId: profile.taxId,
+          address: profile.address, phone: profile.phone, email: profile.email,
+          mainBranchName: String(profile.workspace?.mainBranchName || ''), mainBranchAddress: String(profile.workspace?.mainBranchAddress || ''),
+        };
+      }
+      const company = PLATFORM_STORE.readState().companies.find((item) => item.id === tenant.companyId);
+      if (!company) return null;
+      return {
+        legalName: company.legalName, tradeName: company.tradeName, taxId: company.taxId,
+        address: company.address, phone: company.phone, email: company.email,
+        mainBranchName: String(company.workspace?.mainBranchName || ''), mainBranchAddress: String(company.workspace?.mainBranchAddress || ''),
+      };
+    },
+  });
 
   registerCustomerOrderRoutes(app, { getNeonSql, adminOnly });
 
