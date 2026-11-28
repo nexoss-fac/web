@@ -2388,7 +2388,9 @@ async function startServer() {
       const tenant = tenantStorageContext.getStore();
       if (!tenant) return null;
       if (usePostgresControlPlane()) {
-        const profile = await getPostgresControlPlane().getManagedCompanyProfile(tenant.companyId, tenant.uid);
+        // La identidad fiscal/comercial es visible para los miembros autorizados de la empresa,
+        // no solo para administradores: también cajeros pueden enviar facturas.
+        const profile = await getPostgresControlPlane().getCompanyIdentity(tenant.companyId);
         if (!profile) return null;
         return {
           legalName: profile.legalName, tradeName: profile.tradeName, taxId: profile.taxId,
