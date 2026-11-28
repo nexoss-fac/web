@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { ShoeProduct, ShoeType, ProductCategory, InventoryClassification, INVENTORY_CLASSIFICATIONS } from '../../types';
 import { analyzeShoeWithAi, ShoeAiResult } from '../../services/aiShoeService';
+import { lookupProductByBarcode } from '../../services/productBarcodeLookupService';
 import {
   compressImageFile,
   compressImageDataUrl,
@@ -47,6 +48,7 @@ interface ProductFormModalProps {
 interface SizeStockItem {
   talla: string;
   stock: number;
+  codigo_barras?: string;
 }
 
 interface ColorImageItem {
@@ -107,6 +109,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [sku, setSku] = useState(editingProduct?.sku || '');
   const [codigoBarras, setCodigoBarras] = useState(editingProduct?.codigo_barras || '');
   const [marca, setMarca] = useState(editingProduct?.marca || '');
+  const [modeloFabricante, setModeloFabricante] = useState(editingProduct?.modelo || '');
+  const [isBarcodeLookupLoading, setIsBarcodeLookupLoading] = useState(false);
+  const [barcodeLookupMessage, setBarcodeLookupMessage] = useState<string | null>(null);
+  const [barcodeLookupError, setBarcodeLookupError] = useState<string | null>(null);
   const [tipo, setTipo] = useState<ShoeType>(editingProduct?.tipo || 'Otros');
   const [color, setColor] = useState(editingProduct?.color || '');
   const [costo, setCosto] = useState(editingProduct?.costo?.toString() || '40.00');
@@ -188,6 +194,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     setSku(editingProduct.sku || '');
     setCodigoBarras(editingProduct.codigo_barras || '');
     setMarca(editingProduct.marca || '');
+    setModeloFabricante(editingProduct.modelo || '');
+    setBarcodeLookupMessage(null);
+    setBarcodeLookupError(null);
     setTipo(editingProduct.tipo || 'Otros');
     setColor(editingProduct.color || '');
     setCosto(editingProduct.costo?.toString() || '40.00');
@@ -214,6 +223,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   useEffect(() => {
     if (isOpen && !editingProduct) {
       setCodigoBarras('');
+      setModeloFabricante('');
+      setBarcodeLookupMessage(null);
+      setBarcodeLookupError(null);
       setCategoria(defaultProductCategory as ProductCategory);
       setClasificacionInventario(isFootwear ? 'Mercancía' : classificationForCategory(defaultProductCategory));
       setSingleStock('0');
@@ -225,6 +237,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     if (initialAiData) {
       if (initialAiData.nombre) setNombre(initialAiData.nombre);
       if (initialAiData.marca) setMarca(initialAiData.marca);
+      if (initialAiData.modelo) setModeloFabricante(initialAiData.modelo);
       if (initialAiData.color) setColor(initialAiData.color);
       if (initialAiData.tipo) setTipo(initialAiData.tipo as ShoeType);
       if (initialAiData.genero) setGenero(initialAiData.genero);
@@ -349,6 +362,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   };
 
   // Change stock for a specific size
+  const updateSizeBarcode = (sz: string, code: string) => {
+    setActiveSizes((prev) => prev.map((item) => item.talla === sz ? { ...item, codigo_barras: code.replace(/[^0-9]/g, '').slice(0, 14) } : item));
+  };
+
   const updateSizeStock = (sz: string, qty: number) => {
     const val = Math.max(0, qty);
     setActiveSizes((prev) =>
@@ -562,8 +579,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       const res = await analyzeShoeWithAi(targetImage, undefined, industryKey);
       setAiAnalysisSuccess(res);
 
-      if (res.nombre) setNombre(res.nombre);
-      if (res.marca) setMarca(res.marca);
+      if (res.nombre && !barcodeLookupMessage) setNombre(res.nombre);
+      if (res.marca && !marca.trim()) setMarca(res.marca);
+      if (res.modelo && !modeloFabricante.trim()) setModeloFabricante(res.modelo);
       if (res.color) setColor(res.color);
       if (res.tipo) setTipo(res.tipo as ShoeType);
       if (res.genero) setGenero(res.genero);
@@ -800,6 +818,40 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       ? activeSizes.reduce((sum, s) => sum + s.stock, 0)
       : parseInt(singleStock, 10) || 0;
 
+  const handleLookupBarcode = async (scannedCode?: string) => {
+    const code = (scannedCode ?? codigoBarras).replace(/\s+/g, '').trim();
+    if (!/^(?:\d{8}|\d{12,14})$/.test(code)) {
+      setBarcodeLookupError('Escanea o escribe un EAN-8, UPC-A, EAN-13 o GTIN-14 válido.');
+      setBarcodeLookupMessage(null);
+      return;
+    }
+    if (!scannedCode) setCodigoBarras(code);
+    setIsBarcodeLookupLoading(true);
+    setBarcodeLookupError(null);
+    setBarcodeLookupMessage(null);
+    try {
+      const result = await lookupProductByBarcode(code);
+      if (!result.found || !result.product) {
+        setBarcodeLookupError('No encontramos este código en el catálogo. Puedes completar la ficha con la fotografía y conservar el código original.');
+        return;
+      }
+      const item = result.product;
+      // En la matriz de tallas, varios GTIN pueden corresponder al mismo modelo:
+      // el primer resultado completa la ficha y los siguientes no reemplazan esos datos.
+      if (item.title && (!scannedCode || !nombre.trim())) setNombre(item.title);
+      if (item.brand && (!scannedCode || !marca.trim())) setMarca(item.brand);
+      if (item.model && (!scannedCode || !modeloFabricante.trim())) setModeloFabricante(item.model);
+      if (item.description && !descripcion.trim()) setDescripcion(item.description);
+      if (item.images?.[0] && !imagen.trim()) setImagen(item.images[0]);
+      if (!sku.trim() && item.model) setSku(item.model.replace(/\s+/g, '-').toUpperCase());
+      setBarcodeLookupMessage(`Producto localizado en ${result.source || 'catálogo externo'}. Revisa los datos antes de guardar; el EAN/UPC original se conserva.`);
+    } catch (error) {
+      setBarcodeLookupError(error instanceof Error ? error.message : 'No se pudo consultar el catálogo. El código original permanece en la ficha.');
+    } finally {
+      setIsBarcodeLookupLoading(false);
+    }
+  };
+
   const internalBarcodeForSku = (value: string) => {
     const source = value.trim().toUpperCase() || `AUTO-${Date.now()}`;
     let hash = 2166136261;
@@ -838,6 +890,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       categoria,
       clasificacion_inventario: clasificacionInventario,
       marca: marca.trim() || 'Genérica',
+      modelo: modeloFabricante.trim() || undefined,
       tipo,
       color: color.trim() || 'Estándar',
       moneda: 'USD' as const,
@@ -907,6 +960,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         ? colorImages.map((v) => ({ color: v.color.trim() || 'Estándar', imagen: v.imagen }))
         : colorTokens.map((c) => ({ color: c, imagen: finalImagen }));
 
+      if (colorVariants.length > 1 && activeSizes.some((size) => size.codigo_barras?.trim())) {
+        alert('Has escaneado códigos EAN/UPC por talla, pero hay varios colores. Para no asignar un código de fabricante al color incorrecto, registra cada color por separado o edita cada variante después de guardarla.');
+        return;
+      }
+
       if (colorVariants.length > 1) {
         colorVariants.forEach((variant) => {
           activeSizes.forEach((s) => {
@@ -917,7 +975,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               color: variant.color,
               imagen: variant.imagen,
               sku: `${sku.trim().toUpperCase()}-${colorCode}-${formattedTalla}`,
-              codigo_barras: internalBarcodeForSku(`${sku.trim().toUpperCase()}-${colorCode}-${formattedTalla}`),
+              codigo_barras: colorVariants.length === 1 && s.codigo_barras?.trim() ? s.codigo_barras.trim() : internalBarcodeForSku(`${sku.trim().toUpperCase()}-${colorCode}-${formattedTalla}`),
               talla: s.talla,
               stock: s.stock,
             });
@@ -932,7 +990,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             color: variant.color,
             imagen: variant.imagen,
             sku: `${sku.trim().toUpperCase()}-${formattedTalla}`,
-            codigo_barras: internalBarcodeForSku(`${sku.trim().toUpperCase()}-${formattedTalla}`),
+            codigo_barras: s.codigo_barras?.trim() || internalBarcodeForSku(`${sku.trim().toUpperCase()}-${formattedTalla}`),
             talla: s.talla,
             stock: s.stock,
           });
@@ -1146,20 +1204,38 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             {(editingProduct || entryMode === 'single') ? (
               <div>
                 <label className="block text-slate-700 font-bold mb-1">Código de barras EAN / UPC</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={codigoBarras}
-                  onChange={(e) => setCodigoBarras(e.target.value.replace(/[^0-9]/g, '').slice(0, 14))}
-                  onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-                  placeholder="Escanea o escribe el código (EAN-8, UPC-A, EAN-13)"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
-                />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">Conecta el lector, haz clic aquí y escanea la etiqueta. Se guardará como texto para conservar ceros iniciales.</span>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={codigoBarras}
+                    onChange={(e) => { setCodigoBarras(e.target.value.replace(/[^0-9]/g, '').slice(0, 14)); setBarcodeLookupMessage(null); setBarcodeLookupError(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleLookupBarcode(); } }}
+                    placeholder="Escanea EAN-8, UPC-A, EAN-13 o GTIN-14"
+                    className="min-w-0 flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
+                  />
+                  <button type="button" onClick={() => void handleLookupBarcode()} disabled={isBarcodeLookupLoading || !codigoBarras.trim()} className="shrink-0 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold disabled:opacity-50">
+                    {isBarcodeLookupLoading ? 'Buscando…' : 'Buscar producto'}
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">Escanea y presiona Enter, o pulsa Buscar producto. El código original se guarda sin alterarlo.</span>
+                {barcodeLookupMessage && <span className="mt-1 block rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-semibold text-emerald-700">✓ {barcodeLookupMessage}</span>}
+                {barcodeLookupError && <span className="mt-1 block rounded-lg bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800">{barcodeLookupError}</span>}
               </div>
             ) : (
               <p className="text-[10px] text-slate-500">Para asignar un código distinto por talla, guarda primero el modelo y luego edita cada variante.</p>
             )}
+
+            <div>
+              <label className="block text-slate-700 font-bold mb-1">Modelo / Referencia del fabricante</label>
+              <input
+                type="text"
+                value={modeloFabricante}
+                onChange={(e) => setModeloFabricante(e.target.value)}
+                placeholder="Ej. Air Force 1, Predator, Future..."
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white text-xs"
+              />
+            </div>
 
             <div>
               <label className="block text-slate-700 font-bold mb-1">
@@ -1456,13 +1532,13 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               {/* Active Sizes Steppers Grid */}
               <div className="space-y-1.5">
                 <span className="text-[11px] font-bold text-slate-700 block">
-                  Cantidades por Talla ({activeSizes.length} seleccionadas):
+                  Cantidades y EAN/UPC por Talla ({activeSizes.length} seleccionadas):
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {activeSizes.map((item) => (
                     <div
                       key={item.talla}
-                      className="bg-white p-2 rounded-xl border border-slate-200 flex items-center justify-between shadow-xs"
+                      className="bg-white p-2 rounded-xl border border-slate-200 flex flex-col gap-2 shadow-xs"
                     >
                       <span className="font-mono font-bold text-slate-900 text-xs px-1.5 py-0.5 bg-slate-100 rounded">
                         Talla {item.talla}
@@ -1490,6 +1566,15 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                           +
                         </button>
                       </div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={item.codigo_barras || ''}
+                        onChange={(e) => updateSizeBarcode(item.talla, e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && item.codigo_barras) { e.preventDefault(); void handleLookupBarcode(item.codigo_barras); } }}
+                        placeholder="EAN / UPC de esta talla (Enter para buscar)"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg font-mono text-[10px]"
+                      />
                     </div>
                   ))}
                 </div>
