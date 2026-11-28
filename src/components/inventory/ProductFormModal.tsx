@@ -48,6 +48,7 @@ interface ProductFormModalProps {
 interface SizeStockItem {
   talla: string;
   stock: number;
+  codigo_barras?: string;
 }
 
 interface ColorImageItem {
@@ -236,6 +237,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     if (initialAiData) {
       if (initialAiData.nombre) setNombre(initialAiData.nombre);
       if (initialAiData.marca) setMarca(initialAiData.marca);
+      if (initialAiData.modelo) setModeloFabricante(initialAiData.modelo);
       if (initialAiData.color) setColor(initialAiData.color);
       if (initialAiData.tipo) setTipo(initialAiData.tipo as ShoeType);
       if (initialAiData.genero) setGenero(initialAiData.genero);
@@ -360,6 +362,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   };
 
   // Change stock for a specific size
+  const updateSizeBarcode = (sz: string, code: string) => {
+    setActiveSizes((prev) => prev.map((item) => item.talla === sz ? { ...item, codigo_barras: code.replace(/[^0-9]/g, '').slice(0, 14) } : item));
+  };
+
   const updateSizeStock = (sz: string, qty: number) => {
     const val = Math.max(0, qty);
     setActiveSizes((prev) =>
@@ -962,7 +968,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               color: variant.color,
               imagen: variant.imagen,
               sku: `${sku.trim().toUpperCase()}-${colorCode}-${formattedTalla}`,
-              codigo_barras: internalBarcodeForSku(`${sku.trim().toUpperCase()}-${colorCode}-${formattedTalla}`),
+              codigo_barras: colorVariants.length === 1 && s.codigo_barras?.trim() ? s.codigo_barras.trim() : internalBarcodeForSku(`${sku.trim().toUpperCase()}-${colorCode}-${formattedTalla}`),
               talla: s.talla,
               stock: s.stock,
             });
@@ -977,7 +983,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             color: variant.color,
             imagen: variant.imagen,
             sku: `${sku.trim().toUpperCase()}-${formattedTalla}`,
-            codigo_barras: internalBarcodeForSku(`${sku.trim().toUpperCase()}-${formattedTalla}`),
+            codigo_barras: s.codigo_barras?.trim() || internalBarcodeForSku(`${sku.trim().toUpperCase()}-${formattedTalla}`),
             talla: s.talla,
             stock: s.stock,
           });
@@ -1525,7 +1531,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                   {activeSizes.map((item) => (
                     <div
                       key={item.talla}
-                      className="bg-white p-2 rounded-xl border border-slate-200 flex items-center justify-between shadow-xs"
+                      className="bg-white p-2 rounded-xl border border-slate-200 flex flex-col gap-2 shadow-xs"
                     >
                       <span className="font-mono font-bold text-slate-900 text-xs px-1.5 py-0.5 bg-slate-100 rounded">
                         Talla {item.talla}
@@ -1553,6 +1559,14 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                           +
                         </button>
                       </div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={item.codigo_barras || ''}
+                        onChange={(e) => updateSizeBarcode(item.talla, e.target.value)}
+                        placeholder="EAN / UPC de esta talla (opcional)"
+                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg font-mono text-[10px]"
+                      />
                     </div>
                   ))}
                 </div>
