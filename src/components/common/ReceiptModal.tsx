@@ -207,7 +207,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
   const handleSendEmail = async () => {
     if (!sale || emailSending) return;
     const recipient = emailRecipient.trim();
-    if (!/^[^\\s@,;<>]+@[^\\s@,;<>]+\\.[^\\s@,;<>]+$/.test(recipient)) {
+    if (!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(recipient)) {
       setEmailStatus({ type: 'error', message: 'Introduce un correo válido para enviar la factura.' });
       return;
     }
