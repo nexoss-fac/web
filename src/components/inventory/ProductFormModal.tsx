@@ -818,14 +818,14 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       ? activeSizes.reduce((sum, s) => sum + s.stock, 0)
       : parseInt(singleStock, 10) || 0;
 
-  const handleLookupBarcode = async () => {
-    const code = codigoBarras.replace(/\\s+/g, '').trim();
+  const handleLookupBarcode = async (scannedCode?: string) => {
+    const code = (scannedCode ?? codigoBarras).replace(/\\s+/g, '').trim();
     if (!/^(?:\\d{8}|\\d{12,14})$/.test(code)) {
       setBarcodeLookupError('Escanea o escribe un EAN-8, UPC-A, EAN-13 o GTIN-14 válido.');
       setBarcodeLookupMessage(null);
       return;
     }
-    setCodigoBarras(code);
+    if (!scannedCode) setCodigoBarras(code);
     setIsBarcodeLookupLoading(true);
     setBarcodeLookupError(null);
     setBarcodeLookupMessage(null);
@@ -957,6 +957,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       const colorVariants = colorImages.length > 0
         ? colorImages.map((v) => ({ color: v.color.trim() || 'Estándar', imagen: v.imagen }))
         : colorTokens.map((c) => ({ color: c, imagen: finalImagen }));
+
+      if (colorVariants.length > 1 && activeSizes.some((size) => size.codigo_barras?.trim())) {
+        alert('Has escaneado códigos EAN/UPC por talla, pero hay varios colores. Para no asignar un código de fabricante al color incorrecto, registra cada color por separado o edita cada variante después de guardarla.');
+        return;
+      }
 
       if (colorVariants.length > 1) {
         colorVariants.forEach((variant) => {
@@ -1564,7 +1569,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         inputMode="numeric"
                         value={item.codigo_barras || ''}
                         onChange={(e) => updateSizeBarcode(item.talla, e.target.value)}
-                        placeholder="EAN / UPC de esta talla (opcional)"
+                        onKeyDown={(e) => { if (e.key === 'Enter' && item.codigo_barras) { e.preventDefault(); void handleLookupBarcode(item.codigo_barras); } }}
+                        placeholder="EAN / UPC de esta talla (Enter para buscar)"
                         className="w-full px-2 py-1.5 border border-slate-200 rounded-lg font-mono text-[10px]"
                       />
                     </div>
