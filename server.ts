@@ -64,13 +64,14 @@ import { NATIONAL_FISCAL_REQUIREMENTS } from './src/domain/fiscalBoard.ts';
 import { isIndustryTemplate, normalizeIndustryTemplate, resolveIndustryTemplate } from './src/domain/companyIndustries.ts';
 import { assertProductionRuntimeSupported } from './server/productionRuntime.ts';
 import { logger } from './server/logger.ts';
-// Cache in-memory de consultas de códigos para no consumir repetidamente la cuota externa.
-const productBarcodeLookupCache = new Map<string, { expiresAt: number; payload: Record<string, unknown> }>();
 import { sendMail } from './server/mail/mailer.ts';
 import { buildExpenseNotice, buildSaleNotice, sendNotice, type Notice } from './server/notify/notifier.ts';
 import { isWebPushConfigured, saveWebPushSubscription, removeWebPushSubscription, sendWebPushToCompanyAdmins, sendWebPushToUsers, hasWebPushSubscription, sendWebPushTest } from './server/notify/webPush.ts';
 import { buildInvitationEmail } from './server/mail/invitationEmail.ts';
 import type { AccountBalance, Sale, ShoeProduct } from './src/types.ts';
+
+// Cache in-memory de consultas de códigos para no consumir repetidamente la cuota externa.
+const productBarcodeLookupCache = new Map<string, { expiresAt: number; payload: Record<string, unknown> }>();
 
 const DATA_DIR = path.join(process.cwd(), 'server', 'data');
 assertProductionRuntimeSupported();
