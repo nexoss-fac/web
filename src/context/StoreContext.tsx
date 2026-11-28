@@ -1598,9 +1598,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return updated;
     });
 
-    try { await syncFromServer(false); } catch (syncError) {
+    // La venta y el descuento de inventario ya quedaron confirmados de forma atómica en Neon.
+    // La sincronización completa es secundaria: ejecutarla en segundo plano evita bloquear
+    // la apertura inmediata del comprobante mientras se vuelven a descargar todos los datos.
+    void syncFromServer(false).catch((syncError) => {
       console.error('Error sincronizando después de venta confirmada:', syncError);
-    }
+    });
 
     addNotification(
       'Venta Exitosa',
