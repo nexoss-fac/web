@@ -50,7 +50,7 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
       const sql = getNeonSql();
       let sale: any;
       if (sql) {
-        const rows = await sql\`SELECT * FROM sales_transactions WHERE id = \${saleId} LIMIT 1\`;
+        const rows = await sql`SELECT * FROM sales_transactions WHERE id = ${saleId} LIMIT 1`;
         sale = rows.length ? normalizeSales(rows as any[])[0] : undefined;
       } else {
         const store = await readServerStore();
@@ -66,15 +66,15 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
       const escapedCompanyName = companyName.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char] || char));
       const result = await sendMail({
         to: recipient,
-        subject: \`Factura \${invoiceNumber} - \${companyName}\`,
-        text: \`Adjuntamos la factura \${invoiceNumber} emitida por \${companyName}. Gracias por su preferencia.\`,
-        html: \`<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.5"><h2>Factura \${invoiceNumber}</h2><p>Adjuntamos el comprobante de venta emitido por <strong>\${escapedCompanyName}</strong>.</p><p>Gracias por su preferencia.</p></div>\`,
-        attachments: [{ filename: \`Factura-\${invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, '-')}.pdf\`, content: pdf.toString('base64'), contentType: 'application/pdf' }],
+        subject: `Factura ${invoiceNumber} - ${companyName}`,
+        text: `Adjuntamos la factura ${invoiceNumber} emitida por ${companyName}. Gracias por su preferencia.`,
+        html: `<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.5"><h2>Factura ${invoiceNumber}</h2><p>Adjuntamos el comprobante de venta emitido por <strong>${escapedCompanyName}</strong>.</p><p>Gracias por su preferencia.</p></div>`,
+        attachments: [{ filename: `Factura-${invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, '-')}.pdf`, content: pdf.toString('base64'), contentType: 'application/pdf' }],
       });
 
       if (sql) {
         try {
-          await sql\`CREATE TABLE IF NOT EXISTS nexoss_invoice_email_logs (
+          await sql`CREATE TABLE IF NOT EXISTS nexoss_invoice_email_logs (
             id TEXT PRIMARY KEY,
             sale_id TEXT NOT NULL,
             recipient TEXT NOT NULL,
@@ -82,10 +82,10 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
             provider TEXT,
             error TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-          )\`;
-          await sql\`INSERT INTO nexoss_invoice_email_logs (id, sale_id, recipient, status, provider, error)
-            VALUES (\${\`mail-\${Date.now()}-\${Math.random().toString(36).slice(2, 8)}\`}, \${saleId}, \${recipient},
-              \${result.sent ? 'sent' : 'failed'}, \${result.provider}, \${result.error || null})\`;
+          )`;
+          await sql`INSERT INTO nexoss_invoice_email_logs (id, sale_id, recipient, status, provider, error)
+            VALUES (${`mail-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}, ${saleId}, ${recipient},
+              ${result.sent ? 'sent' : 'failed'}, ${result.provider}, ${result.error || null})`;
         } catch (logError) {
           logger.warn('[Facturas] No se pudo registrar el intento de correo:', logError);
         }
