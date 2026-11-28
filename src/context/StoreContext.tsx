@@ -601,6 +601,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             categoria: p.categoria || 'Calzado',
             clasificacion_inventario: p.clasificacion_inventario || 'Mercancía',
             marca: p.marca || 'Genérica',
+            modelo: p.modelo || '',
             tipo: p.tipo || 'Botines Fútbol Campo',
             talla: String(p.talla || '38'),
             color: p.color || 'Estándar',
