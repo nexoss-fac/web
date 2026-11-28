@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   Search,
   ShoppingCart,
@@ -98,6 +98,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     return `${invoicePrefix}-${String(Math.max(max + 1, invoicePrefix === 'MN' ? 101 : 1)).padStart(6, '0')}`;
   }, [sales, invoicePrefix]);
   const [invoiceNumber, setInvoiceNumber] = useState<string>(() => `${invoicePrefix}-000001`);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const finalizingRef = useRef(false);
   const [reservedInvoiceNumber, setReservedInvoiceNumber] = useState<string>('');
   const [customSaleRate, setCustomSaleRate] = useState<string>('');
   const [isCustomSaleRate, setIsCustomSaleRate] = useState(false);
@@ -547,7 +549,7 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
 
   // Finalize Sale
   const handleFinalizeSale = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || finalizingRef.current) return;
 
     // A crédito no recibe dinero en caja: la venta queda registrada con saldo pendiente.
     let finalPayments: SalePayment[] = [];
@@ -600,6 +602,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     const finalSaleDate = createSaleTimestamp(invoiceDate);
 
     let newSale: Sale;
+    finalizingRef.current = true;
+    setIsFinalizing(true);
     try {
       newSale = await recordSale({
       numero_factura: finalInvoiceNumber,
@@ -628,6 +632,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     } catch (error) {
       console.error('Venta rechazada por el servidor:', error);
       alert(error instanceof Error ? error.message : 'No se pudo registrar la venta. Verifica Neon e intenta nuevamente.');
+      finalizingRef.current = false;
+      setIsFinalizing(false);
       return;
     }
 
@@ -659,6 +665,8 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
     setInvoiceDate(getTodayVenezuela());
     setIsMixedPaymentOpen(false);
     setLastSale(newSale);
+    finalizingRef.current = false;
+    setIsFinalizing(false);
     const localNextNumber = `${invoicePrefix}-${String(Math.max(Number((finalInvoiceNumber.match(/(\d+)$/) || [0, 0])[1]) + 1, invoicePrefix === 'MN' ? 101 : 1)).padStart(6, '0')}`;
     setInvoiceNumber(localNextNumber);
     setReservedInvoiceNumber('');
@@ -2071,11 +2079,11 @@ export const PointOfSale: React.FC<{ onNavigateToLayaways?: () => void; industry
                   <button
                     id="complete-sale-btn"
                     onClick={handleFinalizeSale}
-                    disabled={cart.length === 0}
+                    disabled={cart.length === 0 || isFinalizing}
                     className="w-full py-3 sm:py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-xs sm:text-sm uppercase tracking-wider rounded-xl shadow-md shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed whitespace-nowrap truncate"
                   >
                     <Check className="w-4 h-4 stroke-[3] shrink-0" />
-                    <span className="truncate">Confirmar y Facturar Venta (${totalUsd.toFixed(2)})</span>
+                    <span className="truncate">{isFinalizing ? 'Registrando venta…' : `Confirmar y Facturar Venta (${totalUsd.toFixed(2)})`}</span>
                   </button>
 
                 </div>
