@@ -819,8 +819,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       : parseInt(singleStock, 10) || 0;
 
   const handleLookupBarcode = async (scannedCode?: string) => {
-    const code = (scannedCode ?? codigoBarras).replace(/\\s+/g, '').trim();
-    if (!/^(?:\\d{8}|\\d{12,14})$/.test(code)) {
+    const code = (scannedCode ?? codigoBarras).replace(/\s+/g, '').trim();
+    if (!/^(?:\d{8}|\d{12,14})$/.test(code)) {
       setBarcodeLookupError('Escanea o escribe un EAN-8, UPC-A, EAN-13 o GTIN-14 válido.');
       setBarcodeLookupMessage(null);
       return;
@@ -841,7 +841,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       if (item.model) setModeloFabricante(item.model);
       if (item.description && !descripcion.trim()) setDescripcion(item.description);
       if (item.images?.[0] && !imagen.trim()) setImagen(item.images[0]);
-      if (!sku.trim() && item.model) setSku(item.model.replace(/\\s+/g, '-').toUpperCase());
+      if (!sku.trim() && item.model) setSku(item.model.replace(/\s+/g, '-').toUpperCase());
       setBarcodeLookupMessage(`Producto localizado en ${result.source || 'catálogo externo'}. Revisa los datos antes de guardar; el EAN/UPC original se conserva.`);
     } catch (error) {
       setBarcodeLookupError(error instanceof Error ? error.message : 'No se pudo consultar el catálogo. El código original permanece en la ficha.');
