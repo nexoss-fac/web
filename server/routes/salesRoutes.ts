@@ -63,12 +63,19 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
       const pdf = buildSaleInvoicePdf(sale, company);
       const companyName = company.tradeName || company.legalName || 'NEXOSS';
       const invoiceNumber = String(sale.numero_factura || sale.id);
-      const escapedCompanyName = companyName.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char] || char));
+      const escapeHtml = (value: string) => value.replace(/[&<>"]/g, (char) => {
+        if (char === '&') return '&amp;';
+        if (char === '<') return '&lt;';
+        if (char === '>') return '&gt;';
+        return '&quot;';
+      });
+      const escapedCompanyName = escapeHtml(companyName);
+      const escapedInvoiceNumber = escapeHtml(invoiceNumber);
       const result = await sendMail({
         to: recipient,
         subject: `Factura ${invoiceNumber} - ${companyName}`,
         text: `Adjuntamos la factura ${invoiceNumber} emitida por ${companyName}. Gracias por su preferencia.`,
-        html: `<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.5"><h2>Factura ${invoiceNumber}</h2><p>Adjuntamos el comprobante de venta emitido por <strong>${escapedCompanyName}</strong>.</p><p>Gracias por su preferencia.</p></div>`,
+        html: `<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.5"><h2>Factura ${escapedInvoiceNumber}</h2><p>Adjuntamos el comprobante de venta emitido por <strong>${escapedCompanyName}</strong>.</p><p>Gracias por su preferencia.</p></div>`,
         attachments: [{ filename: `Factura-${invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, '-')}.pdf`, content: pdf.toString('base64'), contentType: 'application/pdf' }],
       });
 
