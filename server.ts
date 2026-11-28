@@ -2262,7 +2262,33 @@ async function startServer() {
         return res.status(404).json({ success: false, found: false, error: 'No encontramos una ficha para este código. Puedes completar los datos con la fotografía.' });
       }
       if (response.status === 429) {
-        return res.status(429).json({ success: false, error: 'Se alcanzó el límite diario de consultas gratuitas. El código original se conserva; intenta más tarde.' });
+        const providerError = await response.json().catch(() => ({})) as { code?: unknown; message?: unknown };
+        const providerCode = typeof providerError.code === 'string' ? providerError.code : '';
+        const remaining = response.headers.get('X-RateLimit-Remaining');
+        const reset = response.headers.get('X-RateLimit-Reset');
+        const retryAfter = response.headers.get('Retry-After');
+        const resetAt = reset && Number.isFinite(Number(reset))
+          ? new Date(Number(reset) * 1000).toISOString()
+          : null;
+        logger.warn('[Barcode lookup] UPCitemdb aplicó un límite externo:', {
+          providerCode: providerCode || 'RATE_LIMIT',
+          remaining,
+          resetAt,
+          retryAfter,
+        });
+        const message = providerCode === 'TOO_FAST' || retryAfter
+          ? 'El catálogo externo está limitando temporalmente las consultas por frecuencia. Espera un momento y vuelve a intentarlo. Tu código original se conserva.'
+          : providerCode === 'EXCEED_LIMIT' || remaining === '0'
+            ? 'El proveedor del catálogo agotó su cuota gratuita compartida por IP. No significa que hayas agotado búsquedas en NEXOSS. Tu código original se conserva; podrás reintentar cuando se restablezca la cuota.'
+            : 'El catálogo externo rechazó temporalmente la consulta por límite de uso. No es un límite de búsquedas de tu inventario. Tu código original se conserva; intenta más tarde.';
+        return res.status(429).json({
+          success: false,
+          error: message,
+          provider: 'UPCitemdb',
+          limitType: providerCode === 'TOO_FAST' || retryAfter ? 'burst' : providerCode === 'EXCEED_LIMIT' || remaining === '0' ? 'daily' : 'unknown',
+          ...(resetAt ? { resetAt } : {}),
+          ...(retryAfter ? { retryAfterSeconds: Number(retryAfter) || undefined } : {}),
+        });
       }
       if (!response.ok) {
         return res.status(502).json({ success: false, error: 'El catálogo externo no está disponible en este momento.' });
