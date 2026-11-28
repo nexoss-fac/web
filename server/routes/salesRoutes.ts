@@ -3,6 +3,8 @@ import { logger } from '../logger.ts';
 import { validateSaleTotals } from '../sales/saleTotals.ts';
 import { applySaleToStore, pickUpdatableSaleFields, voidSaleInStore } from '../sales/localSales.ts';
 import type { ServerStoreState } from '../../server.ts';
+import { sendMail } from '../mail/mailer.ts';
+import { buildSaleInvoicePdf, type InvoicePdfCompany } from '../sales/invoicePdf.ts';
 
 /** Lo que las rutas de ventas necesitan del servidor; se inyecta para poder probarlas sin disco ni Neon. */
 export interface SalesRouteDeps {
@@ -15,6 +17,7 @@ export interface SalesRouteDeps {
   voidSale: (id: string, reason: string) => Promise<{ ok: boolean; items?: unknown }>;
   /** Se llama una sola vez cuando una venta NUEVA quedó guardada (no al reenviar una ya registrada). */
   onSaleRegistered?: (sale: any) => void;
+  getCompanyProfile?: () => Promise<InvoicePdfCompany | null>;
 }
 
 export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
@@ -33,6 +36,67 @@ export function registerSalesRoutes(app: Express, deps: SalesRouteDeps): void {
     }
     const local = await readLocalSales();
     res.json({ source: 'local_file', data: local });
+  });
+
+  app.post('/api/sales/:id/email', async (req, res) => {
+    const saleId = String(req.params.id || '').trim();
+    const recipient = typeof req.body?.to === 'string' ? req.body.to.trim() : '';
+    if (!saleId) return res.status(400).json({ sent: false, error: 'Factura inválida.' });
+    if (!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(recipient)) {
+      return res.status(400).json({ sent: false, error: 'Introduce un correo válido.' });
+    }
+
+    try {
+      const sql = getNeonSql();
+      let sale: any;
+      if (sql) {
+        const rows = await sql\`SELECT * FROM sales_transactions WHERE id = \${saleId} LIMIT 1\`;
+        sale = rows.length ? normalizeSales(rows as any[])[0] : undefined;
+      } else {
+        const store = await readServerStore();
+        sale = (store.sales || []).find((item: any) => String(item.id) === saleId);
+      }
+      if (!sale) return res.status(404).json({ sent: false, error: 'No se encontró la factura en esta empresa.' });
+      if (sale.estado === 'anulada') return res.status(409).json({ sent: false, error: 'No se puede enviar una factura anulada.' });
+
+      const company = await deps.getCompanyProfile?.() || {};
+      const pdf = buildSaleInvoicePdf(sale, company);
+      const companyName = company.tradeName || company.legalName || 'NEXOSS';
+      const invoiceNumber = String(sale.numero_factura || sale.id);
+      const escapedCompanyName = companyName.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char] || char));
+      const result = await sendMail({
+        to: recipient,
+        subject: \`Factura \${invoiceNumber} - \${companyName}\`,
+        text: \`Adjuntamos la factura \${invoiceNumber} emitida por \${companyName}. Gracias por su preferencia.\`,
+        html: \`<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.5"><h2>Factura \${invoiceNumber}</h2><p>Adjuntamos el comprobante de venta emitido por <strong>\${escapedCompanyName}</strong>.</p><p>Gracias por su preferencia.</p></div>\`,
+        attachments: [{ filename: \`Factura-\${invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, '-')}.pdf\`, content: pdf.toString('base64'), contentType: 'application/pdf' }],
+      });
+
+      if (sql) {
+        try {
+          await sql\`CREATE TABLE IF NOT EXISTS nexoss_invoice_email_logs (
+            id TEXT PRIMARY KEY,
+            sale_id TEXT NOT NULL,
+            recipient TEXT NOT NULL,
+            status TEXT NOT NULL,
+            provider TEXT,
+            error TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )\`;
+          await sql\`INSERT INTO nexoss_invoice_email_logs (id, sale_id, recipient, status, provider, error)
+            VALUES (\${\`mail-\${Date.now()}-\${Math.random().toString(36).slice(2, 8)}\`}, \${saleId}, \${recipient},
+              \${result.sent ? 'sent' : 'failed'}, \${result.provider}, \${result.error || null})\`;
+        } catch (logError) {
+          logger.warn('[Facturas] No se pudo registrar el intento de correo:', logError);
+        }
+      }
+
+      if (!result.sent) return res.status(502).json({ sent: false, error: result.error || 'El proveedor de correo no aceptó el envío.' });
+      return res.json({ sent: true, recipient, provider: result.provider, invoiceNumber });
+    } catch (error) {
+      logger.error('[Facturas] Error preparando o enviando el PDF:', error);
+      return res.status(500).json({ sent: false, error: 'No se pudo preparar o enviar la factura. Inténtalo nuevamente.' });
+    }
   });
 
   app.post('/api/sales', async (req, res) => {
