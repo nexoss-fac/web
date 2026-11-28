@@ -34,6 +34,11 @@ test('envía por SMTP con el transporte indicado y no filtra la contraseña si f
   assert.equal(ok.sent, true);
   assert.equal(sent[0].to, 'ana@example.com');
 
+  const attachment = { filename: 'Factura-NX-000001.pdf', content: Buffer.from('%PDF-1.4').toString('base64'), contentType: 'application/pdf' };
+  await sendMail({ ...message, attachments: [attachment] }, config, { createTransport: () => ({ sendMail: async (m) => { sent.push(m); } }) });
+  assert.equal(sent[1].attachments[0].filename, attachment.filename);
+  assert.equal(sent[1].attachments[0].content.toString('base64'), attachment.content);
+
   const failed = await sendMail(message, config, { createTransport: () => ({ sendMail: async () => { throw new Error('Invalid login'); } }) });
   assert.equal(failed.sent, false);
   assert.equal(JSON.stringify(failed).includes('SECRETA'), false);
