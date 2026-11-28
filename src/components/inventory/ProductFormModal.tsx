@@ -106,8 +106,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [nombre, setNombre] = useState(editingProduct?.nombre || '');
   const [sku, setSku] = useState(editingProduct?.sku || '');
   const [codigoBarras, setCodigoBarras] = useState(editingProduct?.codigo_barras || '');
-  const [marca, setMarca] = useState(editingProduct?.marca || (isFootwear ? 'Nike' : ''));
-  const [tipo, setTipo] = useState<ShoeType>(editingProduct?.tipo || (isFootwear ? 'Botines Fútbol Campo' : 'Otros'));
+  const [marca, setMarca] = useState(editingProduct?.marca || '');
+  const [tipo, setTipo] = useState<ShoeType>(editingProduct?.tipo || 'Otros');
   const [color, setColor] = useState(editingProduct?.color || '');
   const [costo, setCosto] = useState(editingProduct?.costo?.toString() || '40.00');
   const [precio, setPrecio] = useState(editingProduct?.precio?.toString() || '80.00');
@@ -187,8 +187,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     setNombre(editingProduct.nombre || '');
     setSku(editingProduct.sku || '');
     setCodigoBarras(editingProduct.codigo_barras || '');
-    setMarca(editingProduct.marca || (isFootwear ? 'Nike' : ''));
-    setTipo(editingProduct.tipo || (isFootwear ? 'Botines Fútbol Campo' : 'Otros'));
+    setMarca(editingProduct.marca || '');
+    setTipo(editingProduct.tipo || 'Otros');
     setColor(editingProduct.color || '');
     setCosto(editingProduct.costo?.toString() || '40.00');
     setPrecio(editingProduct.precio?.toString() || '80.00');
@@ -800,6 +800,14 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       ? activeSizes.reduce((sum, s) => sum + s.stock, 0)
       : parseInt(singleStock, 10) || 0;
 
+  const internalBarcodeForSku = (value: string) => {
+    const source = value.trim().toUpperCase() || `AUTO-${Date.now()}`;
+    let hash = 2166136261;
+    for (let i = 0; i < source.length; i++) hash = Math.imul(hash ^ source.charCodeAt(i), 16777619);
+    const prefix = source.replace(/[^A-Z0-9]/g, '').slice(0, 12) || 'ITEM';
+    return `NX-${prefix}-${(hash >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const aiBatchMode = entryMode === 'multi' && colorImages.length > 0 && !editingProduct;
@@ -857,13 +865,15 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       // En este modo cada tarjeta trae su propia talla y stock, por lo que no exigimos la tabla de tallas compartidas.
       // Comparten costo/precio del formulario, pero pueden tener nombre, SKU, color, talla y stock propios.
       if (colorImages.length > 1) {
-        const itemsToCreate = colorImages.map((item, index) => ({
+        const itemsToCreate = colorImages.map((item, index) => {
+          const variantSku = item.sku?.trim().toUpperCase() || `AUTO-${Date.now().toString().slice(-8)}-${String(index + 1).padStart(2,'0')}`;
+          return {
           ...baseProductData,
           costo: Number(item.costo ?? parsedCosto),
           precio: Number(item.precio ?? parsedPrecio),
           nombre: item.nombre?.trim() || `${nombre.trim() || 'Producto por identificar'} ${index + 1}`,
-          // Código generado localmente cuando el usuario no ingresó uno. Se puede editar antes de guardar.
-          sku: item.sku?.trim().toUpperCase() || `AUTO-${Date.now().toString().slice(-8)}-${String(index + 1).padStart(2,'0')}`,
+          sku: variantSku,
+          codigo_barras: internalBarcodeForSku(variantSku),
           marca: item.marca?.trim() || baseProductData.marca,
           tipo: item.tipo || baseProductData.tipo,
           genero: item.genero || baseProductData.genero,
@@ -872,7 +882,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           imagen: item.imagen,
           talla: item.talla?.trim() || singleTalla,
           stock: Number(item.stock ?? 0),
-        }));
+          };
+        });
         if (onSaveBulk) onSaveBulk(itemsToCreate); else itemsToCreate.forEach((item) => onSave(item));
         onClose();
         return;
@@ -906,6 +917,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               color: variant.color,
               imagen: variant.imagen,
               sku: `${sku.trim().toUpperCase()}-${colorCode}-${formattedTalla}`,
+              codigo_barras: internalBarcodeForSku(`${sku.trim().toUpperCase()}-${colorCode}-${formattedTalla}`),
               talla: s.talla,
               stock: s.stock,
             });
@@ -920,6 +932,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             color: variant.color,
             imagen: variant.imagen,
             sku: `${sku.trim().toUpperCase()}-${formattedTalla}`,
+            codigo_barras: internalBarcodeForSku(`${sku.trim().toUpperCase()}-${formattedTalla}`),
             talla: s.talla,
             stock: s.stock,
           });
@@ -936,6 +949,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       onSave({
         ...baseProductData,
         sku: sku.trim().toUpperCase(),
+        codigo_barras: codigoBarras.replace(/\s+/g, '').trim() || internalBarcodeForSku(sku),
         talla: singleTalla,
         stock: parseInt(singleStock, 10) || 0,
       });

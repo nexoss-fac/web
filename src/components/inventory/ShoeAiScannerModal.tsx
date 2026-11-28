@@ -297,7 +297,7 @@ export const ShoeAiScannerModal: React.FC<ShoeAiScannerModalProps> = ({
     setAiResult(null);
 
     try {
-      const res = await analyzeShoeWithAi(imgData, userHint);
+      const res = await analyzeShoeWithAi(imgData, userHint, 'calzado');
       setAiResult(res);
     } catch (err: any) {
       console.error('Shoe AI Error:', err);
