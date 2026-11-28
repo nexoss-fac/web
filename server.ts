@@ -2395,7 +2395,7 @@ async function startServer() {
         return {
           legalName: profile.legalName, tradeName: profile.tradeName, taxId: profile.taxId,
           address: profile.address, phone: profile.phone, email: profile.email,
-          mainBranchName: profile.workspace?.mainBranchName, mainBranchAddress: profile.workspace?.mainBranchAddress,
+          mainBranchName: String(profile.workspace?.mainBranchName || ''), mainBranchAddress: String(profile.workspace?.mainBranchAddress || ''),
         };
       }
       const company = PLATFORM_STORE.readState().companies.find((item) => item.id === tenant.companyId);
@@ -2403,7 +2403,7 @@ async function startServer() {
       return {
         legalName: company.legalName, tradeName: company.tradeName, taxId: company.taxId,
         address: company.address, phone: company.phone, email: company.email,
-        mainBranchName: company.workspace?.mainBranchName, mainBranchAddress: company.workspace?.mainBranchAddress,
+        mainBranchName: String(company.workspace?.mainBranchName || ''), mainBranchAddress: String(company.workspace?.mainBranchAddress || ''),
       };
     },
   });
